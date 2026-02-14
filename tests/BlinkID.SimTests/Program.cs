@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using Foundation;
 using UIKit;
@@ -78,25 +76,11 @@ public class TestResults
 
 public class Application
 {
+    // Framework resolution is handled automatically by the library assembly's
+    // [ModuleInitializer] in the generated bindings — no manual resolver needed.
     static void Main(string[] args)
     {
-        // The generated bindings register a generic DllImportResolver via [ModuleInitializer],
-        // but wrapper functions use DllImport("SwiftBindings") while the actual framework is
-        // "BlinkIDSwiftBindings". Register our own resolver on the *test app* assembly to handle
-        // any stray lookups, and also register on the *library* assembly to fix the mismatch.
-        NativeLibrary.SetDllImportResolver(typeof(Swift.BlinkID.Country).Assembly, ResolveFramework);
-
         UIApplication.Main(args, null, typeof(AppDelegate));
-    }
-
-    static IntPtr ResolveFramework(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        // Map "SwiftBindings" to the module-specific wrapper framework name
-        var resolvedName = libraryName == "SwiftBindings" ? "BlinkIDSwiftBindings" : libraryName;
-        var frameworkPath = $"@rpath/{resolvedName}.framework/{resolvedName}";
-        if (NativeLibrary.TryLoad(frameworkPath, out var handle))
-            return handle;
-        return IntPtr.Zero;
     }
 }
 
