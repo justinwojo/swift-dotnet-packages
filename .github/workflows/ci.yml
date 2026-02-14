@@ -13,20 +13,97 @@ permissions:
   contents: read
 
 jobs:
+  # ── Detect which libraries need building ───────────────────────────────────
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed libraries
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual trigger — building all libraries"
+            LIBRARIES=""
+            for dir in libraries/*/; do
+              lib=$(basename "$dir")
+              [ -f "$dir/library.json" ] && LIBRARIES="$LIBRARIES $lib"
+            done
+            LIBRARIES=$(echo "$LIBRARIES" | xargs)
+          else
+            CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }})
+            echo "Changed files:"
+            echo "$CHANGED"
+            echo ""
+
+            # Shared infra changes affect all libraries — build everything
+            if echo "$CHANGED" | grep -qE '^(scripts/|templates/|Directory\.Build\.props|global\.json|\.github/workflows/ci\.yml)'; then
+              echo "Shared infrastructure changed — building all libraries"
+              LIBRARIES=""
+              for dir in libraries/*/; do
+                lib=$(basename "$dir")
+                [ -f "$dir/library.json" ] && LIBRARIES="$LIBRARIES $lib"
+              done
+              LIBRARIES=$(echo "$LIBRARIES" | xargs)
+            else
+              # Extract library names from changed library or test paths
+              LIBRARIES=$(echo "$CHANGED" \
+                | grep -oE '^(libraries|tests)/[^/]+' \
+                | sed 's|^libraries/||; s|^tests/||; s|\.SimTests$||' \
+                | sort -u || true)
+
+              # Filter to libraries that actually exist
+              VALID=""
+              for lib in $LIBRARIES; do
+                if [ -d "libraries/$lib" ] && [ -f "libraries/$lib/library.json" ]; then
+                  VALID="$VALID $lib"
+                else
+                  echo "Skipping '$lib' — no matching library directory"
+                fi
+              done
+              LIBRARIES=$(echo "$VALID" | xargs)
+            fi
+          fi
+
+          if [ -z "$LIBRARIES" ]; then
+            echo "No library changes detected"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Libraries to build: $LIBRARIES"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+          # Build JSON matrix from library names
+          MATRIX='{"include":['
+          FIRST=true
+          for lib in $LIBRARIES; do
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              MATRIX="$MATRIX,"
+            fi
+            MATRIX="$MATRIX{\"library\":\"$lib\"}"
+          done
+          MATRIX="$MATRIX]}"
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Matrix: $MATRIX"
+
+  # ── Build, test, and validate packaging ────────────────────────────────────
   build:
+    needs: detect
+    if: needs.detect.outputs.has_changes == 'true'
     runs-on: macos-26
     strategy:
-      matrix:
-        include:
-          - library: Nuke
-            build_dir: libraries/Nuke
-            test_dir: tests/Nuke.SimTests
-            build_flags: ""
-          - library: Stripe
-            build_dir: libraries/Stripe
-            test_dir: tests/Stripe.SimTests
-            build_flags: "--all-products"
-            build_passes: 2
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,25 +116,48 @@ jobs:
       - name: Install workloads
         run: dotnet workload restore
 
+      - name: Determine build flags
+        id: flags
+        run: |
+          CONFIG="libraries/${{ matrix.library }}/library.json"
+
+          PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
+
+          HAS_INTERNAL=$(python3 -c "
+          import json
+          products = json.load(open('$CONFIG'))['products']
+          print('true' if any(p.get('internal') for p in products) else 'false')
+          ")
+
+          if [ "$PRODUCT_COUNT" -gt 1 ]; then
+            echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_flags=" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$HAS_INTERNAL" = "true" ] || [ "$PRODUCT_COUNT" -gt 3 ]; then
+            echo "build_passes=2" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_passes=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build xcframeworks
         run: |
-          cd ${{ matrix.build_dir }}
-          ./build-xcframework.sh ${{ matrix.build_flags }}
+          cd "libraries/${{ matrix.library }}"
+          ./build-xcframework.sh ${{ steps.flags.outputs.build_flags }}
 
       - name: Resolve built products
         id: resolve
         run: |
-          # Use the shared script's --resolve-products flag to get the exact product list
-          # that matches what was built, avoiding duplicated parsing logic.
-          PRODUCTS=$(scripts/build-xcframework.sh ${{ matrix.build_dir }} ${{ matrix.build_flags }} --resolve-products)
-          echo "products<<EOF" >> $GITHUB_OUTPUT
-          echo "$PRODUCTS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          PRODUCTS=$(scripts/build-xcframework.sh "libraries/${{ matrix.library }}" ${{ steps.flags.outputs.build_flags }} --resolve-products)
+          echo "products<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Generate bindings and build libraries
         run: |
           PRODUCTS="${{ steps.resolve.outputs.products }}"
-          PASSES=${{ matrix.build_passes || 1 }}
+          PASSES=${{ steps.flags.outputs.build_passes }}
 
           for ((pass=1; pass<=PASSES; pass++)); do
             echo "=== Build pass $pass of $PASSES ==="
@@ -65,16 +165,13 @@ jobs:
             while IFS='|' read -r dir csproj; do
               [ -z "$csproj" ] && continue
 
-              BUILD_PATH="${{ matrix.build_dir }}"
+              BUILD_PATH="libraries/${{ matrix.library }}"
               [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
 
-              # generate-bindings.sh runs only on pass 1; failures always fatal
               if [ "$pass" -eq 1 ]; then
                 (cd "$BUILD_PATH" && ./generate-bindings.sh)
               fi
 
-              # dotnet build: tolerate failures on non-final passes (wrapper compilation),
-              # but always fail on the final pass
               if [ "$pass" -lt "$PASSES" ]; then
                 dotnet build "$BUILD_PATH/$csproj" || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"
               else
@@ -83,10 +180,26 @@ jobs:
             done <<< "$PRODUCTS"
           done
 
+      - name: Validate packaging
+        run: |
+          PRODUCTS="${{ steps.resolve.outputs.products }}"
+
+          while IFS='|' read -r dir csproj; do
+            [ -z "$csproj" ] && continue
+
+            BUILD_PATH="libraries/${{ matrix.library }}"
+            [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
+
+            echo "=== Validating pack: $csproj ==="
+            dotnet pack "$BUILD_PATH/$csproj" --no-build /p:Version=0.0.0-ci -o "${{ runner.temp }}/ci-packages"
+          done <<< "$PRODUCTS"
+
+          echo "Packages produced:"
+          ls "${{ runner.temp }}/ci-packages"/*.nupkg 2>/dev/null || echo "::warning::No .nupkg files produced"
+
       - name: Boot iOS Simulator
         id: boot-sim
         run: |
-          # Find best available iPhone simulator
           DEVICE=$(xcrun simctl list devices available -j | \
             python3 -c "
           import json, sys
@@ -98,7 +211,6 @@ jobs:
                   for d in devices:
                       if d['name'] == pref and d['state'] != 'Booted':
                           print(d['udid']); sys.exit(0)
-          # Fallback: first available iPhone
           for runtime, devices in data['devices'].items():
               if 'iOS' not in runtime: continue
               for d in devices:
@@ -111,16 +223,19 @@ jobs:
             exit 1
           fi
           echo "Booting simulator: $DEVICE"
-          xcrun simctl boot "$DEVICE" 2>/dev/null || true  # tolerate already-booted
+          xcrun simctl boot "$DEVICE" 2>/dev/null || true
           xcrun simctl bootstatus "$DEVICE" -b
           echo "device_udid=$DEVICE" >> "$GITHUB_OUTPUT"
 
-      - name: Build test app
+      - name: Build and validate test app
         run: |
-          cd ${{ matrix.test_dir }}
-          ./build-testapp.sh
+          TEST_DIR="tests/${{ matrix.library }}.SimTests"
 
-      - name: Validate on simulator
-        run: |
-          cd ${{ matrix.test_dir }}
+          if [ ! -d "$TEST_DIR" ]; then
+            echo "::warning::No sim test found at $TEST_DIR — skipping test validation"
+            exit 0
+          fi
+
+          cd "$TEST_DIR"
+          ./build-testapp.sh
           ./validate-sim.sh 30 ${{ steps.boot-sim.outputs.device_udid }}

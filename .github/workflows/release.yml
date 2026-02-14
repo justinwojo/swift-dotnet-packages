@@ -1,0 +1,339 @@
+name: Release
+
+# Triggered by pushing a tag like "Nuke/12.8.0" or manually via workflow_dispatch.
+# Tag-based runs build, test, pack, and publish to NuGet.
+# Manual dispatch supports dry-run mode (build + pack without publish).
+
+on:
+  push:
+    tags:
+      - '*/[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Library/version to release (e.g., Nuke/12.8.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run — build and pack without publishing'
+        type: boolean
+        default: true
+
+concurrency:
+  # One release at a time per tag (prevents partial-failure reruns from racing)
+  group: release-${{ github.ref_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Job 1: Build, test, and pack ─────────────────────────────────────────────
+  build:
+    runs-on: macos-26
+    outputs:
+      library: ${{ steps.parse.outputs.library }}
+      version: ${{ steps.parse.outputs.version }}
+      dry_run: ${{ steps.config.outputs.dry_run }}
+      packages: ${{ steps.pack.outputs.packages }}
+    steps:
+      - name: Parse and validate tag
+        id: parse
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          # Strict semver validation
+          if ! echo "$TAG" | grep -qE '^[A-Za-z0-9._-]+/[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$'; then
+            echo "::error::Invalid tag format: $TAG (expected <Library>/<semver>, e.g. Nuke/12.8.0)"
+            exit 1
+          fi
+
+          LIBRARY="${TAG%%/[0-9]*}"
+          VERSION="${TAG#*/}"
+
+          echo "library=$LIBRARY" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "## Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Library:** $LIBRARY" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Determine run mode
+        id: config
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+          else
+            DRY_RUN="false"
+          fi
+          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+          echo "- **Dry run:** $DRY_RUN" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+
+      - name: Validate library
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+
+          if [ ! -d "libraries/$LIBRARY" ]; then
+            echo "::error::Library directory not found: libraries/$LIBRARY"
+            echo "Available libraries:"
+            ls libraries/ | sed 's/^/  - /'
+            exit 1
+          fi
+
+          if [ ! -f "libraries/$LIBRARY/library.json" ]; then
+            echo "::error::library.json not found in libraries/$LIBRARY"
+            exit 1
+          fi
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+
+      - name: Install workloads
+        run: dotnet workload restore
+
+      - name: Determine build flags
+        id: flags
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          CONFIG="libraries/$LIBRARY/library.json"
+
+          PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
+
+          # Count non-internal products to decide if multi-pass is needed
+          HAS_INTERNAL=$(python3 -c "
+          import json
+          products = json.load(open('$CONFIG'))['products']
+          print('true' if any(p.get('internal') for p in products) else 'false')
+          ")
+
+          if [ "$PRODUCT_COUNT" -gt 1 ]; then
+            echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_flags=" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Multi-pass needed when there are internal/cross-module dependencies
+          if [ "$HAS_INTERNAL" = "true" ] || [ "$PRODUCT_COUNT" -gt 3 ]; then
+            echo "build_passes=2" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_passes=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build xcframeworks
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          cd "libraries/$LIBRARY"
+          ./build-xcframework.sh ${{ steps.flags.outputs.build_flags }}
+
+      - name: Resolve built products
+        id: resolve
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          PRODUCTS=$(scripts/build-xcframework.sh "libraries/$LIBRARY" ${{ steps.flags.outputs.build_flags }} --resolve-products)
+          echo "products<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Generate bindings and build libraries
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          PRODUCTS="${{ steps.resolve.outputs.products }}"
+          PASSES=${{ steps.flags.outputs.build_passes }}
+
+          for ((pass=1; pass<=PASSES; pass++)); do
+            echo "=== Build pass $pass of $PASSES ==="
+
+            while IFS='|' read -r dir csproj; do
+              [ -z "$csproj" ] && continue
+
+              BUILD_PATH="libraries/$LIBRARY"
+              [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
+
+              # generate-bindings.sh runs only on pass 1
+              if [ "$pass" -eq 1 ]; then
+                (cd "$BUILD_PATH" && ./generate-bindings.sh)
+              fi
+
+              # Tolerate build failures on non-final passes (wrapper compilation)
+              if [ "$pass" -lt "$PASSES" ]; then
+                dotnet build "$BUILD_PATH/$csproj" -c Release || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"
+              else
+                dotnet build "$BUILD_PATH/$csproj" -c Release
+              fi
+            done <<< "$PRODUCTS"
+          done
+
+      - name: Boot iOS Simulator
+        id: boot-sim
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | \
+            python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          prefs = ['iPhone 16', 'iPhone 16 Pro', 'iPhone 15', 'iPhone 15 Pro']
+          for runtime, devices in data['devices'].items():
+              if 'iOS' not in runtime: continue
+              for pref in prefs:
+                  for d in devices:
+                      if d['name'] == pref and d['state'] != 'Booted':
+                          print(d['udid']); sys.exit(0)
+          for runtime, devices in data['devices'].items():
+              if 'iOS' not in runtime: continue
+              for d in devices:
+                  if 'iPhone' in d['name']:
+                      print(d['udid']); sys.exit(0)
+          sys.exit(1)
+          ")
+          if [ -z "$DEVICE" ]; then
+            echo "Error: No compatible iOS simulator found"
+            exit 1
+          fi
+          echo "Booting simulator: $DEVICE"
+          xcrun simctl boot "$DEVICE" 2>/dev/null || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          echo "device_udid=$DEVICE" >> "$GITHUB_OUTPUT"
+
+      - name: Build and validate test app
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          TEST_DIR="tests/$LIBRARY.SimTests"
+
+          if [ ! -d "$TEST_DIR" ]; then
+            echo "::warning::No sim test found at $TEST_DIR — skipping test validation"
+            exit 0
+          fi
+
+          cd "$TEST_DIR"
+          ./build-testapp.sh
+          ./validate-sim.sh 30 ${{ steps.boot-sim.outputs.device_udid }}
+
+      - name: Pack NuGet packages
+        id: pack
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          VERSION="${{ steps.parse.outputs.version }}"
+          PRODUCTS="${{ steps.resolve.outputs.products }}"
+          PACKAGES=""
+
+          # Pack each product in library.json order (dependencies first)
+          while IFS='|' read -r dir csproj; do
+            [ -z "$csproj" ] && continue
+
+            BUILD_PATH="libraries/$LIBRARY"
+            [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
+
+            echo "=== Packing $csproj ==="
+            dotnet pack "$BUILD_PATH/$csproj" \
+              --no-build \
+              -c Release \
+              /p:Version="$VERSION" \
+              -o "${{ runner.temp }}/packages"
+
+            PACKAGES="$PACKAGES $csproj"
+          done <<< "$PRODUCTS"
+
+          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Packages" >> "$GITHUB_STEP_SUMMARY"
+          ls "${{ runner.temp }}/packages"/*.nupkg | while read -r pkg; do
+            echo "- \`$(basename "$pkg")\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Generate release manifest
+        run: |
+          LIBRARY="${{ steps.parse.outputs.library }}"
+          VERSION="${{ steps.parse.outputs.version }}"
+          DRY_RUN="${{ steps.config.outputs.dry_run }}"
+
+          python3 -c "
+          import json, os, glob, datetime
+
+          packages = []
+          for f in sorted(glob.glob('${{ runner.temp }}/packages/*.nupkg')):
+              name = os.path.basename(f)
+              # Extract package ID from filename: Swift.Nuke.12.8.0.nupkg -> Swift.Nuke
+              parts = name.rsplit('.', 1)[0]  # Remove .nupkg
+              # Version is the last 3+ dot-separated numeric segments
+              segments = parts.split('.')
+              pkg_parts = []
+              for i, seg in enumerate(segments):
+                  if seg[0:1].isdigit():
+                      pkg_parts = segments[:i]
+                      break
+              pkg_id = '.'.join(pkg_parts) if pkg_parts else parts
+              packages.append({'id': pkg_id, 'file': name})
+
+          manifest = {
+              'library': '$LIBRARY',
+              'version': '$VERSION',
+              'git_sha': '${{ github.sha }}',
+              'dry_run': '$DRY_RUN' == 'true',
+              'packages': packages,
+              'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
+          }
+          with open('${{ runner.temp }}/packages/release-manifest.json', 'w') as f:
+              json.dump(manifest, f, indent=2)
+          print(json.dumps(manifest, indent=2))
+          "
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ steps.parse.outputs.library }}-${{ steps.parse.outputs.version }}
+          path: ${{ runner.temp }}/packages/
+          retention-days: 30
+
+  # ── Job 2: Publish to NuGet ──────────────────────────────────────────────────
+  publish:
+    needs: build
+    if: needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment: nuget-publish
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages-${{ needs.build.outputs.library }}-${{ needs.build.outputs.version }}
+          path: packages/
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+
+      - name: Publish to NuGet
+        run: |
+          LIBRARY="${{ needs.build.outputs.library }}"
+          VERSION="${{ needs.build.outputs.version }}"
+
+          echo "=== Publishing $LIBRARY v$VERSION to NuGet ==="
+
+          # Push packages in filesystem order (library.json order preserved from pack step)
+          for pkg in packages/*.nupkg; do
+            [ -f "$pkg" ] || continue
+            echo "Pushing $(basename "$pkg")..."
+            dotnet nuget push "$pkg" \
+              --source https://api.nuget.org/v3/index.json \
+              --api-key "${{ secrets.NUGET_API_KEY }}" \
+              --skip-duplicate
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Published to NuGet" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Library:** $LIBRARY" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          for pkg in packages/*.nupkg; do
+            [ -f "$pkg" ] || continue
+            echo "- \`$(basename "$pkg")\`" >> "$GITHUB_STEP_SUMMARY"
+          done
