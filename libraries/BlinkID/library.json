@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/BlinkID/blinkid-swift-package.git",
+  "version": "7.6.2",
+  "mode": "binary",
+  "minIOS": "15.0",
+  "products": [
+    {
+      "framework": "BlinkID"
+    }
+  ]
+}

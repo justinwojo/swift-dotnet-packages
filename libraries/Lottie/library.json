@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/airbnb/lottie-ios.git",
+  "version": "4.6.0",
+  "mode": "source",
+  "minIOS": "15.0",
+  "products": [
+    {
+      "scheme": "Lottie (iOS)",
+      "framework": "Lottie"
+    }
+  ]
+}

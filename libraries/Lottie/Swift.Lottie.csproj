@@ -1,0 +1,19 @@
+<Project Sdk="Swift.Bindings.Sdk/0.1.0-preview.2">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Swift.Lottie</PackageId>
+    <Version>4.6.0</Version>
+    <Description>.NET bindings for the Lottie Swift library</Description>
+    <PackageTags>swift;dotnet;interop;lottie;ios</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
