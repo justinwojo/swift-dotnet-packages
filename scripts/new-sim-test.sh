@@ -369,8 +369,9 @@ for entry in "${RESOLVED_PRODUCTS[@]}"; do
 done
 echo ""
 echo "Next steps:"
-echo "  1. Generate bindings: cd libraries/${LIBRARY_NAME} && ./generate-bindings.sh"
+echo "  1. Build xcframework: cd libraries/${LIBRARY_NAME} && ./build-xcframework.sh"
 echo "  2. Build test app:    cd tests/${LIBRARY_NAME}.SimTests && ./build-testapp.sh"
+echo "     (The SDK csproj generates bindings automatically during build)"
 echo "  3. Boot simulator:    xcrun simctl boot <device-udid>"
 echo "  4. Validate:          ./validate-sim.sh 15"
 echo "  5. Add library-specific tests to Program.cs"

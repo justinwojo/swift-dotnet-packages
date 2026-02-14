@@ -68,6 +68,7 @@ CONFIG="$LIBRARY_DIR/library.json"
 
 REPO=$(json_field "$CONFIG" repository)
 VERSION=$(json_field "$CONFIG" version)
+TAG=$(json_field "$CONFIG" tag "$VERSION")   # git tag — defaults to version if not set
 REVISION=$(json_field "$CONFIG" revision "")
 MODE=$(json_field "$CONFIG" mode)
 MIN_IOS=$(json_field "$CONFIG" minIOS "15.0")
@@ -146,13 +147,13 @@ fi
 
 verify_revision() {
     if [ -n "$REVISION" ]; then
-        echo "=== Verifying tag $VERSION resolves to $REVISION ==="
-        REMOTE_SHA=$(git ls-remote "$REPO" "refs/tags/$VERSION" "refs/tags/$VERSION^{}" 2>/dev/null | tail -1 | awk '{print $1}')
+        echo "=== Verifying tag $TAG resolves to $REVISION ==="
+        REMOTE_SHA=$(git ls-remote "$REPO" "refs/tags/$TAG" "refs/tags/$TAG^{}" 2>/dev/null | tail -1 | awk '{print $1}')
         if [ -z "$REMOTE_SHA" ]; then
-            die "Tag '$VERSION' not found in $REPO"
+            die "Tag '$TAG' not found in $REPO"
         fi
         if [ "$REMOTE_SHA" != "$REVISION" ]; then
-            die "Tag '$VERSION' resolves to $REMOTE_SHA, expected $REVISION"
+            die "Tag '$TAG' resolves to $REMOTE_SHA, expected $REVISION"
         fi
         echo "Revision verified."
     fi
@@ -163,6 +164,7 @@ verify_revision() {
 build_source() {
     local BUILD_DIR="$LIBRARY_DIR/.build-workspace"
     local ARCHIVES_DIR="$BUILD_DIR/archives"
+    local DERIVED_DATA="$BUILD_DIR/DerivedData"
 
     # Clean previous build
     rm -rf "$BUILD_DIR"
@@ -170,8 +172,8 @@ build_source() {
 
     verify_revision
 
-    echo "=== Cloning $REPO @ $VERSION ==="
-    git clone --depth 1 --branch "$VERSION" "$REPO" "$BUILD_DIR/source"
+    echo "=== Cloning $REPO @ $TAG ==="
+    git clone --depth 1 --branch "$TAG" "$REPO" "$BUILD_DIR/source"
 
     # Read buildSettings overrides from library.json
     local BUILD_SETTINGS=()
@@ -235,6 +237,7 @@ except:
             -scheme "$scheme" \
             -destination "generic/platform=iOS" \
             -archivePath "$ARCHIVES_DIR/${framework}-ios-arm64" \
+            -derivedDataPath "$DERIVED_DATA/device" \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             SKIP_INSTALL=NO \
             IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
@@ -246,6 +249,7 @@ except:
             -scheme "$scheme" \
             -destination "generic/platform=iOS Simulator" \
             -archivePath "$ARCHIVES_DIR/${framework}-ios-simulator" \
+            -derivedDataPath "$DERIVED_DATA/simulator" \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             SKIP_INSTALL=NO \
             IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
@@ -253,9 +257,35 @@ except:
             -quiet)
 
         echo "=== Creating ${framework}.xcframework ==="
+        # Find the framework in the archive — location varies by project type:
+        #   Xcode projects: Products/Library/Frameworks/
+        #   SPM packages:   Products/usr/local/lib/
+        local device_fw simulator_fw
+        device_fw=$(find "$ARCHIVES_DIR/${framework}-ios-arm64.xcarchive/Products" -name "${framework}.framework" -type d | head -1)
+        simulator_fw=$(find "$ARCHIVES_DIR/${framework}-ios-simulator.xcarchive/Products" -name "${framework}.framework" -type d | head -1)
+        [ -n "$device_fw" ] || die "${framework}.framework not found in device archive"
+        [ -n "$simulator_fw" ] || die "${framework}.framework not found in simulator archive"
+
+        # SPM dynamic library archives don't include Swift module interfaces in the
+        # installed framework. Copy them from DerivedData intermediates if missing.
+        local dd_variant
+        for fw_path in "$device_fw" "$simulator_fw"; do
+            # Match the DerivedData subdirectory to the framework slice
+            if [ "$fw_path" = "$device_fw" ]; then dd_variant="device"; else dd_variant="simulator"; fi
+            if [ ! -d "$fw_path/Modules/${framework}.swiftmodule" ]; then
+                local swiftmod
+                swiftmod=$(find "$DERIVED_DATA/$dd_variant" -path "*/ArchiveIntermediates/${scheme}/BuildProductsPath/*/${framework}.swiftmodule" -type d 2>/dev/null | head -1)
+                if [ -n "$swiftmod" ]; then
+                    echo "  Injecting Swift module interfaces into $(basename "$(dirname "$fw_path")")"
+                    mkdir -p "$fw_path/Modules"
+                    cp -R "$swiftmod" "$fw_path/Modules/"
+                fi
+            fi
+        done
+
         xcodebuild -create-xcframework \
-            -framework "$ARCHIVES_DIR/${framework}-ios-arm64.xcarchive/Products/Library/Frameworks/${framework}.framework" \
-            -framework "$ARCHIVES_DIR/${framework}-ios-simulator.xcarchive/Products/Library/Frameworks/${framework}.framework" \
+            -framework "$device_fw" \
+            -framework "$simulator_fw" \
             -output "$output_xcframework"
 
         echo "=== ${framework}.xcframework built successfully ==="
@@ -331,9 +361,9 @@ SWIFT
             found_xcframework="$ARTIFACTS_DIR/$artifact_path"
             [ -d "$found_xcframework" ] || die "Artifact not found at specified path: $found_xcframework"
         else
-            # Search for the xcframework in artifacts
+            # Search for the xcframework in artifacts (exclude __MACOSX resource fork dirs)
             local matches
-            matches=$(find "$ARTIFACTS_DIR" -name "${framework}.xcframework" -type d 2>/dev/null || true)
+            matches=$(find "$ARTIFACTS_DIR" -name "__MACOSX" -prune -o -name "${framework}.xcframework" -type d -print 2>/dev/null || true)
             local match_count
             match_count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
 

@@ -20,10 +20,7 @@ dotnet add package Swift.StripeCardScan
 # 1. Build the xcframework from SPM
 ./build-xcframework.sh
 
-# 2. Generate C# bindings
-./generate-bindings.sh
-
-# 3. Build the package
+# 2. Build the package (SDK generates bindings automatically)
 dotnet build
 ```
 

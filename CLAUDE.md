@@ -27,10 +27,8 @@ Each library directory under `libraries/` contains:
 |------|---------|
 | `library.json` | SPM source, version, build mode, products |
 | `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
-| `generate-bindings.sh` | Run swift-bindings generator against xcframework |
-| `Swift.<Name>.csproj` | Library project targeting `net10.0-ios` |
+| `Swift.<Name>.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet) |
-| `output/` | Generated binding output (gitignored) |
 
 ### Library Config (`library.json`)
 
@@ -67,17 +65,9 @@ Each library root has a `library.json` declaring its SPM source and products:
 
 Each library's `build-xcframework.sh` is a thin wrapper: `../../scripts/build-xcframework.sh . "$@"`
 
-### Generator Mode
+### Binding Generation
 
-Libraries use `--xcframework` mode for binding generation. This auto-resolves ABI JSON, dylib, TBD, and swiftinterface from the xcframework, compiles the Swift wrapper, and emits a ready-to-build `.csproj`.
-
-```bash
-dotnet run --project "$GENERATOR_PROJECT" -- \
-  --xcframework Library.xcframework \
-  -o output/
-```
-
-The generator is located via `SWIFT_BINDINGS_ROOT` env var (defaults to `../../swift-bindings` as a sibling directory).
+Binding generation is handled automatically by the `Swift.Bindings.Sdk` NuGet package during `dotnet build`. The SDK reads the xcframework, generates C# bindings and a Swift wrapper into `obj/`, and compiles everything. No separate generation step is needed.
 
 ### Key Naming Convention
 
@@ -100,7 +90,7 @@ The generator is located via `SWIFT_BINDINGS_ROOT` env var (defaults to `../../s
 ./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
 ```
 
-Generates: `library.json`, thin `build-xcframework.sh`, `generate-bindings.sh`, `Swift.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
+Generates: `library.json`, thin `build-xcframework.sh`, `Swift.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
 
 ### New Simulator Test
 
@@ -142,10 +132,10 @@ Filename placeholder: `__LIBRARY_NAME__` in template filenames becomes the actua
 ### Running Simulator Tests Locally
 
 ```bash
-# 1. Generate bindings (if not already done)
-cd libraries/Nuke && ./generate-bindings.sh
+# 1. Build xcframework (if not already done)
+cd libraries/Nuke && ./build-xcframework.sh
 
-# 2. Build the test app
+# 2. Build the test app (SDK generates bindings automatically)
 cd tests/Nuke.SimTests && ./build-testapp.sh
 
 # 3. Boot a simulator
@@ -181,17 +171,17 @@ strategy:
 **Steps:**
 1. **Build xcframeworks** — `./build-xcframework.sh $build_flags`
 2. **Resolve products** — `--resolve-products` for CI product iteration
-3. **Generate bindings + build** — iterates over resolved products
+3. **Build libraries** — SDK generates bindings automatically during `dotnet build`
 4. **Boot iOS Simulator** — Finds best available iPhone, exports `device_udid`
 5. **Build test app** — `./build-testapp.sh`
 6. **Validate on simulator** — `./validate-sim.sh 30 $device_udid`
 
-To add a new library to CI, add a matrix entry with `library`, `build_dir`, `test_dir`, and `build_flags`.
+CI auto-detects libraries from `libraries/*/library.json` — no manual matrix configuration needed.
 
 ## Dependencies
 
+- **Swift.Bindings.Sdk** NuGet package — handles binding generation during `dotnet build`
 - **Swift.Runtime** NuGet package — pinned to `0.1.0-preview.1` (exact, not wildcard)
-- **swift-bindings generator** — sibling repo, referenced via `SWIFT_BINDINGS_ROOT`
 - **.NET SDK 10.0** — pinned in `global.json`
 
 ## Multi-Product Vendor Libraries (e.g., Stripe)

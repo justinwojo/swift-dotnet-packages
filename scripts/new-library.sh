@@ -327,6 +327,9 @@ fi
 
 is_internal() {
     local name="$1"
+    if [ ${#INTERNAL_SET[@]} -eq 0 ]; then
+        return 1
+    fi
     for iname in "${INTERNAL_SET[@]}"; do
         if [ "$(echo "$iname" | xargs)" = "$name" ]; then
             return 0
@@ -335,8 +338,8 @@ is_internal() {
     return 1
 }
 
-# For each product, generate bindings script, csproj, and README
-# Internal products get only a subdirectory (for xcframework output), not bindings/csproj
+# For each product, generate csproj and README
+# Internal products get only a subdirectory (for xcframework output), not csproj
 for product_name in "${PRODUCT_LIST[@]}"; do
     product_name=$(echo "$product_name" | xargs)  # trim whitespace
     MODULE_NAME="$product_name"
@@ -346,29 +349,14 @@ for product_name in "${PRODUCT_LIST[@]}"; do
     if [ "$IS_MULTI" = true ]; then
         PRODUCT_DIR="$LIB_DIR/$product_name"
         mkdir -p "$PRODUCT_DIR"
-        # For multi-product, generate-bindings.sh adjusts the generator root path
-        GENERATOR_REL_ROOT="../../../swift-bindings"
     else
         PRODUCT_DIR="$LIB_DIR"
-        GENERATOR_REL_ROOT="../../swift-bindings"
     fi
 
-    # Skip bindings/csproj/README for internal products
+    # Skip csproj/README for internal products
     if is_internal "$product_name"; then
         continue
     fi
-
-    # generate-bindings.sh
-    sed -e "s/{{FRAMEWORK_NAME}}/$FRAMEWORK_NAME/g" \
-        -e "s/{{MODULE_NAME}}/$MODULE_NAME/g" \
-        "$TEMPLATE_DIR/generate-bindings.sh.template" > "$PRODUCT_DIR/generate-bindings.sh"
-
-    # Fix generator path for multi-product subdirectories
-    if [ "$IS_MULTI" = true ]; then
-        sed -i '' "s|../../swift-bindings|../../../swift-bindings|g" "$PRODUCT_DIR/generate-bindings.sh"
-    fi
-
-    chmod +x "$PRODUCT_DIR/generate-bindings.sh"
 
     # Swift.{Module}.csproj
     sed -e "s/{{MODULE_NAME}}/$MODULE_NAME/g" \
@@ -396,11 +384,9 @@ for product_name in "${PRODUCT_LIST[@]}"; do
         fi
     elif [ "$IS_MULTI" = true ]; then
         echo "  - $product_name/"
-        echo "    - generate-bindings.sh"
         echo "    - Swift.${product_name}.csproj"
         echo "    - README.md"
     else
-        echo "  - generate-bindings.sh"
         echo "  - Swift.${product_name}.csproj"
         echo "  - README.md"
     fi
@@ -408,6 +394,6 @@ done
 echo ""
 echo "Next steps:"
 echo "  1. Build xcframeworks: cd libraries/$LIBRARY_NAME && ./build-xcframework.sh$([ "$IS_MULTI" = true ] && echo " --all-products")"
-echo "  2. Generate bindings for each product"
-echo "  3. dotnet build"
-echo "  4. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME$([ "$IS_MULTI" = true ] && echo " --all-products")"
+echo "  2. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME$([ "$IS_MULTI" = true ] && echo " --all-products")"
+echo "  3. Build test app:    cd tests/$LIBRARY_NAME.SimTests && ./build-testapp.sh"
+echo "     (The SDK csproj generates bindings automatically during build)"

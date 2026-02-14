@@ -154,7 +154,7 @@ jobs:
           echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Generate bindings and build libraries
+      - name: Build libraries (SDK generates bindings automatically)
         run: |
           PRODUCTS="${{ steps.resolve.outputs.products }}"
           PASSES=${{ steps.flags.outputs.build_passes }}
@@ -167,10 +167,6 @@ jobs:
 
               BUILD_PATH="libraries/${{ matrix.library }}"
               [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-              if [ "$pass" -eq 1 ]; then
-                (cd "$BUILD_PATH" && ./generate-bindings.sh)
-              fi
 
               if [ "$pass" -lt "$PASSES" ]; then
                 dotnet build "$BUILD_PATH/$csproj" || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"

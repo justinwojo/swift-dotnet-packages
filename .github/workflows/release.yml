@@ -143,7 +143,7 @@ jobs:
           echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Generate bindings and build libraries
+      - name: Build libraries (SDK generates bindings automatically)
         run: |
           LIBRARY="${{ steps.parse.outputs.library }}"
           PRODUCTS="${{ steps.resolve.outputs.products }}"
@@ -157,11 +157,6 @@ jobs:
 
               BUILD_PATH="libraries/$LIBRARY"
               [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-              # generate-bindings.sh runs only on pass 1
-              if [ "$pass" -eq 1 ]; then
-                (cd "$BUILD_PATH" && ./generate-bindings.sh)
-              fi
 
               # Tolerate build failures on non-final passes (wrapper compilation)
               if [ "$pass" -lt "$PASSES" ]; then

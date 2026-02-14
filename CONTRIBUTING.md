@@ -43,10 +43,8 @@ Libraries that produce one NuGet package go directly under `libraries/`:
 libraries/Nuke/
 ├── library.json
 ├── build-xcframework.sh
-├── generate-bindings.sh
 ├── Swift.Nuke.csproj
-├── README.md
-└── output/
+└── README.md
 ```
 
 Examples: Nuke, CryptoSwift, Lottie, Alamofire
@@ -60,13 +58,10 @@ libraries/Stripe/
 ├── library.json
 ├── build-xcframework.sh
 ├── StripeCore/
-│   ├── generate-bindings.sh
 │   └── Swift.StripeCore.csproj
 ├── StripePayments/
-│   ├── generate-bindings.sh
 │   └── Swift.StripePayments.csproj
 └── StripePaymentSheet/
-    ├── generate-bindings.sh
     └── Swift.StripePaymentSheet.csproj
 ```
 
@@ -126,7 +121,7 @@ Some vendors include internal frameworks (ObjC-only or non-public) that other pr
 Internal products:
 - Are built as xcframeworks (needed at runtime)
 - Get `"internal": true` in `library.json`
-- Don't get `generate-bindings.sh`, csproj, or README
+- Don't get a csproj or README
 - Are excluded from `--resolve-products` (CI skips them for binding generation)
 
 #### SwiftFrameworkDependency auto-detection
@@ -156,13 +151,12 @@ Multi-product libraries with cross-module Swift dependencies require a two-pass 
 
 **Locally:**
 ```bash
-# Pass 1: generate + build (some products may fail)
+# Pass 1: build (some products may fail — SDK generates bindings automatically)
 for product in StripeCore StripePayments ...; do
-  (cd libraries/Stripe/$product && ./generate-bindings.sh)
   dotnet build libraries/Stripe/$product/Swift.$product.csproj || true
 done
 
-# Pass 2: build only (should succeed)
+# Pass 2: build (should succeed — fingerprint skips regeneration)
 for product in StripeCore StripePayments ...; do
   dotnet build libraries/Stripe/$product/Swift.$product.csproj
 done
@@ -176,7 +170,7 @@ done
 2. Scaffold with `--products` and `--internal` flags
 3. Build xcframeworks: `./build-xcframework.sh --all-products`
 4. Auto-detect deps: `scripts/detect-dependencies.sh libraries/Vendor --all-products --inject`
-5. Generate bindings and build (two passes if needed)
+5. Build libraries: `dotnet build` (two passes if needed — SDK generates bindings automatically)
 6. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
 7. Add to CI matrix with appropriate `build_flags` and `build_passes`
 
@@ -225,10 +219,8 @@ Each library directory should contain:
 |------|---------|
 | `library.json` | SPM source, version, mode, products |
 | `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
-| `generate-bindings.sh` | Run the generator against the xcframework |
-| `Swift.{Name}.csproj` | Library project targeting `net10.0-ios` |
+| `Swift.{Name}.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet package) |
-| `output/` | Generated binding output (gitignored) |
 
 ## Build Scripts
 
@@ -250,38 +242,11 @@ cd libraries/Stripe && ./build-xcframework.sh --all-products
 scripts/build-xcframework.sh libraries/Stripe --all-products --resolve-products
 ```
 
-### generate-bindings.sh
-
-Runs the swift-bindings generator against the xcframework. Uses `SWIFT_BINDINGS_ROOT` environment variable to locate the generator (defaults to `../../swift-bindings` as a sibling directory).
-
 ## CI
 
-The GitHub Actions workflow uses a matrix strategy with richer entries:
+The GitHub Actions workflow auto-detects libraries from `libraries/*/library.json`. On PRs, it only builds libraries with changed files; on `workflow_dispatch`, it builds all. Build flags (multi-product, two-pass) are derived from `library.json` at runtime — no manual matrix configuration needed.
 
-```yaml
-strategy:
-  matrix:
-    include:
-      - library: Nuke
-        build_dir: libraries/Nuke
-        test_dir: tests/Nuke.SimTests
-        build_flags: ""
-      - library: Stripe
-        build_dir: libraries/Stripe
-        test_dir: tests/Stripe.SimTests
-        build_flags: "--all-products"
-        build_passes: 2
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `library` | yes | Display name |
-| `build_dir` | yes | Path to library directory |
-| `test_dir` | yes | Path to simulator test directory |
-| `build_flags` | yes | Flags for `build-xcframework.sh` (e.g. `"--all-products"`) |
-| `build_passes` | no | Number of `dotnet build` passes (default 1, use 2 for multi-product vendors with cross-module deps) |
-
-Product lists are derived from `library.json` at runtime via `--resolve-products` to avoid drift between config and CI. Internal products are automatically excluded.
+Product lists are resolved via `--resolve-products` to avoid drift between config and CI. Internal products are automatically excluded.
 
 For dependent packages, use `needs:` to enforce build order:
 
