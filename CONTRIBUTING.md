@@ -94,6 +94,92 @@ libraries/BlinkIDUX/
 
 When published to NuGet, `ProjectReference` automatically becomes a `PackageReference` — consumers who install `Swift.BlinkIDUX` get `Swift.BlinkID` pulled in transitively.
 
+### Multi-product vendor guide
+
+Vendors like Stripe distribute many frameworks from a single SPM repo. These require extra configuration beyond what `new-library.sh` generates by default.
+
+#### Discovering products and identifying ObjC-only frameworks
+
+Use `--discover` to list products and detect which are Swift vs ObjC-only:
+
+```bash
+./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios.git
+```
+
+The output annotates each product:
+- `(Swift)` — has a Swift module, generates bindings normally
+- `(ObjC-only)` — no Swift module, must be marked internal
+- `(unknown)` — could not determine; inspect manually
+
+#### Internal dependencies
+
+Some vendors include internal frameworks (ObjC-only or non-public) that other products depend on at runtime. Mark these with `--internal` during scaffolding:
+
+```bash
+./scripts/new-library.sh Stripe \
+  --repo https://github.com/stripe/stripe-ios.git \
+  --version 25.6.2 --mode source \
+  --products StripeCore,StripePayments,...,Stripe3DS2,StripeUICore,StripeCameraCore \
+  --internal Stripe3DS2,StripeUICore,StripeCameraCore
+```
+
+Internal products:
+- Are built as xcframeworks (needed at runtime)
+- Get `"internal": true` in `library.json`
+- Don't get `generate-bindings.sh`, csproj, or README
+- Are excluded from `--resolve-products` (CI skips them for binding generation)
+
+#### SwiftFrameworkDependency auto-detection
+
+Products that import sibling Swift modules need `<SwiftFrameworkDependency>` items in their csproj. Use `detect-dependencies.sh` to auto-detect these from `.swiftinterface` files:
+
+```bash
+# Report mode (stdout):
+scripts/detect-dependencies.sh libraries/Stripe --all-products
+
+# Inject into csproj files:
+scripts/detect-dependencies.sh libraries/Stripe --all-products --inject
+```
+
+The `--inject` flag:
+- Uses XML comment markers (`<!-- BEGIN/END auto-detected SwiftFrameworkDependency -->`) for idempotent updates
+- Migrates existing manual entries on first run (removes sibling entries, keeps non-sibling ones)
+- Running twice produces identical output
+
+**Prerequisite**: xcframeworks must be built before running.
+
+**Important**: ObjC-only frameworks (no `.swiftmodule`) are automatically excluded from generated deps. Never add them as `SwiftFrameworkDependency` — this causes the generator to silently produce no output.
+
+#### Two-pass build pattern
+
+Multi-product libraries with cross-module Swift dependencies require a two-pass build. Pass 1 generates bindings but wrapper compilation may fail (e.g., internal `@objc` types referenced in wrapper); the SDK stamps a fingerprint. Pass 2 skips generation and compiles C# successfully.
+
+**Locally:**
+```bash
+# Pass 1: generate + build (some products may fail)
+for product in StripeCore StripePayments ...; do
+  (cd libraries/Stripe/$product && ./generate-bindings.sh)
+  dotnet build libraries/Stripe/$product/Swift.$product.csproj || true
+done
+
+# Pass 2: build only (should succeed)
+for product in StripeCore StripePayments ...; do
+  dotnet build libraries/Stripe/$product/Swift.$product.csproj
+done
+```
+
+**In CI:** Set `build_passes: 2` in the matrix entry. The CI workflow automatically runs multiple passes, tolerating build failures on non-final passes.
+
+#### Onboarding checklist for new multi-product vendors
+
+1. Run `--discover` to list products and identify ObjC-only frameworks
+2. Scaffold with `--products` and `--internal` flags
+3. Build xcframeworks: `./build-xcframework.sh --all-products`
+4. Auto-detect deps: `scripts/detect-dependencies.sh libraries/Vendor --all-products --inject`
+5. Generate bindings and build (two passes if needed)
+6. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
+7. Add to CI matrix with appropriate `build_flags` and `build_passes`
+
 ## Library Config (`library.json`)
 
 Each library root has a `library.json` that declares its SPM source and products:
@@ -123,6 +209,7 @@ Each library root has a `library.json` that declares its SPM source and products
 | `products[].module` | no | Swift module name (defaults to `framework`) |
 | `products[].subdirectory` | no | Subdirectory for multi-product vendors |
 | `products[].artifactPath` | binary only | Override artifact lookup path |
+| `products[].internal` | no | `true` to mark as internal-only (no bindings, excluded from `--resolve-products`) |
 
 ### Build Modes
 
@@ -183,9 +270,18 @@ strategy:
         build_dir: libraries/Stripe
         test_dir: tests/Stripe.SimTests
         build_flags: "--all-products"
+        build_passes: 2
 ```
 
-Product lists are derived from `library.json` at runtime via `--resolve-products` to avoid drift between config and CI.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `library` | yes | Display name |
+| `build_dir` | yes | Path to library directory |
+| `test_dir` | yes | Path to simulator test directory |
+| `build_flags` | yes | Flags for `build-xcframework.sh` (e.g. `"--all-products"`) |
+| `build_passes` | no | Number of `dotnet build` passes (default 1, use 2 for multi-product vendors with cross-module deps) |
+
+Product lists are derived from `library.json` at runtime via `--resolve-products` to avoid drift between config and CI. Internal products are automatically excluded.
 
 For dependent packages, use `needs:` to enforce build order:
 

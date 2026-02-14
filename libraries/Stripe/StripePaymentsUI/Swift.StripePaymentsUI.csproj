@@ -4,10 +4,10 @@
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.StripePaymentSheet</PackageId>
+    <PackageId>Swift.StripePaymentsUI</PackageId>
     <Version>25.6.2</Version>
-    <Description>.NET bindings for the StripePaymentSheet Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripepaymentsheet;ios</PackageTags>
+    <Description>.NET bindings for the StripePaymentsUI Swift library</Description>
+    <PackageTags>swift;dotnet;interop;stripepaymentsui;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
@@ -18,10 +18,8 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeApplePay/StripeApplePay.xcframework" />
     <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
     <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" />
-    <SwiftFrameworkDependency Include="../StripePaymentsUI/StripePaymentsUI.xcframework" />
     <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->

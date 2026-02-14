@@ -23,6 +23,7 @@
 #   --scheme SCHEME      Xcode scheme name (source mode, single product)
 #   --products P1,P2,P3  Comma-separated product names
 #   --min-ios VER        Minimum iOS version (default: 15.0)
+#   --internal P1,P2     Comma-separated products to mark as internal (no bindings)
 #   --revision SHA       Full 40-char commit SHA for verification
 #   --discover URL       Discover products from an SPM repo (standalone mode)
 #   --force              Overwrite existing library directory
@@ -46,9 +47,11 @@ discover_products() {
     git clone --depth 1 "$repo_url" "$tmp_dir/repo" 2>&1 | tail -1
 
     echo "=== Dumping Package.swift ==="
-    (cd "$tmp_dir/repo" && swift package dump-package) | python3 -c "
+    (cd "$tmp_dir/repo" && swift package dump-package > "$tmp_dir/package-dump.json")
+
+    python3 -c "
 import json, sys
-pkg = json.load(sys.stdin)
+pkg = json.load(open('$tmp_dir/package-dump.json'))
 print(f\"Package: {pkg['name']}\")
 print()
 products = pkg.get('products', [])
@@ -70,6 +73,72 @@ if binary_targets:
         url = t.get('url', t.get('path', 'local'))
         print(f\"  - {t['name']} -> {url}\")
 "
+
+    echo ""
+    echo "Resolving packages for framework analysis..."
+    (cd "$tmp_dir/repo" && swift package resolve 2>&1 | tail -3)
+
+    echo ""
+    echo "Framework analysis:"
+    (cd "$tmp_dir/repo" && python3 -c "
+import json, os, glob
+
+pkg = json.load(open('$tmp_dir/package-dump.json'))
+targets = {t['name']: t for t in pkg.get('targets', [])}
+artifacts_dir = '.build/artifacts'
+
+for p in pkg.get('products', []):
+    name = p['name']
+    target_names = p.get('targets', [])
+
+    any_swift = False
+    any_objc_only = False
+    all_unknown = True
+
+    for tname in target_names:
+        t = targets.get(tname, {})
+        if t.get('type') == 'binary':
+            # Look for resolved xcframework
+            for xcfw in glob.glob(f'{artifacts_dir}/**/{tname}.xcframework', recursive=True):
+                has_swiftmod = any(
+                    os.path.isdir(d) for d in glob.glob(f'{xcfw}/**/Modules/*.swiftmodule', recursive=True)
+                )
+                if has_swiftmod:
+                    any_swift = True
+                else:
+                    any_objc_only = True
+                all_unknown = False
+                break
+        else:
+            # Source target: classify by target type first
+            target_type = t.get('type', '')
+            if target_type in ('clang', 'system'):
+                # C/ObjC target — check for mixed Swift sources as fallback
+                src_path = t.get('path', tname)
+                has_swift_files = bool(glob.glob(f'{src_path}/**/*.swift', recursive=True))
+                if has_swift_files:
+                    any_swift = True
+                else:
+                    any_objc_only = True
+            elif t.get('publicHeadersPath'):
+                # Swift target with public headers (unusual but possible mixed target)
+                src_path = t.get('path', tname)
+                has_swift_files = bool(glob.glob(f'{src_path}/**/*.swift', recursive=True))
+                if has_swift_files:
+                    any_swift = True
+                else:
+                    any_objc_only = True
+            else:
+                any_swift = True  # Regular Swift target
+            all_unknown = False
+
+    if any_swift:
+        print(f'  {name} (Swift)')
+    elif any_objc_only:
+        print(f'  {name} (ObjC-only) -- use --internal when scaffolding')
+    else:
+        print(f'  {name} (unknown -- could not determine)')
+")
     exit 0
 }
 
@@ -85,6 +154,7 @@ MIN_IOS="15.0"
 REVISION=""
 FORCE=false
 DISCOVER_URL=""
+INTERNAL_PRODUCTS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -110,6 +180,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --products)
             PRODUCTS="$2"
+            shift 2
+            ;;
+        --internal)
+            INTERNAL_PRODUCTS="$2"
             shift 2
             ;;
         --min-ios)
@@ -211,6 +285,8 @@ products_str = '$PRODUCTS'
 scheme = '$SCHEME'
 mode = '$MODE'
 is_multi = $( [ "$IS_MULTI" = true ] && echo "True" || echo "False" )
+internal_str = '$INTERNAL_PRODUCTS'
+internal_set = set(n.strip() for n in internal_str.split(',') if n.strip()) if internal_str else set()
 
 if products_str:
     for name in products_str.split(','):
@@ -220,6 +296,8 @@ if products_str:
             product['scheme'] = name
         if is_multi:
             product['subdirectory'] = name
+        if name in internal_set:
+            product['internal'] = True
         config['products'].append(product)
 elif scheme:
     config['products'].append({
@@ -241,7 +319,24 @@ echo "Created libraries/$LIBRARY_NAME/library.json"
 cp "$TEMPLATE_DIR/build-xcframework.sh.template" "$LIB_DIR/build-xcframework.sh"
 chmod +x "$LIB_DIR/build-xcframework.sh"
 
+# Build set of internal product names for skipping file generation
+INTERNAL_SET=()
+if [ -n "$INTERNAL_PRODUCTS" ]; then
+    IFS=',' read -ra INTERNAL_SET <<< "$INTERNAL_PRODUCTS"
+fi
+
+is_internal() {
+    local name="$1"
+    for iname in "${INTERNAL_SET[@]}"; do
+        if [ "$(echo "$iname" | xargs)" = "$name" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # For each product, generate bindings script, csproj, and README
+# Internal products get only a subdirectory (for xcframework output), not bindings/csproj
 for product_name in "${PRODUCT_LIST[@]}"; do
     product_name=$(echo "$product_name" | xargs)  # trim whitespace
     MODULE_NAME="$product_name"
@@ -256,6 +351,11 @@ for product_name in "${PRODUCT_LIST[@]}"; do
     else
         PRODUCT_DIR="$LIB_DIR"
         GENERATOR_REL_ROOT="../../swift-bindings"
+    fi
+
+    # Skip bindings/csproj/README for internal products
+    if is_internal "$product_name"; then
+        continue
     fi
 
     # generate-bindings.sh
@@ -290,7 +390,11 @@ echo "  - library.json"
 echo "  - build-xcframework.sh (thin wrapper)"
 for product_name in "${PRODUCT_LIST[@]}"; do
     product_name=$(echo "$product_name" | xargs)
-    if [ "$IS_MULTI" = true ]; then
+    if is_internal "$product_name"; then
+        if [ "$IS_MULTI" = true ]; then
+            echo "  - $product_name/ (internal — no bindings)"
+        fi
+    elif [ "$IS_MULTI" = true ]; then
         echo "  - $product_name/"
         echo "    - generate-bindings.sh"
         echo "    - Swift.${product_name}.csproj"

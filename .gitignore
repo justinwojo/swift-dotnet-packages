@@ -19,6 +19,7 @@ local-packages/
 
 # Generator output
 **/output/
+**/test-output/
 
 # .NET
 *.user

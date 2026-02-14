@@ -5,9 +5,17 @@ using System.Diagnostics;
 using System.Text;
 using Foundation;
 using UIKit;
+using Swift.Stripe;
 using Swift.StripeCore;
-using Swift.StripePayments;
+// using Swift.StripePayments; // excluded: generator produces invalid enum-as-NSObject bindings
 using Swift.StripePaymentSheet;
+using Swift.StripePaymentsUI;
+using Swift.StripeApplePay;
+using Swift.StripeIdentity;
+using Swift.StripeIssuing;
+using Swift.StripeCardScan;
+using Swift.StripeFinancialConnections;
+using Swift.StripeConnect;
 
 namespace StripeSimTests;
 

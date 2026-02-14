@@ -22,43 +22,7 @@ TEMPLATE_DIR="$REPO_ROOT/templates/sim-test"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-die() { echo "Error: $*" >&2; exit 1; }
-
-json_field() {
-    python3 -c "
-import json
-data = json.load(open('$1'))
-keys = '$2'.split('.')
-for k in keys:
-    data = data.get(k)
-    if data is None:
-        print('${3:-}')
-        exit(0)
-print(data)
-" 2>/dev/null
-}
-
-json_array_len() {
-    python3 -c "import json; data=json.load(open('$1')); print(len(data.get('$2', [])))"
-}
-
-json_product_field() {
-    python3 -c "
-import json
-data = json.load(open('$1'))
-product = data['products'][$2]
-print(product.get('$3', '${4:-}'))
-"
-}
-
-json_product_names() {
-    python3 -c "
-import json
-data = json.load(open('$1'))
-for p in data['products']:
-    print(p['framework'])
-"
-}
+source "$(dirname "$0")/lib.sh"
 
 # Resolve a library's products to an array of "lib_dir|framework|module|subdir" entries.
 # Arguments: <library_name> <product_filter> (product_filter: "" for auto, "*" for all, "P1,P2" for specific)

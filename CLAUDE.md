@@ -194,6 +194,40 @@ To add a new library to CI, add a matrix entry with `library`, `build_dir`, `tes
 - **swift-bindings generator** — sibling repo, referenced via `SWIFT_BINDINGS_ROOT`
 - **.NET SDK 10.0** — pinned in `global.json`
 
+## Multi-Product Vendor Libraries (e.g., Stripe)
+
+Multi-product libraries with cross-module dependencies require additional configuration:
+
+### Internal Dependencies
+
+Some vendors have internal frameworks (not public SPM products) that other products depend on. These must be:
+1. Added to `library.json` with `"internal": true` so they're built as xcframeworks
+2. Built alongside public products, but they don't need binding generation or csproj files
+3. Referenced as `NativeReference` in sim test csproj (needed at runtime)
+
+Example: Stripe has 3 internal dependencies: `Stripe3DS2`, `StripeUICore`, `StripeCameraCore`.
+
+### SwiftFrameworkDependency Items
+
+Products that import other Swift modules need `<SwiftFrameworkDependency>` items in their csproj pointing to sibling xcframeworks. This tells the SDK where to find dependent modules during binding generation.
+
+```xml
+<ItemGroup>
+  <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
+  <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" />
+</ItemGroup>
+```
+
+**Important**: Do NOT list ObjC-only frameworks (no Swift module) as `SwiftFrameworkDependency` — this causes the generator to silently produce no output. They should only be `NativeReference` in the consuming app.
+
+### SDK Fingerprint / Two-Pass Build
+
+The SDK runs binding generation during `dotnet build`. When wrapper compilation fails (common for products referencing internal types), the first build fails but creates a fingerprint stamp file. The second build skips generation (fingerprint matches) and compiles the C# bindings that were generated. This is the expected workflow for complex multi-module libraries.
+
+### Scheme Name Mismatches
+
+Some products have Xcode schemes that differ from their framework name. Example: the `Stripe` umbrella framework uses scheme `StripeiOS`, not `Stripe`. Check available schemes with `xcodebuild -list` in the source repo.
+
 ## Working Guidelines
 
 - Do NOT commit unless explicitly asked

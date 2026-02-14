@@ -26,6 +26,7 @@ jobs:
             build_dir: libraries/Stripe
             test_dir: tests/Stripe.SimTests
             build_flags: "--all-products"
+            build_passes: 2
     steps:
       - uses: actions/checkout@v4
 
@@ -55,15 +56,32 @@ jobs:
 
       - name: Generate bindings and build libraries
         run: |
-          while IFS='|' read -r dir csproj; do
-            if [ -n "$dir" ]; then
-              (cd "${{ matrix.build_dir }}/$dir" && ./generate-bindings.sh)
-              dotnet build "${{ matrix.build_dir }}/$dir/$csproj"
-            else
-              (cd "${{ matrix.build_dir }}" && ./generate-bindings.sh)
-              dotnet build "${{ matrix.build_dir }}/$csproj"
-            fi
-          done <<< "${{ steps.resolve.outputs.products }}"
+          PRODUCTS="${{ steps.resolve.outputs.products }}"
+          PASSES=${{ matrix.build_passes || 1 }}
+
+          for ((pass=1; pass<=PASSES; pass++)); do
+            echo "=== Build pass $pass of $PASSES ==="
+
+            while IFS='|' read -r dir csproj; do
+              [ -z "$csproj" ] && continue
+
+              BUILD_PATH="${{ matrix.build_dir }}"
+              [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
+
+              # generate-bindings.sh runs only on pass 1; failures always fatal
+              if [ "$pass" -eq 1 ]; then
+                (cd "$BUILD_PATH" && ./generate-bindings.sh)
+              fi
+
+              # dotnet build: tolerate failures on non-final passes (wrapper compilation),
+              # but always fail on the final pass
+              if [ "$pass" -lt "$PASSES" ]; then
+                dotnet build "$BUILD_PATH/$csproj" || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"
+              else
+                dotnet build "$BUILD_PATH/$csproj"
+              fi
+            done <<< "$PRODUCTS"
+          done
 
       - name: Boot iOS Simulator
         id: boot-sim

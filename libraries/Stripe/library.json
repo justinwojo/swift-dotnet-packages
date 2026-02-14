@@ -22,6 +22,64 @@
       "framework": "StripePaymentSheet",
       "scheme": "StripePaymentSheet",
       "subdirectory": "StripePaymentSheet"
+    },
+    {
+      "framework": "Stripe",
+      "scheme": "StripeiOS",
+      "subdirectory": "Stripe"
+    },
+    {
+      "framework": "StripePaymentsUI",
+      "scheme": "StripePaymentsUI",
+      "subdirectory": "StripePaymentsUI"
+    },
+    {
+      "framework": "StripeApplePay",
+      "scheme": "StripeApplePay",
+      "subdirectory": "StripeApplePay"
+    },
+    {
+      "framework": "StripeIdentity",
+      "scheme": "StripeIdentity",
+      "subdirectory": "StripeIdentity"
+    },
+    {
+      "framework": "StripeIssuing",
+      "scheme": "StripeIssuing",
+      "subdirectory": "StripeIssuing"
+    },
+    {
+      "framework": "StripeCardScan",
+      "scheme": "StripeCardScan",
+      "subdirectory": "StripeCardScan"
+    },
+    {
+      "framework": "StripeFinancialConnections",
+      "scheme": "StripeFinancialConnections",
+      "subdirectory": "StripeFinancialConnections"
+    },
+    {
+      "framework": "StripeConnect",
+      "scheme": "StripeConnect",
+      "subdirectory": "StripeConnect"
+    },
+    {
+      "framework": "Stripe3DS2",
+      "scheme": "Stripe3DS2",
+      "subdirectory": "Stripe3DS2",
+      "internal": true
+    },
+    {
+      "framework": "StripeUICore",
+      "scheme": "StripeUICore",
+      "subdirectory": "StripeUICore",
+      "internal": true
+    },
+    {
+      "framework": "StripeCameraCore",
+      "scheme": "StripeCameraCore",
+      "subdirectory": "StripeCameraCore",
+      "internal": true
     }
   ]
 }
