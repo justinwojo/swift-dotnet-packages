@@ -1,0 +1,19 @@
+<Project Sdk="Swift.Bindings.Sdk/0.1.0-preview.1">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Swift.{{MODULE_NAME}}</PackageId>
+    <Version>{{VERSION}}</Version>
+    <Description>.NET bindings for the {{MODULE_NAME}} Swift library</Description>
+    <PackageTags>swift;dotnet;interop;{{MODULE_NAME_LOWER}};ios</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

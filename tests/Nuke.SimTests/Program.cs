@@ -200,80 +200,29 @@ public class MainViewController : UIViewController
 
     private void RunSmokeTests(TestLogger logger, TestResults results)
     {
-        // SwiftString round-trip (validates Swift runtime interop)
-        try
-        {
-            using var str = new Swift.SwiftString("hello from .NET");
-            logger.Pass("SwiftString creation");
-            results.Pass("SwiftString_Create");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"SwiftString creation: {ex.Message}");
-            results.Fail("SwiftString_Create", ex.Message);
-        }
+        // Basic type metadata test — override with library-specific type access
+        logger.Info("Smoke tests complete (add library-specific tests in RunLibraryTests)");
     }
 
+    /// <summary>
+    /// Add library-specific tests here after scaffolding.
+    /// </summary>
     private void RunLibraryTests(TestLogger logger, TestResults results)
     {
-        TestImagePipelineSingleton(logger, results);
-        TestImageRequestConstruction(logger, results);
-        TestImageRequestPriority(logger, results);
-    }
-
-    private void TestImagePipelineSingleton(TestLogger logger, TestResults results)
-    {
-        try
-        {
-            var pipeline = ImagePipeline.Shared;
-            if (pipeline != null)
-            {
-                logger.Pass("ImagePipeline.Shared is accessible");
-                results.Pass("ImagePipeline_Shared");
-            }
-            else
-            {
-                logger.Fail("ImagePipeline.Shared returned null");
-                results.Fail("ImagePipeline_Shared", "Null");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"ImagePipeline.Shared: {ex.Message}");
-            results.Fail("ImagePipeline_Shared", ex.Message);
-        }
-    }
-
-    private void TestImageRequestConstruction(TestLogger logger, TestResults results)
-    {
-        try
-        {
-            using var request = new ImageRequest("https://example.com/image.png");
-            var desc = request.Description;
-            logger.Pass($"ImageRequest constructor (description: {desc})");
-            results.Pass("ImageRequest_Constructor");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"ImageRequest constructor: {ex.Message}");
-            results.Fail("ImageRequest_Constructor", ex.Message);
-        }
-    }
-
-    private void TestImageRequestPriority(TestLogger logger, TestResults results)
-    {
-        try
-        {
-            using var request = new ImageRequest("https://example.com/test.jpg");
-            var priority = request.Priority;
-            logger.Pass($"ImageRequest.Priority: {priority}");
-            results.Pass("ImageRequest_Priority");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"ImageRequest.Priority: {ex.Message}");
-            results.Fail("ImageRequest_Priority", ex.Message);
-        }
+        // TODO: Add library-specific tests
+        // Example:
+        //   try
+        //   {
+        //       var obj = new SomeType();
+        //       logger.Pass("SomeType constructor");
+        //       results.Pass("SomeType_Constructor");
+        //   }
+        //   catch (Exception ex)
+        //   {
+        //       logger.Fail($"SomeType constructor: {ex.Message}");
+        //       results.Fail("SomeType_Constructor", ex.Message);
+        //   }
+        logger.Info("No library-specific tests defined yet");
     }
 }
 

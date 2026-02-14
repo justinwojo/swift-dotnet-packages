@@ -12,6 +12,7 @@ swift-dotnet-packages/
 ├── tests/<Name>.SimTests/    # Simulator test apps per library
 ├── tests/<Name>.Tests/       # Unit/integration tests per library (future)
 ├── templates/sim-test/       # Simulator test app template files
+├── templates/library/        # Library scaffolding template files
 ├── scripts/                  # Scaffolding and utility scripts
 ├── Directory.Build.props     # Shared NuGet metadata
 ├── global.json               # .NET SDK version pin (10.0.102)
@@ -24,11 +25,47 @@ Each library directory under `libraries/` contains:
 
 | File | Purpose |
 |------|---------|
-| `build-xcframework.sh` | Clone from SPM + build xcframework (device + simulator) |
+| `library.json` | SPM source, version, build mode, products |
+| `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
 | `generate-bindings.sh` | Run swift-bindings generator against xcframework |
 | `Swift.<Name>.csproj` | Library project targeting `net10.0-ios` |
 | `README.md` | Package description (included in NuGet) |
 | `output/` | Generated binding output (gitignored) |
+
+### Library Config (`library.json`)
+
+Each library root has a `library.json` declaring its SPM source and products:
+
+```json
+{
+  "repository": "https://github.com/kean/Nuke.git",
+  "version": "12.8.0",
+  "mode": "source",
+  "minIOS": "15.0",
+  "products": [
+    { "scheme": "Nuke", "framework": "Nuke" }
+  ]
+}
+```
+
+**Fields:** `repository` (SPM URL), `version` (git tag), `revision` (optional SHA verification), `mode` (`"source"` or `"binary"`), `minIOS` (default `"15.0"`), `products[]` (framework, scheme, module, subdirectory, artifactPath).
+
+### Build Modes
+
+- **Source mode**: Clone repo, build with xcodebuild (Nuke, Alamofire, etc.)
+- **Binary mode**: Use `swift package resolve` to download pre-built xcframeworks (Stripe, Firebase, etc.)
+
+### Shared Build Script
+
+`scripts/build-xcframework.sh <library-dir> [--products P1,P2] [--all-products] [--resolve-products]`
+
+- Single product in config: auto-selects it
+- Multiple products + no flags: fails with helpful error listing available products
+- `--products P1,P2`: builds subset
+- `--all-products`: builds everything
+- `--resolve-products`: dry-run, prints `subdirectory|csproj` pairs for CI
+
+Each library's `build-xcframework.sh` is a thin wrapper: `../../scripts/build-xcframework.sh . "$@"`
 
 ### Generator Mode
 
@@ -48,6 +85,39 @@ The generator is located via `SWIFT_BINDINGS_ROOT` env var (defaults to `../../s
 - **Module name** = Swift module name — used in generated C# files (`Swift.{Module}.cs`) and wrapper xcframework (`{Module}SwiftBindings.xcframework`)
 - Usually identical, but can differ (use `--module` flag in scaffolding when they differ)
 
+## Scaffolding
+
+### New Library
+
+```bash
+# Single-product:
+./scripts/new-library.sh Nuke --repo https://github.com/kean/Nuke.git --version 12.8.0 --mode source --scheme Nuke
+
+# Multi-product vendor:
+./scripts/new-library.sh Stripe --repo https://github.com/stripe/stripe-ios-spm.git --version 24.0.0 --mode binary --products StripeCore,StripePayments,StripePaymentSheet
+
+# Discover available products:
+./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
+```
+
+Generates: `library.json`, thin `build-xcframework.sh`, `generate-bindings.sh`, `Swift.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
+
+### New Simulator Test
+
+```bash
+./scripts/new-sim-test.sh <LibraryName> [--products P1,P2] [--all-products] [--with <root>[:P1,P2]] [--module M] [--force]
+```
+
+- Instantiates `templates/sim-test/` into `tests/LibraryName.SimTests/`
+- Requires `libraries/LibraryName/` to exist
+- Reads `library.json` to resolve product list, framework names, module names
+- `--module` overrides Swift module name (single-product only)
+- `--products` / `--all-products` for multi-product libraries
+- `--with` for cross-repo dependencies (repeatable)
+- `--force` overwrites existing test directory
+- Multi-product: generates csproj programmatically with all ProjectReference and NativeReference entries
+- Single-product: uses template with sed substitution
+
 ## Simulator Tests
 
 Each library can have a simulator test app (`tests/<Name>.SimTests/`) that validates bindings run correctly on iOS Simulator. Tests use a standard structure:
@@ -58,18 +128,6 @@ Each library can have a simulator test app (`tests/<Name>.SimTests/`) that valid
 - **Library-specific tests** — API-level tests (constructors, singletons, properties)
 - **Success marker** — prints `TEST SUCCESS` to stdout on pass; `validate-sim.sh` watches for this
 
-### Scaffolding a New Test
-
-```bash
-./scripts/new-sim-test.sh LibraryName [--module ModuleName] [--force]
-```
-
-- Instantiates `templates/sim-test/` into `tests/LibraryName.SimTests/`
-- Requires `libraries/LibraryName/` to exist
-- `--module` overrides Swift module name (default = library name)
-- `--force` overwrites existing test directory
-- Idempotent: errors if target exists without `--force`
-
 ### Template Placeholders
 
 | Placeholder | Description | Example |
@@ -77,6 +135,7 @@ Each library can have a simulator test app (`tests/<Name>.SimTests/`) that valid
 | `{{LIBRARY_NAME}}` | PascalCase library name | `Nuke` |
 | `{{LIBRARY_NAME_LOWER}}` | Lowercase library name | `nuke` |
 | `{{MODULE_NAME}}` | Swift module name | `Nuke` |
+| `{{USING_STATEMENTS}}` | One or more `using Swift.{Module};` lines | `using Swift.Nuke;` |
 
 Filename placeholder: `__LIBRARY_NAME__` in template filenames becomes the actual library name.
 
@@ -107,16 +166,27 @@ After scaffolding, edit `tests/LibraryName.SimTests/Program.cs`:
 
 ## CI Pipeline
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-15` with a matrix over libraries:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26` with a matrix over libraries:
 
-1. **Build xcframework** — `./build-xcframework.sh`
-2. **Generate bindings** — `./generate-bindings.sh`
-3. **Build library** — `dotnet build`
-4. **Boot iOS Simulator** — Finds best available iPhone, exports `device_udid` via `$GITHUB_OUTPUT`
+```yaml
+strategy:
+  matrix:
+    include:
+      - library: Nuke
+        build_dir: libraries/Nuke
+        test_dir: tests/Nuke.SimTests
+        build_flags: ""
+```
+
+**Steps:**
+1. **Build xcframeworks** — `./build-xcframework.sh $build_flags`
+2. **Resolve products** — `--resolve-products` for CI product iteration
+3. **Generate bindings + build** — iterates over resolved products
+4. **Boot iOS Simulator** — Finds best available iPhone, exports `device_udid`
 5. **Build test app** — `./build-testapp.sh`
-6. **Validate on simulator** — `./validate-sim.sh 30 $device_udid` (passes explicit UDID to avoid ambiguity with multiple booted sims)
+6. **Validate on simulator** — `./validate-sim.sh 30 $device_udid`
 
-To add a new library to CI, add it to the `matrix.library` array.
+To add a new library to CI, add a matrix entry with `library`, `build_dir`, `test_dir`, and `build_flags`.
 
 ## Dependencies
 

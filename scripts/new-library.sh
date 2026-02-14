@@ -1,0 +1,309 @@
+#!/bin/bash
+# Scaffold a new library from templates and generate library.json.
+#
+# Usage:
+#   Single-product (source mode):
+#     ./scripts/new-library.sh Nuke \
+#       --repo https://github.com/kean/Nuke.git \
+#       --version 12.8.0 --mode source --scheme Nuke
+#
+#   Multi-product (binary mode):
+#     ./scripts/new-library.sh Stripe \
+#       --repo https://github.com/stripe/stripe-ios-spm.git \
+#       --version 24.0.0 --mode binary \
+#       --products StripeCore,StripePayments,StripePaymentSheet
+#
+#   Discover available products from an SPM repo:
+#     ./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
+#
+# Options:
+#   --repo URL           SPM repository URL (required)
+#   --version TAG        Git tag (required)
+#   --mode source|binary Build mode (required)
+#   --scheme SCHEME      Xcode scheme name (source mode, single product)
+#   --products P1,P2,P3  Comma-separated product names
+#   --min-ios VER        Minimum iOS version (default: 15.0)
+#   --revision SHA       Full 40-char commit SHA for verification
+#   --discover URL       Discover products from an SPM repo (standalone mode)
+#   --force              Overwrite existing library directory
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TEMPLATE_DIR="$REPO_ROOT/templates/library"
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+# ── Discover Mode ────────────────────────────────────────────────────────────
+
+discover_products() {
+    local repo_url="$1"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    echo "=== Cloning $repo_url (shallow) ==="
+    git clone --depth 1 "$repo_url" "$tmp_dir/repo" 2>&1 | tail -1
+
+    echo "=== Dumping Package.swift ==="
+    (cd "$tmp_dir/repo" && swift package dump-package) | python3 -c "
+import json, sys
+pkg = json.load(sys.stdin)
+print(f\"Package: {pkg['name']}\")
+print()
+products = pkg.get('products', [])
+if not products:
+    print('No products found.')
+    sys.exit(0)
+print(f'Products ({len(products)}):')
+for p in products:
+    ptype = list(p['type'].keys())[0] if isinstance(p['type'], dict) else p['type']
+    targets = ', '.join(p.get('targets', []))
+    print(f\"  - {p['name']} ({ptype}) -> [{targets}]\")
+
+print()
+targets = pkg.get('targets', [])
+binary_targets = [t for t in targets if t.get('type') == 'binary']
+if binary_targets:
+    print(f'Binary targets ({len(binary_targets)}):')
+    for t in binary_targets:
+        url = t.get('url', t.get('path', 'local'))
+        print(f\"  - {t['name']} -> {url}\")
+"
+    exit 0
+}
+
+# ── Argument Parsing ─────────────────────────────────────────────────────────
+
+LIBRARY_NAME=""
+REPO_URL=""
+VERSION=""
+MODE=""
+SCHEME=""
+PRODUCTS=""
+MIN_IOS="15.0"
+REVISION=""
+FORCE=false
+DISCOVER_URL=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --discover)
+            DISCOVER_URL="$2"
+            shift 2
+            ;;
+        --repo)
+            REPO_URL="$2"
+            shift 2
+            ;;
+        --version)
+            VERSION="$2"
+            shift 2
+            ;;
+        --mode)
+            MODE="$2"
+            shift 2
+            ;;
+        --scheme)
+            SCHEME="$2"
+            shift 2
+            ;;
+        --products)
+            PRODUCTS="$2"
+            shift 2
+            ;;
+        --min-ios)
+            MIN_IOS="$2"
+            shift 2
+            ;;
+        --revision)
+            REVISION="$2"
+            shift 2
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        -*)
+            die "Unknown option '$1'"
+            ;;
+        *)
+            if [ -z "$LIBRARY_NAME" ]; then
+                LIBRARY_NAME="$1"
+            else
+                die "Unexpected argument '$1'"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Handle discover mode
+if [ -n "$DISCOVER_URL" ]; then
+    discover_products "$DISCOVER_URL"
+fi
+
+# ── Validate Arguments ───────────────────────────────────────────────────────
+
+[ -n "$LIBRARY_NAME" ] || die "LibraryName is required"
+[ -n "$REPO_URL" ] || die "--repo is required"
+[ -n "$VERSION" ] || die "--version is required"
+[ -n "$MODE" ] || die "--mode is required"
+
+case "$MODE" in
+    source|binary) ;;
+    *) die "--mode must be 'source' or 'binary'" ;;
+esac
+
+# Determine products
+PRODUCT_LIST=()
+IS_MULTI=false
+
+if [ -n "$PRODUCTS" ]; then
+    IFS=',' read -ra PRODUCT_LIST <<< "$PRODUCTS"
+    if [ "${#PRODUCT_LIST[@]}" -gt 1 ]; then
+        IS_MULTI=true
+    fi
+elif [ -n "$SCHEME" ]; then
+    PRODUCT_LIST=("$SCHEME")
+else
+    die "Either --scheme (single product) or --products (one or more) is required"
+fi
+
+# For source mode, scheme defaults to the product name
+if [ "$MODE" = "source" ] && [ -z "$SCHEME" ] && [ "$IS_MULTI" = false ]; then
+    SCHEME="${PRODUCT_LIST[0]}"
+fi
+
+# ── Check Target Directory ───────────────────────────────────────────────────
+
+LIB_DIR="$REPO_ROOT/libraries/$LIBRARY_NAME"
+if [ -d "$LIB_DIR" ]; then
+    if [ "$FORCE" = true ]; then
+        echo "Removing existing $LIB_DIR (--force)"
+        rm -rf "$LIB_DIR"
+    else
+        die "libraries/$LIBRARY_NAME/ already exists. Use --force to overwrite."
+    fi
+fi
+
+mkdir -p "$LIB_DIR"
+
+# ── Generate library.json ────────────────────────────────────────────────────
+
+generate_library_json() {
+    python3 -c "
+import json
+
+config = {
+    'repository': '$REPO_URL',
+    'version': '$VERSION',
+    'mode': '$MODE',
+    'minIOS': '$MIN_IOS',
+    'products': []
+}
+
+revision = '$REVISION'
+if revision:
+    config['revision'] = revision
+
+products_str = '$PRODUCTS'
+scheme = '$SCHEME'
+mode = '$MODE'
+is_multi = $( [ "$IS_MULTI" = true ] && echo "True" || echo "False" )
+
+if products_str:
+    for name in products_str.split(','):
+        name = name.strip()
+        product = {'framework': name}
+        if mode == 'source':
+            product['scheme'] = name
+        if is_multi:
+            product['subdirectory'] = name
+        config['products'].append(product)
+elif scheme:
+    config['products'].append({
+        'scheme': scheme,
+        'framework': scheme
+    })
+
+print(json.dumps(config, indent=2))
+" > "$LIB_DIR/library.json"
+}
+
+generate_library_json
+
+echo "Created libraries/$LIBRARY_NAME/library.json"
+
+# ── Generate Files From Templates ────────────────────────────────────────────
+
+# build-xcframework.sh (thin wrapper — same for all libraries)
+cp "$TEMPLATE_DIR/build-xcframework.sh.template" "$LIB_DIR/build-xcframework.sh"
+chmod +x "$LIB_DIR/build-xcframework.sh"
+
+# For each product, generate bindings script, csproj, and README
+for product_name in "${PRODUCT_LIST[@]}"; do
+    product_name=$(echo "$product_name" | xargs)  # trim whitespace
+    MODULE_NAME="$product_name"
+    MODULE_NAME_LOWER=$(echo "$MODULE_NAME" | tr '[:upper:]' '[:lower:]')
+    FRAMEWORK_NAME="$product_name"
+
+    if [ "$IS_MULTI" = true ]; then
+        PRODUCT_DIR="$LIB_DIR/$product_name"
+        mkdir -p "$PRODUCT_DIR"
+        # For multi-product, generate-bindings.sh adjusts the generator root path
+        GENERATOR_REL_ROOT="../../../swift-bindings"
+    else
+        PRODUCT_DIR="$LIB_DIR"
+        GENERATOR_REL_ROOT="../../swift-bindings"
+    fi
+
+    # generate-bindings.sh
+    sed -e "s/{{FRAMEWORK_NAME}}/$FRAMEWORK_NAME/g" \
+        -e "s/{{MODULE_NAME}}/$MODULE_NAME/g" \
+        "$TEMPLATE_DIR/generate-bindings.sh.template" > "$PRODUCT_DIR/generate-bindings.sh"
+
+    # Fix generator path for multi-product subdirectories
+    if [ "$IS_MULTI" = true ]; then
+        sed -i '' "s|../../swift-bindings|../../../swift-bindings|g" "$PRODUCT_DIR/generate-bindings.sh"
+    fi
+
+    chmod +x "$PRODUCT_DIR/generate-bindings.sh"
+
+    # Swift.{Module}.csproj
+    sed -e "s/{{MODULE_NAME}}/$MODULE_NAME/g" \
+        -e "s/{{MODULE_NAME_LOWER}}/$MODULE_NAME_LOWER/g" \
+        -e "s/{{VERSION}}/$VERSION/g" \
+        "$TEMPLATE_DIR/Swift.__MODULE_NAME__.csproj.template" > "$PRODUCT_DIR/Swift.${MODULE_NAME}.csproj"
+
+    # README.md
+    sed -e "s|{{MODULE_NAME}}|$MODULE_NAME|g" \
+        -e "s|{{REPOSITORY}}|$REPO_URL|g" \
+        "$TEMPLATE_DIR/README.md.template" > "$PRODUCT_DIR/README.md"
+done
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+
+echo ""
+echo "Created libraries/$LIBRARY_NAME/ with:"
+echo "  - library.json"
+echo "  - build-xcframework.sh (thin wrapper)"
+for product_name in "${PRODUCT_LIST[@]}"; do
+    product_name=$(echo "$product_name" | xargs)
+    if [ "$IS_MULTI" = true ]; then
+        echo "  - $product_name/"
+        echo "    - generate-bindings.sh"
+        echo "    - Swift.${product_name}.csproj"
+        echo "    - README.md"
+    else
+        echo "  - generate-bindings.sh"
+        echo "  - Swift.${product_name}.csproj"
+        echo "  - README.md"
+    fi
+done
+echo ""
+echo "Next steps:"
+echo "  1. Build xcframeworks: cd libraries/$LIBRARY_NAME && ./build-xcframework.sh$([ "$IS_MULTI" = true ] && echo " --all-products")"
+echo "  2. Generate bindings for each product"
+echo "  3. dotnet build"
+echo "  4. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME$([ "$IS_MULTI" = true ] && echo " --all-products")"

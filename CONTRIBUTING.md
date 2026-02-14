@@ -1,5 +1,38 @@
 # Contributing: Adding Libraries
 
+## Quick Start
+
+### Scaffold a new library
+
+```bash
+# Single-product (source mode):
+./scripts/new-library.sh Nuke \
+  --repo https://github.com/kean/Nuke.git \
+  --version 12.8.0 --mode source --scheme Nuke
+
+# Multi-product vendor (binary mode):
+./scripts/new-library.sh Stripe \
+  --repo https://github.com/stripe/stripe-ios-spm.git \
+  --version 24.0.0 --mode binary \
+  --products StripeCore,StripePayments,StripePaymentSheet
+
+# Discover available products from an SPM repo:
+./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
+```
+
+### Scaffold simulator tests
+
+```bash
+# Single-product
+./scripts/new-sim-test.sh Nuke
+
+# Multi-product vendor
+./scripts/new-sim-test.sh Stripe --all-products
+
+# Cross-repo dependency
+./scripts/new-sim-test.sh BlinkIDUX --with BlinkID
+```
+
 ## Directory Structure
 
 ### Single-package libraries
@@ -8,6 +41,7 @@ Libraries that produce one NuGet package go directly under `libraries/`:
 
 ```
 libraries/Nuke/
+├── library.json
 ├── build-xcframework.sh
 ├── generate-bindings.sh
 ├── Swift.Nuke.csproj
@@ -23,14 +57,17 @@ When a vendor distributes 3+ related frameworks from a single SPM repository, gr
 
 ```
 libraries/Stripe/
-├── build-xcframeworks.sh              # One script builds all from SPM
+├── library.json
+├── build-xcframework.sh
 ├── StripeCore/
-│   └── Swift.Stripe.Core.csproj
+│   ├── generate-bindings.sh
+│   └── Swift.StripeCore.csproj
 ├── StripePayments/
-│   └── Swift.Stripe.Payments.csproj
-├── StripePaymentSheet/
-│   └── Swift.Stripe.PaymentSheet.csproj
-└── ...
+│   ├── generate-bindings.sh
+│   └── Swift.StripePayments.csproj
+└── StripePaymentSheet/
+    ├── generate-bindings.sh
+    └── Swift.StripePaymentSheet.csproj
 ```
 
 **Rule of thumb:** Group when there's a shared build step or 3+ packages from the same source repo. For 1-2 packages, flat is fine.
@@ -57,13 +94,50 @@ libraries/BlinkIDUX/
 
 When published to NuGet, `ProjectReference` automatically becomes a `PackageReference` — consumers who install `Swift.BlinkIDUX` get `Swift.BlinkID` pulled in transitively.
 
+## Library Config (`library.json`)
+
+Each library root has a `library.json` that declares its SPM source and products:
+
+```json
+{
+  "repository": "https://github.com/kean/Nuke.git",
+  "version": "12.8.0",
+  "mode": "source",
+  "minIOS": "15.0",
+  "products": [
+    { "scheme": "Nuke", "framework": "Nuke" }
+  ]
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `repository` | yes | SPM git URL |
+| `version` | yes | Git tag (exact pin) |
+| `revision` | no | Full 40-char commit SHA — verified at build time |
+| `mode` | yes | `"source"` or `"binary"` |
+| `minIOS` | no | Min iOS deployment target (default `"15.0"`) |
+| `products[]` | yes | Array of products to build |
+| `products[].scheme` | source only | Xcode scheme name for xcodebuild |
+| `products[].framework` | yes | Framework name (xcframework output name) |
+| `products[].module` | no | Swift module name (defaults to `framework`) |
+| `products[].subdirectory` | no | Subdirectory for multi-product vendors |
+| `products[].artifactPath` | binary only | Override artifact lookup path |
+
+### Build Modes
+
+**Source mode** (`"mode": "source"`): Clones the repo and builds xcframeworks with xcodebuild. Used for libraries that distribute source (Nuke, Alamofire, etc.).
+
+**Binary mode** (`"mode": "binary"`): Uses `swift package resolve` to download pre-built xcframeworks. Used for vendors that distribute binary xcframeworks via SPM (Stripe, Firebase, etc.).
+
 ## Per-Library Checklist
 
 Each library directory should contain:
 
 | File | Purpose |
 |------|---------|
-| `build-xcframework.sh` | Fetch from SPM + build xcframework |
+| `library.json` | SPM source, version, mode, products |
+| `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
 | `generate-bindings.sh` | Run the generator against the xcframework |
 | `Swift.{Name}.csproj` | Library project targeting `net10.0-ios` |
 | `README.md` | Package description (included in NuGet package) |
@@ -71,11 +145,23 @@ Each library directory should contain:
 
 ## Build Scripts
 
-### build-xcframework.sh
+### Shared build script
 
-Clones the library from its SPM repository (pinned to a specific version tag), builds for iOS device + simulator, and creates the xcframework. Build workspace is cleaned up after.
+The shared `scripts/build-xcframework.sh` reads `library.json` and handles both build modes:
 
-For vendor-grouped libraries, a single `build-xcframeworks.sh` clones once and builds all frameworks from the same source.
+```bash
+# Build single product (auto-detected)
+cd libraries/Nuke && ./build-xcframework.sh
+
+# Build specific products
+cd libraries/Stripe && ./build-xcframework.sh --products StripeCore,StripePayments
+
+# Build all products
+cd libraries/Stripe && ./build-xcframework.sh --all-products
+
+# Dry-run: resolve products (for CI)
+scripts/build-xcframework.sh libraries/Stripe --all-products --resolve-products
+```
 
 ### generate-bindings.sh
 
@@ -83,7 +169,23 @@ Runs the swift-bindings generator against the xcframework. Uses `SWIFT_BINDINGS_
 
 ## CI
 
-The GitHub Actions workflow uses a matrix strategy. Single-package libraries are individual matrix entries. Vendor groups are built as a unit.
+The GitHub Actions workflow uses a matrix strategy with richer entries:
+
+```yaml
+strategy:
+  matrix:
+    include:
+      - library: Nuke
+        build_dir: libraries/Nuke
+        test_dir: tests/Nuke.SimTests
+        build_flags: ""
+      - library: Stripe
+        build_dir: libraries/Stripe
+        test_dir: tests/Stripe.SimTests
+        build_flags: "--all-products"
+```
+
+Product lists are derived from `library.json` at runtime via `--resolve-products` to avoid drift between config and CI.
 
 For dependent packages, use `needs:` to enforce build order:
 
@@ -103,11 +205,25 @@ Each library can have a simulator test app that validates bindings on iOS Simula
 ### Creating tests for a new library
 
 ```bash
-./scripts/new-sim-test.sh LibraryName [--module ModuleName] [--force]
+# Simple single-product
+./scripts/new-sim-test.sh Nuke
+
+# Stripe subset
+./scripts/new-sim-test.sh Stripe --products StripeCore,StripePayments
+
+# Full Stripe
+./scripts/new-sim-test.sh Stripe --all-products
+
+# Cross-repo dependency
+./scripts/new-sim-test.sh BlinkIDUX --with BlinkID
+
+# Complex cross-vendor
+./scripts/new-sim-test.sh Checkout --with Stripe:StripeCore,StripePaymentSheet
 ```
 
 This scaffolds `tests/LibraryName.SimTests/` from the template in `templates/sim-test/`.
-Use `--module` when the Swift module name differs from the library name. Use `--force` to overwrite an existing test directory.
+Use `--module` when the Swift module name differs from the library name (single-product only).
+Use `--force` to overwrite an existing test directory.
 
 ### Running tests locally
 

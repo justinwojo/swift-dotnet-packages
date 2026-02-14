@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/stripe/stripe-ios.git",
+  "version": "25.6.2",
+  "mode": "source",
+  "minIOS": "15.0",
+  "buildSettings": {
+    "GCC_TREAT_WARNINGS_AS_ERRORS": "NO",
+    "SWIFT_TREAT_WARNINGS_AS_ERRORS": "NO"
+  },
+  "products": [
+    {
+      "framework": "StripeCore",
+      "scheme": "StripeCore",
+      "subdirectory": "StripeCore"
+    },
+    {
+      "framework": "StripePayments",
+      "scheme": "StripePayments",
+      "subdirectory": "StripePayments"
+    },
+    {
+      "framework": "StripePaymentSheet",
+      "scheme": "StripePaymentSheet",
+      "subdirectory": "StripePaymentSheet"
+    }
+  ]
+}

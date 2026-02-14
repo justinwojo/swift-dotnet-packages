@@ -17,7 +17,15 @@ jobs:
     runs-on: macos-26
     strategy:
       matrix:
-        library: [Nuke]
+        include:
+          - library: Nuke
+            build_dir: libraries/Nuke
+            test_dir: tests/Nuke.SimTests
+            build_flags: ""
+          - library: Stripe
+            build_dir: libraries/Stripe
+            test_dir: tests/Stripe.SimTests
+            build_flags: "--all-products"
     steps:
       - uses: actions/checkout@v4
 
@@ -30,13 +38,32 @@ jobs:
       - name: Install workloads
         run: dotnet workload restore
 
-      - name: Build xcframework
+      - name: Build xcframeworks
         run: |
-          cd libraries/${{ matrix.library }}
-          ./build-xcframework.sh
+          cd ${{ matrix.build_dir }}
+          ./build-xcframework.sh ${{ matrix.build_flags }}
 
-      - name: Build library
-        run: dotnet build libraries/${{ matrix.library }}
+      - name: Resolve built products
+        id: resolve
+        run: |
+          # Use the shared script's --resolve-products flag to get the exact product list
+          # that matches what was built, avoiding duplicated parsing logic.
+          PRODUCTS=$(scripts/build-xcframework.sh ${{ matrix.build_dir }} ${{ matrix.build_flags }} --resolve-products)
+          echo "products<<EOF" >> $GITHUB_OUTPUT
+          echo "$PRODUCTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate bindings and build libraries
+        run: |
+          while IFS='|' read -r dir csproj; do
+            if [ -n "$dir" ]; then
+              (cd "${{ matrix.build_dir }}/$dir" && ./generate-bindings.sh)
+              dotnet build "${{ matrix.build_dir }}/$dir/$csproj"
+            else
+              (cd "${{ matrix.build_dir }}" && ./generate-bindings.sh)
+              dotnet build "${{ matrix.build_dir }}/$csproj"
+            fi
+          done <<< "${{ steps.resolve.outputs.products }}"
 
       - name: Boot iOS Simulator
         id: boot-sim
@@ -72,10 +99,10 @@ jobs:
 
       - name: Build test app
         run: |
-          cd tests/${{ matrix.library }}.SimTests
+          cd ${{ matrix.test_dir }}
           ./build-testapp.sh
 
       - name: Validate on simulator
         run: |
-          cd tests/${{ matrix.library }}.SimTests
+          cd ${{ matrix.test_dir }}
           ./validate-sim.sh 30 ${{ steps.boot-sim.outputs.device_udid }}

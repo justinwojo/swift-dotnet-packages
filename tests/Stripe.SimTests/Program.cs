@@ -5,9 +5,11 @@ using System.Diagnostics;
 using System.Text;
 using Foundation;
 using UIKit;
-{{USING_STATEMENTS}}
+using Swift.StripeCore;
+using Swift.StripePayments;
+using Swift.StripePaymentSheet;
 
-namespace {{LIBRARY_NAME}}SimTests;
+namespace StripeSimTests;
 
 #region Test Infrastructure
 
@@ -117,7 +119,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "{{LIBRARY_NAME}} Simulator Tests",
+            Text = "Stripe Simulator Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,

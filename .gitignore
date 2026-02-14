@@ -13,8 +13,12 @@ local-packages/
 
 # xcframework build artifacts
 **/xcframework-build/
+**/.build-workspace/
 **/DerivedData/
 **/*.xcframework/
+
+# Generator output
+**/output/
 
 # .NET
 *.user
