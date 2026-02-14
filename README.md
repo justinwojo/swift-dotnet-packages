@@ -2,7 +2,7 @@
 
 NuGet packages providing .NET bindings for popular Swift libraries.
 
-Bindings are generated using [swift-bindings](https://github.com/jwojiechowski/swift-bindings) and target .NET 10.0 on Apple platforms (iOS, macOS, tvOS).
+Bindings are generated using [swift-dotnet-bindings](https://github.com/justinwojo/swift-dotnet-bindings) and target .NET 10.0 on Apple platforms (iOS, macOS, tvOS).
 
 ## Repository Structure
 
