@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <RuntimeIdentifier>iossimulator-arm64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationId>com.swiftbindings.{{LIBRARY_NAME_LOWER}}simtests</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <IncludeSwiftBindingsRuntimeNative>false</IncludeSwiftBindingsRuntimeNative>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+  <!-- Reference the library project — brings in bindings, native frameworks, and Swift.Runtime transitively -->
+  <ItemGroup>
+    <ProjectReference Include="../../libraries/{{LIBRARY_NAME}}/Swift.{{MODULE_NAME}}.csproj" />
+  </ItemGroup>
+
+</Project>

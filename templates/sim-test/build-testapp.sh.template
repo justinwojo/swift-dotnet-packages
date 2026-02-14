@@ -1,0 +1,7 @@
+#!/bin/bash
+# Build {{LIBRARY_NAME}} simulator test app
+set -euo pipefail
+cd "$(dirname "$0")"
+echo "=== Building {{LIBRARY_NAME}} simulator tests ==="
+dotnet build . -c Debug
+echo "=== Build complete ==="

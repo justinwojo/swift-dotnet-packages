@@ -1,0 +1,31 @@
+# Build outputs
+bin/
+obj/
+*.nupkg
+*.snupkg
+
+# Test app build output
+tests/*/bin/
+tests/*/obj/
+
+# Local NuGet packages (temporary, until packages are published)
+local-packages/
+
+# xcframework build artifacts
+**/xcframework-build/
+**/DerivedData/
+**/*.xcframework/
+
+# .NET
+*.user
+*.suo
+*.vs/
+*.DotSettings.user
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+*.swp
+*~
