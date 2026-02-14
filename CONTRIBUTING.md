@@ -51,7 +51,7 @@ Examples: Nuke, CryptoSwift, Lottie, Alamofire
 
 ### Multi-package vendors
 
-When a vendor distributes 3+ related frameworks from a single SPM repository, group them under a vendor directory:
+When a vendor distributes 2+ related frameworks from a single SPM repository, group them under a vendor directory:
 
 ```
 libraries/Stripe/
@@ -65,23 +65,24 @@ libraries/Stripe/
     └── Swift.StripePaymentSheet.csproj
 ```
 
-**Rule of thumb:** Group when there's a shared build step or 3+ packages from the same source repo. For 1-2 packages, flat is fine.
+**Rule of thumb:** Group when there's a shared build step or 2+ packages from the same source repo.
 
-### Dependent packages (no vendor grouping)
+### Dependent packages
 
-When two standalone libraries have a dependency but come from different sources or only have 2 packages, keep them flat with a `ProjectReference`:
+When two or more related libraries have a dependency, group them under a parent directory with a `ProjectReference`:
 
 ```
 libraries/BlinkID/
-├── Swift.BlinkID.csproj               # Standalone
-└── ...
-libraries/BlinkIDUX/
-├── Swift.BlinkIDUX.csproj             # References BlinkID
-└── ...
+├── library.json
+├── build-xcframework.sh
+├── BlinkID/
+│   └── Swift.BlinkID.csproj
+└── BlinkIDUX/
+    └── Swift.BlinkIDUX.csproj         # References BlinkID
 ```
 
 ```xml
-<!-- libraries/BlinkIDUX/Swift.BlinkIDUX.csproj -->
+<!-- libraries/BlinkID/BlinkIDUX/Swift.BlinkIDUX.csproj -->
 <ItemGroup>
   <ProjectReference Include="../BlinkID/Swift.BlinkID.csproj" />
 </ItemGroup>
@@ -207,9 +208,11 @@ Each library root has a `library.json` that declares its SPM source and products
 
 ### Build Modes
 
-**Source mode** (`"mode": "source"`): Clones the repo and builds xcframeworks with xcodebuild. Used for libraries that distribute source (Nuke, Alamofire, etc.).
+Swift libraries are distributed in two ways, and the `mode` field tells the build script how to obtain the compiled frameworks:
 
-**Binary mode** (`"mode": "binary"`): Uses `swift package resolve` to download pre-built xcframeworks. Used for vendors that distribute binary xcframeworks via SPM (Stripe, Firebase, etc.).
+**Source mode** (`"mode": "source"`): The library publishes its Swift source code. The build script clones the repository, compiles the Swift code locally with Xcode, and produces xcframeworks from the build output. This is the most common distribution model for open-source Swift libraries (Nuke, Alamofire, Lottie, etc.).
+
+**Binary mode** (`"mode": "binary"`): The library vendor pre-compiles their code and publishes ready-to-use binary frameworks. The build script uses Swift Package Manager to download these pre-built xcframeworks directly — no local compilation needed. Vendors typically choose this model to protect proprietary code or reduce consumer build times (Stripe, Firebase, BlinkID, etc.).
 
 ## Per-Library Checklist
 
