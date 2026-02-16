@@ -18,6 +18,10 @@
     <None Include="Info.plist" />
   </ItemGroup>
 
+  <ItemGroup>
+    <BundleResource Include="Resources/test-animation.json" />
+  </ItemGroup>
+
   <!-- Reference the library project — brings in bindings, native frameworks, and Swift.Runtime transitively -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/Lottie/Swift.Lottie.csproj" />

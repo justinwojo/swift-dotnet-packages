@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Text;
 using Foundation;
 using UIKit;
+using Swift;
+using Swift.Runtime;
 using Swift.Stripe;
 using Swift.StripeCore;
 // using Swift.StripePayments; // excluded: generator produces invalid enum-as-NSObject bindings
@@ -210,29 +212,134 @@ public class MainViewController : UIViewController
 
     private void RunSmokeTests(TestLogger logger, TestResults results)
     {
-        // Basic type metadata test — override with library-specific type access
-        logger.Info("Smoke tests complete (add library-specific tests in RunLibraryTests)");
+        // STPAPIClient type metadata (StripeCore)
+        try
+        {
+            var metadata = SwiftObjectHelper<Swift.StripeCore.STPAPIClient>.GetTypeMetadata();
+            logger.Info($"STPAPIClient metadata size: {metadata.Size}");
+            if (metadata.Size > 0)
+            {
+                logger.Pass("STPAPIClient metadata");
+                results.Pass("STPAPIClient_Metadata");
+            }
+            else
+            {
+                logger.Fail("STPAPIClient metadata: size is 0");
+                results.Fail("STPAPIClient_Metadata", "Size is 0");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"STPAPIClient metadata: {ex.Message}");
+            results.Fail("STPAPIClient_Metadata", ex.Message);
+        }
     }
 
-    /// <summary>
-    /// Add library-specific tests here after scaffolding.
-    /// </summary>
     private void RunLibraryTests(TestLogger logger, TestResults results)
     {
-        // TODO: Add library-specific tests
-        // Example:
-        //   try
-        //   {
-        //       var obj = new SomeType();
-        //       logger.Pass("SomeType constructor");
-        //       results.Pass("SomeType_Constructor");
-        //   }
-        //   catch (Exception ex)
-        //   {
-        //       logger.Fail($"SomeType constructor: {ex.Message}");
-        //       results.Fail("SomeType_Constructor", ex.Message);
-        //   }
-        logger.Info("No library-specific tests defined yet");
+        // StripeCore: STPAPIClient.Shared singleton
+        logger.Info("--- StripeCore ---");
+        try
+        {
+            var client = Swift.StripeCore.STPAPIClient.Shared;
+            logger.Info($"STPAPIClient.Shared: {client}");
+            logger.Pass("STPAPIClient.Shared access");
+            results.Pass("STPAPIClient_Shared");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"STPAPIClient.Shared: {ex.Message}");
+            results.Fail("STPAPIClient_Shared", ex.Message);
+        }
+
+        // StripeCore: STPSDKVersion static property
+        try
+        {
+            var version = Swift.StripeCore.STPAPIClient.STPSDKVersion;
+            logger.Info($"STPSDKVersion: {version}");
+            if (!string.IsNullOrEmpty(version))
+            {
+                logger.Pass("STPSDKVersion access");
+                results.Pass("STPSDKVersion");
+            }
+            else
+            {
+                logger.Fail("STPSDKVersion: empty or null");
+                results.Fail("STPSDKVersion", "Empty or null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"STPSDKVersion: {ex.Message}");
+            results.Fail("STPSDKVersion", ex.Message);
+        }
+
+        // StripeCore: StripeAPI.DefaultPublishableKey — skipped: SwiftString marshalling crash
+        // Setting the property triggers "Span size does not match type size" SIGABRT
+        logger.Skip("StripeAPI.DefaultPublishableKey (SwiftString marshalling bug)");
+        results.Skip("StripeAPI_DefaultPublishableKey", "SwiftString setter triggers SIGABRT in marshalling layer");
+
+        // StripePaymentSheet: DownloadManager.SharedManager singleton
+        logger.Info("--- StripePaymentSheet ---");
+        try
+        {
+            var manager = DownloadManager.SharedManager;
+            logger.Info($"DownloadManager.SharedManager: {manager}");
+            logger.Pass("DownloadManager.SharedManager access");
+            results.Pass("DownloadManager_SharedManager");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DownloadManager.SharedManager: {ex.Message}");
+            results.Fail("DownloadManager_SharedManager", ex.Message);
+        }
+
+        // StripePaymentsUI: STPImageLibrary — skipped: P/Invoke symbols not exported by wrapper framework
+        logger.Info("--- StripePaymentsUI ---");
+        logger.Skip("STPImageLibrary card images (P/Invoke entry points not resolved)");
+        results.Skip("STPImageLibrary_Visa", "Wrapper framework does not export card image symbols");
+        results.Skip("STPImageLibrary_Amex", "Wrapper framework does not export card image symbols");
+
+        // Enum tag tests (no-payload cases only)
+        logger.Info("--- Enum Tags ---");
+        try
+        {
+            var canceled = Swift.StripeCardScan.CardScanSheetResult.Canceled;
+            logger.Info($"CardScanSheetResult.Canceled tag: {canceled.Tag}");
+            logger.Pass("CardScanSheetResult.Canceled tag");
+            results.Pass("CardScanSheetResult_Canceled");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"CardScanSheetResult.Canceled: {ex.Message}");
+            results.Fail("CardScanSheetResult_Canceled", ex.Message);
+        }
+
+        try
+        {
+            var canceled = Swift.StripeFinancialConnections.FinancialConnectionsSheet.Result.Canceled;
+            logger.Info($"FinancialConnectionsSheet.Result.Canceled tag: {canceled.Tag}");
+            logger.Pass("FinancialConnectionsSheet.Result.Canceled tag");
+            results.Pass("FinancialConnections_Canceled");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"FinancialConnectionsSheet.Result.Canceled: {ex.Message}");
+            results.Fail("FinancialConnections_Canceled", ex.Message);
+        }
+
+        try
+        {
+            var canceled = Swift.StripeIdentity.IdentityVerificationSheet.VerificationFlowResult.FlowCanceled;
+            logger.Info($"VerificationFlowResult.FlowCanceled tag: {canceled.Tag}");
+            logger.Pass("VerificationFlowResult.FlowCanceled tag");
+            results.Pass("VerificationFlowResult_FlowCanceled");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"VerificationFlowResult.FlowCanceled: {ex.Message}");
+            results.Fail("VerificationFlowResult_FlowCanceled", ex.Message);
+        }
     }
 }
 

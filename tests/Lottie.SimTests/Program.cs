@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Text;
 using Foundation;
 using UIKit;
+using Swift;
 using Swift.Lottie;
+using Swift.Runtime;
 
 namespace LottieSimTests;
 
@@ -200,29 +202,199 @@ public class MainViewController : UIViewController
 
     private void RunSmokeTests(TestLogger logger, TestResults results)
     {
-        // Basic type metadata test — override with library-specific type access
-        logger.Info("Smoke tests complete (add library-specific tests in RunLibraryTests)");
+        // LottieConfiguration type metadata
+        try
+        {
+            var metadata = SwiftObjectHelper<LottieConfiguration>.GetTypeMetadata();
+            logger.Info($"LottieConfiguration metadata size: {metadata.Size}");
+            if (metadata.Size > 0)
+            {
+                logger.Pass("LottieConfiguration metadata");
+                results.Pass("LottieConfiguration_Metadata");
+            }
+            else
+            {
+                logger.Fail("LottieConfiguration metadata: size is 0");
+                results.Fail("LottieConfiguration_Metadata", "Size is 0");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieConfiguration metadata: {ex.Message}");
+            results.Fail("LottieConfiguration_Metadata", ex.Message);
+        }
+
+        // LottieColor type metadata
+        try
+        {
+            var metadata = SwiftObjectHelper<LottieColor>.GetTypeMetadata();
+            logger.Info($"LottieColor metadata size: {metadata.Size}");
+            if (metadata.Size > 0)
+            {
+                logger.Pass("LottieColor metadata");
+                results.Pass("LottieColor_Metadata");
+            }
+            else
+            {
+                logger.Fail("LottieColor metadata: size is 0");
+                results.Fail("LottieColor_Metadata", "Size is 0");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieColor metadata: {ex.Message}");
+            results.Fail("LottieColor_Metadata", ex.Message);
+        }
     }
 
-    /// <summary>
-    /// Add library-specific tests here after scaffolding.
-    /// </summary>
     private void RunLibraryTests(TestLogger logger, TestResults results)
     {
-        // TODO: Add library-specific tests
-        // Example:
-        //   try
-        //   {
-        //       var obj = new SomeType();
-        //       logger.Pass("SomeType constructor");
-        //       results.Pass("SomeType_Constructor");
-        //   }
-        //   catch (Exception ex)
-        //   {
-        //       logger.Fail($"SomeType constructor: {ex.Message}");
-        //       results.Fail("SomeType_Constructor", ex.Message);
-        //   }
-        logger.Info("No library-specific tests defined yet");
+        // LottieConfiguration.Shared singleton
+        logger.Info("--- LottieConfiguration ---");
+        try
+        {
+            var config = LottieConfiguration.Shared;
+            logger.Info($"LottieConfiguration.Shared: {config}");
+            if (config != null)
+            {
+                logger.Pass("LottieConfiguration.Shared access");
+                results.Pass("LottieConfiguration_Shared");
+            }
+            else
+            {
+                logger.Fail("LottieConfiguration.Shared: returned null");
+                results.Fail("LottieConfiguration_Shared", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieConfiguration.Shared: {ex.Message}");
+            results.Fail("LottieConfiguration_Shared", ex.Message);
+        }
+
+        // LottieColor constructor + RGBA property access
+        logger.Info("--- LottieColor ---");
+        try
+        {
+            var color = new LottieColor(1.0, 0.5, 0.25, 1.0, ColorFormatDenominator.One);
+            var r = color.R;
+            var g = color.G;
+            var b = color.B;
+            var a = color.A;
+            logger.Info($"LottieColor RGBA: r={r}, g={g}, b={b}, a={a}");
+
+            if (Math.Abs(r - 1.0) < 0.001 && Math.Abs(g - 0.5) < 0.001 &&
+                Math.Abs(b - 0.25) < 0.001 && Math.Abs(a - 1.0) < 0.001)
+            {
+                logger.Pass("LottieColor creation + property access");
+                results.Pass("LottieColor_Properties");
+            }
+            else
+            {
+                logger.Fail($"LottieColor: values don't match (r={r}, g={g}, b={b}, a={a})");
+                results.Fail("LottieColor_Properties", "Values don't match");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieColor creation: {ex.Message}");
+            results.Fail("LottieColor_Properties", ex.Message);
+        }
+
+        // LottieColor.Interpolate — skipped: non-blittable P/Invoke with Swift calling convention unsupported
+        logger.Skip("LottieColor.Interpolate (non-blittable P/Invoke limitation)");
+        results.Skip("LottieColor_Interpolate", "Non-blittable P/Invoke with Swift calling convention unsupported");
+
+        // DecodingStrategy enum cases
+        logger.Info("--- DecodingStrategy ---");
+        try
+        {
+            var dictBased = DecodingStrategy.DictionaryBased;
+            var legacy = DecodingStrategy.LegacyCodable;
+            logger.Info($"DecodingStrategy tags: DictionaryBased={dictBased.Tag}, LegacyCodable={legacy.Tag}");
+
+            if (dictBased.Tag != legacy.Tag)
+            {
+                logger.Pass("DecodingStrategy enum cases");
+                results.Pass("DecodingStrategy_Cases");
+            }
+            else
+            {
+                logger.Fail("DecodingStrategy: DictionaryBased and LegacyCodable have same tag");
+                results.Fail("DecodingStrategy_Cases", "Same tag");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DecodingStrategy enum: {ex.Message}");
+            results.Fail("DecodingStrategy_Cases", ex.Message);
+        }
+
+        // LottieLoopMode enum cases
+        logger.Info("--- LottieLoopMode ---");
+        try
+        {
+            var loop = LottieLoopMode.Loop;
+            var playOnce = LottieLoopMode.PlayOnce;
+            var autoReverse = LottieLoopMode.AutoReverse;
+            logger.Info($"LottieLoopMode tags: Loop={loop.Tag}, PlayOnce={playOnce.Tag}, AutoReverse={autoReverse.Tag}");
+
+            if (loop.Tag != playOnce.Tag && playOnce.Tag != autoReverse.Tag && loop.Tag != autoReverse.Tag)
+            {
+                logger.Pass("LottieLoopMode enum cases");
+                results.Pass("LottieLoopMode_Cases");
+            }
+            else
+            {
+                logger.Fail("LottieLoopMode: duplicate tags");
+                results.Fail("LottieLoopMode_Cases", "Duplicate tags");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieLoopMode enum: {ex.Message}");
+            results.Fail("LottieLoopMode_Cases", ex.Message);
+        }
+
+        // LottieAnimation.From bundled JSON
+        logger.Info("--- LottieAnimation ---");
+        try
+        {
+            var jsonPath = NSBundle.MainBundle.PathForResource("test-animation", "json");
+            if (string.IsNullOrEmpty(jsonPath))
+            {
+                logger.Fail("LottieAnimation: test-animation.json not found in bundle");
+                results.Fail("LottieAnimation_FromJSON", "Bundled JSON not found");
+                return;
+            }
+
+            using var data = NSData.FromFile(jsonPath);
+            if (data == null)
+            {
+                logger.Fail("LottieAnimation: failed to read JSON into NSData");
+                results.Fail("LottieAnimation_FromJSON", "NSData read failed");
+                return;
+            }
+
+            var animation = LottieAnimation.From(data, DecodingStrategy.DictionaryBased);
+            logger.Info($"Animation: duration={animation.Duration}, framerate={animation.Framerate}, start={animation.StartFrame}, end={animation.EndFrame}");
+
+            if (animation.Duration > 0 && animation.Framerate > 0 && animation.EndFrame >= animation.StartFrame)
+            {
+                logger.Pass("LottieAnimation.From bundled JSON");
+                results.Pass("LottieAnimation_FromJSON");
+            }
+            else
+            {
+                logger.Fail("LottieAnimation: invalid properties");
+                results.Fail("LottieAnimation_FromJSON", "Invalid animation properties");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieAnimation.From: {ex.Message}");
+            results.Fail("LottieAnimation_FromJSON", ex.Message);
+        }
     }
 }
 

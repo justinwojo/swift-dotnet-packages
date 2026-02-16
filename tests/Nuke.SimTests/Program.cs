@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Text;
 using Foundation;
 using UIKit;
+using Swift;
 using Swift.Nuke;
+using Swift.Runtime;
 
 namespace NukeSimTests;
 
@@ -200,29 +202,188 @@ public class MainViewController : UIViewController
 
     private void RunSmokeTests(TestLogger logger, TestResults results)
     {
-        // Basic type metadata test — override with library-specific type access
-        logger.Info("Smoke tests complete (add library-specific tests in RunLibraryTests)");
+        // ImagePipeline type metadata — verifies the Swift runtime initializes and types are resolvable
+        try
+        {
+            var metadata = SwiftObjectHelper<ImagePipeline>.GetTypeMetadata();
+            logger.Info($"ImagePipeline metadata size: {metadata.Size}");
+            if (metadata.Size > 0)
+            {
+                logger.Pass("ImagePipeline metadata");
+                results.Pass("ImagePipeline_Metadata");
+            }
+            else
+            {
+                logger.Fail("ImagePipeline metadata: size is 0");
+                results.Fail("ImagePipeline_Metadata", "Size is 0");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePipeline metadata: {ex.Message}");
+            results.Fail("ImagePipeline_Metadata", ex.Message);
+        }
     }
 
-    /// <summary>
-    /// Add library-specific tests here after scaffolding.
-    /// </summary>
     private void RunLibraryTests(TestLogger logger, TestResults results)
     {
-        // TODO: Add library-specific tests
-        // Example:
-        //   try
-        //   {
-        //       var obj = new SomeType();
-        //       logger.Pass("SomeType constructor");
-        //       results.Pass("SomeType_Constructor");
-        //   }
-        //   catch (Exception ex)
-        //   {
-        //       logger.Fail($"SomeType constructor: {ex.Message}");
-        //       results.Fail("SomeType_Constructor", ex.Message);
-        //   }
-        logger.Info("No library-specific tests defined yet");
+        // ImagePipeline.Shared singleton access
+        logger.Info("--- Singleton Access ---");
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            logger.Info($"ImagePipeline.Shared: {pipeline}");
+            if (pipeline != null)
+            {
+                logger.Pass("ImagePipeline.Shared access");
+                results.Pass("ImagePipeline_Shared");
+            }
+            else
+            {
+                logger.Fail("ImagePipeline.Shared: returned null");
+                results.Fail("ImagePipeline_Shared", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePipeline.Shared: {ex.Message}");
+            results.Fail("ImagePipeline_Shared", ex.Message);
+        }
+
+        // ImageRequest construction + Description property
+        logger.Info("--- ImageRequest ---");
+        try
+        {
+            var request = new ImageRequest("https://example.com/test.jpg");
+            var desc = request.Description;
+            logger.Info($"ImageRequest description: {desc.Substring(0, Math.Min(60, desc.Length))}...");
+            if (!string.IsNullOrEmpty(desc))
+            {
+                logger.Pass("ImageRequest construction + Description");
+                results.Pass("ImageRequest_Construction");
+            }
+            else
+            {
+                logger.Fail("ImageRequest: description is empty");
+                results.Fail("ImageRequest_Construction", "Empty description");
+            }
+            request.Dispose();
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImageRequest construction: {ex.Message}");
+            results.Fail("ImageRequest_Construction", ex.Message);
+        }
+
+        // Priority enum cases
+        logger.Info("--- Priority Enum ---");
+        try
+        {
+            var veryLow = ImageRequest.PriorityInfo.VeryLow;
+            var low = ImageRequest.PriorityInfo.Low;
+            var normal = ImageRequest.PriorityInfo.Normal;
+            var high = ImageRequest.PriorityInfo.High;
+            var veryHigh = ImageRequest.PriorityInfo.VeryHigh;
+
+            var tags = new[]
+            {
+                veryLow.Tag, low.Tag, normal.Tag, high.Tag, veryHigh.Tag,
+            };
+
+            logger.Info($"Priority tags: {string.Join(", ", tags)}");
+
+            // All 5 should be distinct tag values
+            var distinctCount = tags.Distinct().Count();
+            if (distinctCount == 5)
+            {
+                logger.Pass("Priority enum: 5 distinct cases");
+                results.Pass("Priority_EnumCases");
+            }
+            else
+            {
+                logger.Fail($"Priority enum: expected 5 distinct, got {distinctCount}");
+                results.Fail("Priority_EnumCases", $"Expected 5 distinct, got {distinctCount}");
+            }
+
+            veryLow.Dispose();
+            low.Dispose();
+            normal.Dispose();
+            high.Dispose();
+            veryHigh.Dispose();
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Priority enum: {ex.Message}");
+            results.Fail("Priority_EnumCases", ex.Message);
+        }
+
+        // Priority FromRawValue with invalid value
+        try
+        {
+            var invalid = ImageRequest.PriorityInfo.FromRawValue(999);
+            if (invalid == null)
+            {
+                logger.Pass("Priority FromRawValue(999) returned null");
+                results.Pass("Priority_InvalidRawValue");
+            }
+            else
+            {
+                logger.Fail("Priority FromRawValue(999) should return null");
+                results.Fail("Priority_InvalidRawValue", "Expected null for invalid raw value");
+                invalid.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Priority FromRawValue: {ex.Message}");
+            results.Fail("Priority_InvalidRawValue", ex.Message);
+        }
+
+        // Options static properties
+        logger.Info("--- Options ---");
+        try
+        {
+            var disableMemoryReads = ImageRequest.OptionsInfo.DisableMemoryCacheReads;
+            var disableMemoryWrites = ImageRequest.OptionsInfo.DisableMemoryCacheWrites;
+            var disableDiskReads = ImageRequest.OptionsInfo.DisableDiskCacheReads;
+            var disableDiskWrites = ImageRequest.OptionsInfo.DisableDiskCacheWrites;
+
+            logger.Info($"DisableMemoryCacheReads: {disableMemoryReads.GetType().Name}");
+            logger.Info($"DisableMemoryCacheWrites: {disableMemoryWrites.GetType().Name}");
+            logger.Info($"DisableDiskCacheReads: {disableDiskReads.GetType().Name}");
+            logger.Info($"DisableDiskCacheWrites: {disableDiskWrites.GetType().Name}");
+
+            logger.Pass("Options static properties");
+            results.Pass("Options_StaticProperties");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Options static properties: {ex.Message}");
+            results.Fail("Options_StaticProperties", ex.Message);
+        }
+
+        // ImageProcessingContext struct metadata
+        logger.Info("--- ImageProcessingContext ---");
+        try
+        {
+            var metadata = SwiftObjectHelper<ImageProcessingContext>.GetTypeMetadata();
+            logger.Info($"ImageProcessingContext metadata size: {metadata.Size}");
+            if (metadata.Size > 0)
+            {
+                logger.Pass("ImageProcessingContext metadata");
+                results.Pass("ImageProcessingContext_Metadata");
+            }
+            else
+            {
+                logger.Fail("ImageProcessingContext metadata: size is 0");
+                results.Fail("ImageProcessingContext_Metadata", "Size is 0");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImageProcessingContext metadata: {ex.Message}");
+            results.Fail("ImageProcessingContext_Metadata", ex.Message);
+        }
     }
 }
 
