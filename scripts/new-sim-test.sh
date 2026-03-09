@@ -220,7 +220,7 @@ fi
 USING_STATEMENTS=""
 for entry in "${RESOLVED_PRODUCTS[@]}"; do
     IFS='|' read -r _ _ mod _ <<< "$entry"
-    USING_STATEMENTS+="using Swift.${mod};"$'\n'
+    USING_STATEMENTS+="using ${mod};"$'\n'
 done
 # Remove trailing newline
 USING_STATEMENTS="${USING_STATEMENTS%$'\n'}"

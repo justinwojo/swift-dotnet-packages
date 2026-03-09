@@ -1,0 +1,21 @@
+<Project Sdk="Swift.Bindings.Sdk/0.1.0-preview.16">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Swift.StripeUICore</PackageId>
+    <Version>25.6.2</Version>
+    <Description>.NET bindings for the StripeUICore Swift library (internal Stripe dependency)</Description>
+    <PackageTags>swift;dotnet;interop;stripeuicore;ios</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../StripeCore/Swift.StripeCore.csproj" />
+  </ItemGroup>
+
+</Project>

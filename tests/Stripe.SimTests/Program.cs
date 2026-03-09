@@ -7,17 +7,17 @@ using Foundation;
 using UIKit;
 using Swift;
 using Swift.Runtime;
-using Swift.Stripe;
-using Swift.StripeCore;
-// using Swift.StripePayments; // excluded: generator produces invalid enum-as-NSObject bindings
-using Swift.StripePaymentSheet;
-using Swift.StripePaymentsUI;
-using Swift.StripeApplePay;
-using Swift.StripeIdentity;
-using Swift.StripeIssuing;
-using Swift.StripeCardScan;
-using Swift.StripeFinancialConnections;
-using Swift.StripeConnect;
+using Stripe;
+using StripeCore;
+// using StripePayments; // excluded: generator produces invalid enum-as-NSObject bindings
+using StripePaymentSheet;
+using StripePaymentsUI;
+using StripeApplePay;
+using StripeIdentity;
+using StripeIssuing;
+using StripeCardScan;
+using StripeFinancialConnections;
+using StripeConnect;
 
 namespace StripeSimTests;
 
@@ -215,7 +215,7 @@ public class MainViewController : UIViewController
         // STPAPIClient type metadata (StripeCore)
         try
         {
-            var metadata = SwiftObjectHelper<Swift.StripeCore.STPAPIClient>.GetTypeMetadata();
+            var metadata = SwiftObjectHelper<StripeCore.STPAPIClient>.GetTypeMetadata();
             logger.Info($"STPAPIClient metadata size: {metadata.Size}");
             if (metadata.Size > 0)
             {
@@ -241,7 +241,7 @@ public class MainViewController : UIViewController
         logger.Info("--- StripeCore ---");
         try
         {
-            var client = Swift.StripeCore.STPAPIClient.Shared;
+            var client = StripeCore.STPAPIClient.Shared;
             logger.Info($"STPAPIClient.Shared: {client}");
             logger.Pass("STPAPIClient.Shared access");
             results.Pass("STPAPIClient_Shared");
@@ -255,7 +255,7 @@ public class MainViewController : UIViewController
         // StripeCore: STPSDKVersion static property
         try
         {
-            var version = Swift.StripeCore.STPAPIClient.STPSDKVersion;
+            var version = StripeCore.STPAPIClient.STPSDKVersion;
             logger.Info($"STPSDKVersion: {version}");
             if (!string.IsNullOrEmpty(version))
             {
@@ -274,10 +274,12 @@ public class MainViewController : UIViewController
             results.Fail("STPSDKVersion", ex.Message);
         }
 
-        // StripeCore: StripeAPI.DefaultPublishableKey — skipped: SwiftString marshalling crash
-        // Setting the property triggers "Span size does not match type size" SIGABRT
-        logger.Skip("StripeAPI.DefaultPublishableKey (SwiftString marshalling bug)");
-        results.Skip("StripeAPI_DefaultPublishableKey", "SwiftString setter triggers SIGABRT in marshalling layer");
+        // StripeCore: StripeAPI.DefaultPublishableKey — skipped: wrapper framework empty
+        // Issue 6 (SwiftString setter) is fixed in the generator, but the wrapper xcframework
+        // fails to compile for StripeCore (duplicate @_cdecl attribute after broken wrapper stripping).
+        // The _optbuf P/Invoke entry points don't exist in the empty wrapper binary.
+        logger.Skip("StripeAPI.DefaultPublishableKey (wrapper framework compilation failure)");
+        results.Skip("StripeAPI_DefaultPublishableKey", "Wrapper xcframework empty — _optbuf entry points missing");
 
         // StripePaymentSheet: DownloadManager.SharedManager singleton
         logger.Info("--- StripePaymentSheet ---");
@@ -304,7 +306,7 @@ public class MainViewController : UIViewController
         logger.Info("--- Enum Tags ---");
         try
         {
-            var canceled = Swift.StripeCardScan.CardScanSheetResult.Canceled;
+            var canceled = StripeCardScan.CardScanSheetResult.Canceled;
             logger.Info($"CardScanSheetResult.Canceled tag: {canceled.Tag}");
             logger.Pass("CardScanSheetResult.Canceled tag");
             results.Pass("CardScanSheetResult_Canceled");
@@ -317,7 +319,7 @@ public class MainViewController : UIViewController
 
         try
         {
-            var canceled = Swift.StripeFinancialConnections.FinancialConnectionsSheet.Result.Canceled;
+            var canceled = StripeFinancialConnections.FinancialConnectionsSheet.Result.Canceled;
             logger.Info($"FinancialConnectionsSheet.Result.Canceled tag: {canceled.Tag}");
             logger.Pass("FinancialConnectionsSheet.Result.Canceled tag");
             results.Pass("FinancialConnections_Canceled");
@@ -330,7 +332,7 @@ public class MainViewController : UIViewController
 
         try
         {
-            var canceled = Swift.StripeIdentity.IdentityVerificationSheet.VerificationFlowResult.FlowCanceled;
+            var canceled = StripeIdentity.IdentityVerificationSheet.VerificationFlowResult.FlowCanceled;
             logger.Info($"VerificationFlowResult.FlowCanceled tag: {canceled.Tag}");
             logger.Pass("VerificationFlowResult.FlowCanceled tag");
             results.Pass("VerificationFlowResult_FlowCanceled");

@@ -240,6 +240,7 @@ except:
             -derivedDataPath "$DERIVED_DATA/device" \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             SKIP_INSTALL=NO \
+            MACH_O_TYPE=mh_dylib \
             IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
             ${BUILD_SETTINGS[@]+"${BUILD_SETTINGS[@]}"} \
             -quiet)
@@ -252,6 +253,7 @@ except:
             -derivedDataPath "$DERIVED_DATA/simulator" \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
             SKIP_INSTALL=NO \
+            MACH_O_TYPE=mh_dylib \
             IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
             ${BUILD_SETTINGS[@]+"${BUILD_SETTINGS[@]}"} \
             -quiet)

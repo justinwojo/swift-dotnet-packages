@@ -6,7 +6,7 @@ using System.Text;
 using Foundation;
 using UIKit;
 using Swift;
-using Swift.BlinkID;
+using BlinkID;
 using Swift.Runtime;
 
 namespace BlinkIDSimTests;
@@ -297,16 +297,16 @@ public class MainViewController : UIViewController
         {
             var horizontal = DocumentOrientation.Horizontal;
             var vertical = DocumentOrientation.Vertical;
-            logger.Info($"DocumentOrientation: Horizontal={horizontal.Tag}, Vertical={vertical.Tag}");
-            if (horizontal.Tag != vertical.Tag)
+            logger.Info($"DocumentOrientation: Horizontal={(int)horizontal}, Vertical={(int)vertical}");
+            if (horizontal != vertical)
             {
-                logger.Pass("DocumentOrientation case construction");
+                logger.Pass("DocumentOrientation simple enum");
                 results.Pass("DocumentOrientation_Cases");
             }
             else
             {
-                logger.Fail("DocumentOrientation cases: same tag");
-                results.Fail("DocumentOrientation_Cases", "Same tag");
+                logger.Fail("DocumentOrientation cases: same value");
+                results.Fail("DocumentOrientation_Cases", "Same value");
             }
         }
         catch (Exception ex)
@@ -321,16 +321,16 @@ public class MainViewController : UIViewController
             var cw90 = DocumentRotation.Clockwise90;
             var ccw90 = DocumentRotation.CounterClockwise90;
             var upside = DocumentRotation.UpsideDown;
-            logger.Info($"DocumentRotation: Zero={zero.Tag}, CW90={cw90.Tag}, CCW90={ccw90.Tag}, Upside={upside.Tag}");
-            if (zero.Tag != cw90.Tag && cw90.Tag != ccw90.Tag && ccw90.Tag != upside.Tag)
+            logger.Info($"DocumentRotation: Zero={(int)zero}, CW90={(int)cw90}, CCW90={(int)ccw90}, Upside={(int)upside}");
+            if (zero != cw90 && cw90 != ccw90 && ccw90 != upside)
             {
-                logger.Pass("DocumentRotation case construction");
+                logger.Pass("DocumentRotation simple enum");
                 results.Pass("DocumentRotation_Cases");
             }
             else
             {
-                logger.Fail("DocumentRotation cases: duplicate tags");
-                results.Fail("DocumentRotation_Cases", "Duplicate tags");
+                logger.Fail("DocumentRotation cases: duplicate values");
+                results.Fail("DocumentRotation_Cases", "Duplicate values");
             }
         }
         catch (Exception ex)
@@ -344,7 +344,7 @@ public class MainViewController : UIViewController
         try
         {
             var horizontal = DocumentOrientation.Horizontal;
-            var rawValue = horizontal.RawValue;
+            var rawValue = (int)horizontal;
             logger.Info($"DocumentOrientation.Horizontal raw value: {rawValue}");
             logger.Pass("DocumentOrientation raw value access");
             results.Pass("DocumentOrientation_RawValue");
@@ -369,28 +369,25 @@ public class MainViewController : UIViewController
             results.Fail("Country_RawValue", ex.Message);
         }
 
-        // Enum FromRawValue round-trips
-        logger.Info("--- Enum FromRawValue ---");
+        // Enum value comparison (simple enums use direct comparison)
+        logger.Info("--- Enum Value Comparison ---");
         try
         {
             var horizontal = DocumentOrientation.Horizontal;
-            var rawValue = horizontal.RawValue;
-            var roundTripped = DocumentOrientation.FromRawValue((long)rawValue);
-            logger.Info($"DocumentOrientation round-trip: rawValue={rawValue}");
-            if (roundTripped != null)
+            if (horizontal == DocumentOrientation.Horizontal && horizontal != DocumentOrientation.Vertical)
             {
-                logger.Pass("DocumentOrientation FromRawValue round-trip");
+                logger.Pass("DocumentOrientation value comparison");
                 results.Pass("DocumentOrientation_FromRawValue");
             }
             else
             {
-                logger.Fail("DocumentOrientation FromRawValue returned null");
-                results.Fail("DocumentOrientation_FromRawValue", "Returned null");
+                logger.Fail("DocumentOrientation value mismatch");
+                results.Fail("DocumentOrientation_FromRawValue", "Value mismatch");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"DocumentOrientation FromRawValue: {ex.Message}");
+            logger.Fail($"DocumentOrientation value comparison: {ex.Message}");
             results.Fail("DocumentOrientation_FromRawValue", ex.Message);
         }
 
@@ -417,11 +414,35 @@ public class MainViewController : UIViewController
             results.Fail("RequestTimeout_Default", ex.Message);
         }
 
+        // DocumentImageColorStatus — now a simple C# enum
+        logger.Info("--- DocumentImageColorStatus ---");
+        try
+        {
+            var notAvail = DocumentImageColorStatus.NotAvailable;
+            var bw = DocumentImageColorStatus.BlackAndWhite;
+            var color = DocumentImageColorStatus.Color;
+            logger.Info($"DocumentImageColorStatus: NotAvailable={(int)notAvail}, BlackAndWhite={(int)bw}, Color={(int)color}");
+            if (notAvail != bw && bw != color)
+            {
+                logger.Pass("DocumentImageColorStatus simple enum values");
+                results.Pass("DocumentImageColorStatus_Values");
+            }
+            else
+            {
+                logger.Fail("DocumentImageColorStatus: duplicate values");
+                results.Fail("DocumentImageColorStatus_Values", "Duplicate values");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DocumentImageColorStatus: {ex.Message}");
+            results.Fail("DocumentImageColorStatus_Values", ex.Message);
+        }
+
         // Extended type metadata
         logger.Info("--- Extended Metadata ---");
         foreach (var (typeName, getMetadata) in new (string, Func<TypeMetadata>)[]
         {
-            ("DocumentImageColorStatus", () => SwiftObjectHelper<DocumentImageColorStatus>.GetTypeMetadata()),
             ("Region", () => SwiftObjectHelper<Region>.GetTypeMetadata()),
             ("Point", () => SwiftObjectHelper<Point>.GetTypeMetadata()),
             ("Quadrilateral", () => SwiftObjectHelper<Quadrilateral>.GetTypeMetadata()),

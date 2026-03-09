@@ -6,7 +6,7 @@ using System.Text;
 using Foundation;
 using UIKit;
 using Swift;
-using Swift.Nuke;
+using Nuke;
 using Swift.Runtime;
 
 namespace NukeSimTests;
@@ -279,11 +279,11 @@ public class MainViewController : UIViewController
         logger.Info("--- Priority Enum ---");
         try
         {
-            var veryLow = ImageRequest.PriorityInfo.VeryLow;
-            var low = ImageRequest.PriorityInfo.Low;
-            var normal = ImageRequest.PriorityInfo.Normal;
-            var high = ImageRequest.PriorityInfo.High;
-            var veryHigh = ImageRequest.PriorityInfo.VeryHigh;
+            var veryLow = ImageRequest.Priority.VeryLow;
+            var low = ImageRequest.Priority.Low;
+            var normal = ImageRequest.Priority.Normal;
+            var high = ImageRequest.Priority.High;
+            var veryHigh = ImageRequest.Priority.VeryHigh;
 
             var tags = new[]
             {
@@ -320,7 +320,7 @@ public class MainViewController : UIViewController
         // Priority FromRawValue with invalid value
         try
         {
-            var invalid = ImageRequest.PriorityInfo.FromRawValue(999);
+            var invalid = ImageRequest.Priority.FromRawValue(999);
             if (invalid == null)
             {
                 logger.Pass("Priority FromRawValue(999) returned null");
@@ -343,10 +343,10 @@ public class MainViewController : UIViewController
         logger.Info("--- Options ---");
         try
         {
-            var disableMemoryReads = ImageRequest.OptionsInfo.DisableMemoryCacheReads;
-            var disableMemoryWrites = ImageRequest.OptionsInfo.DisableMemoryCacheWrites;
-            var disableDiskReads = ImageRequest.OptionsInfo.DisableDiskCacheReads;
-            var disableDiskWrites = ImageRequest.OptionsInfo.DisableDiskCacheWrites;
+            var disableMemoryReads = ImageRequest.Options.DisableMemoryCacheReads;
+            var disableMemoryWrites = ImageRequest.Options.DisableMemoryCacheWrites;
+            var disableDiskReads = ImageRequest.Options.DisableDiskCacheReads;
+            var disableDiskWrites = ImageRequest.Options.DisableDiskCacheWrites;
 
             logger.Info($"DisableMemoryCacheReads: {disableMemoryReads.GetType().Name}");
             logger.Info($"DisableMemoryCacheWrites: {disableMemoryWrites.GetType().Name}");
