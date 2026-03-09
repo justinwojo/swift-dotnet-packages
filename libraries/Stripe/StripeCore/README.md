@@ -1,11 +1,11 @@
-# Swift.StripeCore
+# SwiftBindings.Stripe.Core
 
-.NET bindings for [StripeCore](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeCore](https://github.com/stripe/stripe-ios.git), the Stripe core networking and shared infrastructure module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeCore
+dotnet add package SwiftBindings.Stripe.Core
 ```
 
 ## Requirements

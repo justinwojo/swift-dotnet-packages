@@ -1,11 +1,11 @@
-# Swift.BlinkID
+# SwiftBindings.BlinkID
 
-.NET bindings for [BlinkID](https://github.com/BlinkID/blinkid-swift-package.git), a Swift library.
+Native Swift interop bindings for [BlinkID](https://github.com/BlinkID/blinkid-swift-package.git), Microblink's ID scanning library.
 
 ## Installation
 
 ```
-dotnet add package Swift.BlinkID
+dotnet add package SwiftBindings.BlinkID
 ```
 
 ## Requirements

@@ -1,11 +1,11 @@
-# Swift.StripeConnect
+# SwiftBindings.Stripe.Connect
 
-.NET bindings for [StripeConnect](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeConnect](https://github.com/stripe/stripe-ios.git), the Stripe Connect platform module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeConnect
+dotnet add package SwiftBindings.Stripe.Connect
 ```
 
 ## Requirements

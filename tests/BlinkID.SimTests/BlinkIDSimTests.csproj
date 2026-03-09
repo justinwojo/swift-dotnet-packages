@@ -20,7 +20,7 @@
 
   <!-- Reference the library project — brings in bindings, native frameworks, and SwiftBindings.Runtime transitively -->
   <ItemGroup>
-    <ProjectReference Include="../../libraries/BlinkID/Swift.BlinkID.csproj" />
+    <ProjectReference Include="../../libraries/BlinkID/SwiftBindings.BlinkID.csproj" />
   </ItemGroup>
 
   <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->

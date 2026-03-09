@@ -1,11 +1,11 @@
-# Swift.Lottie
+# SwiftBindings.Lottie
 
-.NET bindings for [Lottie](https://github.com/airbnb/lottie-ios), Airbnb's library for rendering After Effects animations natively on iOS.
+Native Swift interop bindings for [Lottie](https://github.com/airbnb/lottie-ios), Airbnb's library for rendering After Effects animations natively on iOS.
 
 ## Installation
 
 ```
-dotnet add package Swift.Lottie
+dotnet add package SwiftBindings.Lottie
 ```
 
 ## Requirements

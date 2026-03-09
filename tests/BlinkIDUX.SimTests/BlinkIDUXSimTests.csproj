@@ -20,8 +20,8 @@
 
   <!-- Reference both BlinkID and BlinkIDUX library projects -->
   <ItemGroup>
-    <ProjectReference Include="../../libraries/BlinkID/Swift.BlinkID.csproj" />
-    <ProjectReference Include="../../libraries/BlinkIDUX/Swift.BlinkIDUX.csproj" />
+    <ProjectReference Include="../../libraries/BlinkID/SwiftBindings.BlinkID.csproj" />
+    <ProjectReference Include="../../libraries/BlinkIDUX/SwiftBindings.BlinkIDUX.csproj" />
   </ItemGroup>
 
   <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->

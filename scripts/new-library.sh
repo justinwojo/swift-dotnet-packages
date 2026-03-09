@@ -358,11 +358,11 @@ for product_name in "${PRODUCT_LIST[@]}"; do
         continue
     fi
 
-    # Swift.{Module}.csproj
+    # SwiftBindings.{Module}.csproj
     sed -e "s/{{MODULE_NAME}}/$MODULE_NAME/g" \
         -e "s/{{MODULE_NAME_LOWER}}/$MODULE_NAME_LOWER/g" \
         -e "s/{{VERSION}}/$VERSION/g" \
-        "$TEMPLATE_DIR/Swift.__MODULE_NAME__.csproj.template" > "$PRODUCT_DIR/Swift.${MODULE_NAME}.csproj"
+        "$TEMPLATE_DIR/SwiftBindings.__MODULE_NAME__.csproj.template" > "$PRODUCT_DIR/SwiftBindings.${MODULE_NAME}.csproj"
 
     # README.md
     sed -e "s|{{MODULE_NAME}}|$MODULE_NAME|g" \
@@ -384,10 +384,10 @@ for product_name in "${PRODUCT_LIST[@]}"; do
         fi
     elif [ "$IS_MULTI" = true ]; then
         echo "  - $product_name/"
-        echo "    - Swift.${product_name}.csproj"
+        echo "    - SwiftBindings.${product_name}.csproj"
         echo "    - README.md"
     else
-        echo "  - Swift.${product_name}.csproj"
+        echo "  - SwiftBindings.${product_name}.csproj"
         echo "  - README.md"
     fi
 done

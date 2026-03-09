@@ -1,11 +1,11 @@
-# Swift.StripeFinancialConnections
+# SwiftBindings.Stripe.FinancialConnections
 
-.NET bindings for [StripeFinancialConnections](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeFinancialConnections](https://github.com/stripe/stripe-ios.git), the Stripe financial account linking module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeFinancialConnections
+dotnet add package SwiftBindings.Stripe.FinancialConnections
 ```
 
 ## Requirements

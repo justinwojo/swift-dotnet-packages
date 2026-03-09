@@ -1,11 +1,11 @@
-# Swift.StripeCardScan
+# SwiftBindings.Stripe.CardScan
 
-.NET bindings for [StripeCardScan](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeCardScan](https://github.com/stripe/stripe-ios.git), the Stripe card scanning module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeCardScan
+dotnet add package SwiftBindings.Stripe.CardScan
 ```
 
 ## Requirements

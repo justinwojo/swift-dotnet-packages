@@ -1,11 +1,11 @@
-# Swift.Nuke
+# SwiftBindings.Nuke
 
-.NET bindings for [Nuke](https://github.com/kean/Nuke), a powerful image loading and caching framework for Swift.
+Native Swift interop bindings for [Nuke](https://github.com/kean/Nuke), a powerful image loading and caching framework for Swift.
 
 ## Installation
 
 ```
-dotnet add package Swift.Nuke
+dotnet add package SwiftBindings.Nuke
 ```
 
 ## Requirements

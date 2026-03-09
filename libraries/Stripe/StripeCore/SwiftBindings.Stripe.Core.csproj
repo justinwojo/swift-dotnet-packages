@@ -1,13 +1,13 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.1">
+<Project Sdk="SwiftBindings.Sdk/0.1.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.{{MODULE_NAME}}</PackageId>
-    <Version>{{VERSION}}</Version>
-    <Description>.NET bindings for the {{MODULE_NAME}} Swift library</Description>
-    <PackageTags>swift;dotnet;interop;{{MODULE_NAME_LOWER}};ios</PackageTags>
+    <PackageId>SwiftBindings.Stripe.Core</PackageId>
+    <Version>25.6.2</Version>
+    <Description>.NET bindings for the StripeCore Swift library</Description>
+    <PackageTags>swift;dotnet;interop;stripecore;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

@@ -1,13 +1,13 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.1">
+<Project Sdk="SwiftBindings.Sdk/0.1.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.StripeIssuing</PackageId>
+    <PackageId>SwiftBindings.Stripe.PaymentSheet</PackageId>
     <Version>25.6.2</Version>
-    <Description>.NET bindings for the StripeIssuing Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripeissuing;ios</PackageTags>
+    <Description>.NET bindings for the StripePaymentSheet Swift library</Description>
+    <PackageTags>swift;dotnet;interop;stripepaymentsheet;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
@@ -18,15 +18,18 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
+    <SwiftFrameworkDependency Include="../StripeApplePay/StripeApplePay.xcframework" />
     <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
     <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" />
     <SwiftFrameworkDependency Include="../StripePaymentsUI/StripePaymentsUI.xcframework" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
   <ItemGroup>
-    <ProjectReference Include="../StripeCore/Swift.StripeCore.csproj" />
-    <ProjectReference Include="../StripePayments/Swift.StripePayments.csproj" />
+    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
+    <ProjectReference Include="../StripePayments/SwiftBindings.Stripe.Payments.csproj" />
+    <ProjectReference Include="../StripeUICore/SwiftBindings.Stripe.UICore.csproj" />
   </ItemGroup>
 
 </Project>

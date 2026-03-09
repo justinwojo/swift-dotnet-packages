@@ -1,11 +1,11 @@
-# Swift.StripePaymentSheet
+# SwiftBindings.Stripe.PaymentSheet
 
-.NET bindings for [StripePaymentSheet](https://github.com/stripe/stripe-ios-spm.git), a Swift library.
+Native Swift interop bindings for [StripePaymentSheet](https://github.com/stripe/stripe-ios-spm.git), the Stripe prebuilt payment UI module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripePaymentSheet
+dotnet add package SwiftBindings.Stripe.PaymentSheet
 ```
 
 ## Requirements

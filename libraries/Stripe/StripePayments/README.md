@@ -1,11 +1,11 @@
-# Swift.StripePayments
+# SwiftBindings.Stripe.Payments
 
-.NET bindings for [StripePayments](https://github.com/stripe/stripe-ios-spm.git), a Swift library.
+Native Swift interop bindings for [StripePayments](https://github.com/stripe/stripe-ios-spm.git), the Stripe payments processing module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripePayments
+dotnet add package SwiftBindings.Stripe.Payments
 ```
 
 ## Requirements

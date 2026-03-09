@@ -305,7 +305,7 @@ for idx in "${PRODUCT_INDICES[@]}"; do
     # Find csproj file
     csproj_dir="$LIBRARY_DIR"
     [ -n "$sub" ] && csproj_dir="$csproj_dir/$sub"
-    csproj_file="$csproj_dir/Swift.${mod}.csproj"
+    csproj_file="$csproj_dir/SwiftBindings.${mod}.csproj"
 
     if [ ! -f "$csproj_file" ]; then
         echo "Warning: $csproj_file not found, skipping" >&2

@@ -24,7 +24,7 @@
 
   <!-- Reference the library project — brings in bindings, native frameworks, and SwiftBindings.Runtime transitively -->
   <ItemGroup>
-    <ProjectReference Include="../../libraries/Lottie/Swift.Lottie.csproj" />
+    <ProjectReference Include="../../libraries/Lottie/SwiftBindings.Lottie.csproj" />
   </ItemGroup>
 
   <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->

@@ -27,7 +27,7 @@ Each library directory under `libraries/` contains:
 |------|---------|
 | `library.json` | SPM source, version, build mode, products |
 | `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
-| `Swift.<Name>.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
+| `SwiftBindings.<Name>.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet) |
 
 ### Library Config (`library.json`)
@@ -90,7 +90,7 @@ Binding generation is handled automatically by the `SwiftBindings.Sdk` NuGet pac
 ./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
 ```
 
-Generates: `library.json`, thin `build-xcframework.sh`, `Swift.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
+Generates: `library.json`, thin `build-xcframework.sh`, `SwiftBindings.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
 
 ### New Simulator Test
 

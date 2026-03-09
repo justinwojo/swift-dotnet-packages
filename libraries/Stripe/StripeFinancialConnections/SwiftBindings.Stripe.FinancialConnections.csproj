@@ -1,13 +1,13 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.1">
+<Project Sdk="SwiftBindings.Sdk/0.1.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.StripeApplePay</PackageId>
+    <PackageId>SwiftBindings.Stripe.FinancialConnections</PackageId>
     <Version>25.6.2</Version>
-    <Description>.NET bindings for the StripeApplePay Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripeapplepay;ios</PackageTags>
+    <Description>.NET bindings for the StripeFinancialConnections Swift library</Description>
+    <PackageTags>swift;dotnet;interop;stripefinancialconnections;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
@@ -19,11 +19,12 @@
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
     <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
   <ItemGroup>
-    <ProjectReference Include="../StripeCore/Swift.StripeCore.csproj" />
+    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
   </ItemGroup>
 
 </Project>

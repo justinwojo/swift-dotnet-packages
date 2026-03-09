@@ -1,10 +1,10 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.1">
+<Project Sdk="SwiftBindings.Sdk/0.1.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.BlinkIDUX</PackageId>
+    <PackageId>SwiftBindings.BlinkIDUX</PackageId>
     <Version>7.6.2</Version>
     <Description>.NET bindings for the BlinkIDUX Swift library</Description>
     <PackageTags>swift;dotnet;interop;blinkidux;ios</PackageTags>
@@ -18,7 +18,7 @@
 
   <!-- BlinkIDUX depends on BlinkID — ProjectReference becomes PackageReference in NuGet -->
   <ItemGroup>
-    <ProjectReference Include="../BlinkID/Swift.BlinkID.csproj" />
+    <ProjectReference Include="../BlinkID/SwiftBindings.BlinkID.csproj" />
   </ItemGroup>
 
   <!-- BlinkID xcframework needed during binding generation -->

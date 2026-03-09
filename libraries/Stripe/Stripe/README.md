@@ -1,11 +1,11 @@
-# Swift.Stripe
+# SwiftBindings.Stripe
 
-.NET bindings for [Stripe](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [Stripe](https://github.com/stripe/stripe-ios.git), the Stripe umbrella framework for iOS payments.
 
 ## Installation
 
 ```
-dotnet add package Swift.Stripe
+dotnet add package SwiftBindings.Stripe
 ```
 
 ## Requirements

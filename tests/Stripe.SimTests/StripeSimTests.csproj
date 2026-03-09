@@ -20,18 +20,18 @@
 
   <!-- Reference library projects — brings in bindings and SwiftBindings.Runtime transitively -->
   <ItemGroup>
-    <ProjectReference Include="../../libraries/Stripe/StripeCore/Swift.StripeCore.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeCore/SwiftBindings.Stripe.Core.csproj" />
     <!-- StripePayments excluded: generator produces invalid enum-as-NSObject bindings -->
-    <!-- <ProjectReference Include="../../libraries/Stripe/StripePayments/Swift.StripePayments.csproj" /> -->
-    <ProjectReference Include="../../libraries/Stripe/StripePaymentSheet/Swift.StripePaymentSheet.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/Stripe/Swift.Stripe.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripePaymentsUI/Swift.StripePaymentsUI.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeApplePay/Swift.StripeApplePay.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeIdentity/Swift.StripeIdentity.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeIssuing/Swift.StripeIssuing.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeCardScan/Swift.StripeCardScan.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeFinancialConnections/Swift.StripeFinancialConnections.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/StripeConnect/Swift.StripeConnect.csproj" />
+    <!-- <ProjectReference Include="../../libraries/Stripe/StripePayments/SwiftBindings.Stripe.Payments.csproj" /> -->
+    <ProjectReference Include="../../libraries/Stripe/StripePaymentSheet/SwiftBindings.Stripe.PaymentSheet.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/Stripe/SwiftBindings.Stripe.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripePaymentsUI/SwiftBindings.Stripe.PaymentsUI.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeApplePay/SwiftBindings.Stripe.ApplePay.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeIdentity/SwiftBindings.Stripe.Identity.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeIssuing/SwiftBindings.Stripe.Issuing.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeCardScan/SwiftBindings.Stripe.CardScan.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeFinancialConnections/SwiftBindings.Stripe.FinancialConnections.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeConnect/SwiftBindings.Stripe.Connect.csproj" />
   </ItemGroup>
 
   <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->

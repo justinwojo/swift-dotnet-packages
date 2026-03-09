@@ -1,11 +1,11 @@
-# Swift.StripeIdentity
+# SwiftBindings.Stripe.Identity
 
-.NET bindings for [StripeIdentity](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeIdentity](https://github.com/stripe/stripe-ios.git), the Stripe identity verification module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeIdentity
+dotnet add package SwiftBindings.Stripe.Identity
 ```
 
 ## Requirements

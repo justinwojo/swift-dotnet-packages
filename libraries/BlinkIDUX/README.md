@@ -1,11 +1,11 @@
-# Swift.BlinkIDUX
+# SwiftBindings.BlinkIDUX
 
-.NET bindings for [BlinkIDUX](https://github.com/BlinkID/blinkid-ios.git), a Swift library.
+Native Swift interop bindings for [BlinkIDUX](https://github.com/BlinkID/blinkid-ios.git), the BlinkID scanning UX components.
 
 ## Installation
 
 ```
-dotnet add package Swift.BlinkIDUX
+dotnet add package SwiftBindings.BlinkIDUX
 ```
 
 ## Requirements

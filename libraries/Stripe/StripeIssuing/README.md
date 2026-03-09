@@ -1,11 +1,11 @@
-# Swift.StripeIssuing
+# SwiftBindings.Stripe.Issuing
 
-.NET bindings for [StripeIssuing](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeIssuing](https://github.com/stripe/stripe-ios.git), the Stripe card issuing module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeIssuing
+dotnet add package SwiftBindings.Stripe.Issuing
 ```
 
 ## Requirements

@@ -1,11 +1,11 @@
-# Swift.{{MODULE_NAME}}
+# SwiftBindings.{{MODULE_NAME}}
 
-.NET bindings for [{{MODULE_NAME}}]({{REPOSITORY}}), a Swift library.
+Native Swift interop bindings for [{{MODULE_NAME}}]({{REPOSITORY}}) on .NET.
 
 ## Installation
 
 ```
-dotnet add package Swift.{{MODULE_NAME}}
+dotnet add package SwiftBindings.{{MODULE_NAME}}
 ```
 
 ## Requirements

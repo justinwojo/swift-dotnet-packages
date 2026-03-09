@@ -1,11 +1,11 @@
-# Swift.StripeApplePay
+# SwiftBindings.Stripe.ApplePay
 
-.NET bindings for [StripeApplePay](https://github.com/stripe/stripe-ios.git), a Swift library.
+Native Swift interop bindings for [StripeApplePay](https://github.com/stripe/stripe-ios.git), the Stripe Apple Pay integration module.
 
 ## Installation
 
 ```
-dotnet add package Swift.StripeApplePay
+dotnet add package SwiftBindings.Stripe.ApplePay
 ```
 
 ## Requirements

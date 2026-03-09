@@ -43,7 +43,7 @@ Libraries that produce one NuGet package go directly under `libraries/`:
 libraries/Nuke/
 ├── library.json
 ├── build-xcframework.sh
-├── Swift.Nuke.csproj
+├── SwiftBindings.Nuke.csproj
 └── README.md
 ```
 
@@ -58,11 +58,11 @@ libraries/Stripe/
 ├── library.json
 ├── build-xcframework.sh
 ├── StripeCore/
-│   └── Swift.StripeCore.csproj
+│   └── SwiftBindings.Stripe.Core.csproj
 ├── StripePayments/
-│   └── Swift.StripePayments.csproj
+│   └── SwiftBindings.Stripe.Payments.csproj
 └── StripePaymentSheet/
-    └── Swift.StripePaymentSheet.csproj
+    └── SwiftBindings.Stripe.PaymentSheet.csproj
 ```
 
 **Rule of thumb:** Group when there's a shared build step or 2+ packages from the same source repo.
@@ -76,19 +76,19 @@ libraries/BlinkID/
 ├── library.json
 ├── build-xcframework.sh
 ├── BlinkID/
-│   └── Swift.BlinkID.csproj
+│   └── SwiftBindings.BlinkID.csproj
 └── BlinkIDUX/
-    └── Swift.BlinkIDUX.csproj         # References BlinkID
+    └── SwiftBindings.BlinkIDUX.csproj         # References BlinkID
 ```
 
 ```xml
-<!-- libraries/BlinkID/BlinkIDUX/Swift.BlinkIDUX.csproj -->
+<!-- libraries/BlinkID/BlinkIDUX/SwiftBindings.BlinkIDUX.csproj -->
 <ItemGroup>
-  <ProjectReference Include="../BlinkID/Swift.BlinkID.csproj" />
+  <ProjectReference Include="../BlinkID/SwiftBindings.BlinkID.csproj" />
 </ItemGroup>
 ```
 
-When published to NuGet, `ProjectReference` automatically becomes a `PackageReference` — consumers who install `Swift.BlinkIDUX` get `Swift.BlinkID` pulled in transitively.
+When published to NuGet, `ProjectReference` automatically becomes a `PackageReference` — consumers who install `SwiftBindings.BlinkIDUX` get `SwiftBindings.BlinkID` pulled in transitively.
 
 ### Multi-product vendor guide
 
@@ -154,12 +154,12 @@ Multi-product libraries with cross-module Swift dependencies require a two-pass 
 ```bash
 # Pass 1: build (some products may fail — SDK generates bindings automatically)
 for product in StripeCore StripePayments ...; do
-  dotnet build libraries/Stripe/$product/Swift.$product.csproj || true
+  dotnet build libraries/Stripe/$product/SwiftBindings.Stripe.$product.csproj || true
 done
 
 # Pass 2: build (should succeed — fingerprint skips regeneration)
 for product in StripeCore StripePayments ...; do
-  dotnet build libraries/Stripe/$product/Swift.$product.csproj
+  dotnet build libraries/Stripe/$product/SwiftBindings.Stripe.$product.csproj
 done
 ```
 
@@ -222,7 +222,7 @@ Each library directory should contain:
 |------|---------|
 | `library.json` | SPM source, version, mode, products |
 | `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
-| `Swift.{Name}.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
+| `SwiftBindings.{Name}.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet package) |
 
 ## Build Scripts
@@ -311,6 +311,6 @@ The validate script watches for `TEST SUCCESS` in console output and detects cra
 
 | Pattern | Example |
 |---------|---------|
-| Single library | `Swift.Nuke` |
-| Vendor group | `Swift.Stripe.Core`, `Swift.Stripe.Payments` |
-| Dependent pair | `Swift.BlinkID`, `Swift.BlinkIDUX` |
+| Single library | `SwiftBindings.Nuke` |
+| Vendor group | `SwiftBindings.Stripe.Core`, `SwiftBindings.Stripe.Payments` |
+| Dependent pair | `SwiftBindings.BlinkID`, `SwiftBindings.BlinkIDUX` |

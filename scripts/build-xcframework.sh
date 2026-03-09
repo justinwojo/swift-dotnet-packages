@@ -135,9 +135,9 @@ if [ "$RESOLVE_ONLY" = true ]; then
         module=$(json_product_field "$CONFIG" "$idx" module "$framework")
         subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
         if [ -n "$subdir" ]; then
-            echo "${subdir}|Swift.${module}.csproj"
+            echo "${subdir}|SwiftBindings.${module}.csproj"
         else
-            echo "|Swift.${module}.csproj"
+            echo "|SwiftBindings.${module}.csproj"
         fi
     done
     exit 0

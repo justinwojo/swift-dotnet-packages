@@ -1,13 +1,13 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.1">
+<Project Sdk="SwiftBindings.Sdk/0.1.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>Swift.BlinkID</PackageId>
-    <Version>7.6.2</Version>
-    <Description>.NET bindings for the BlinkID Swift library</Description>
-    <PackageTags>swift;dotnet;interop;blinkid;ios</PackageTags>
+    <PackageId>SwiftBindings.Nuke</PackageId>
+    <Version>12.8.0</Version>
+    <Description>.NET bindings for the Nuke Swift image loading library</Description>
+    <PackageTags>swift;dotnet;interop;nuke;image-loading;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

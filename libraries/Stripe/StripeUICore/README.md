@@ -1,11 +1,11 @@
-# SwiftBindings.Stripe.PaymentsUI
+# SwiftBindings.Stripe.UICore
 
-Native Swift interop bindings for [StripePaymentsUI](https://github.com/stripe/stripe-ios.git), the Stripe payments UI components module.
+Native Swift interop bindings for [StripeUICore](https://github.com/stripe/stripe-ios.git), the Stripe shared UI components module.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.Stripe.PaymentsUI
+dotnet add package SwiftBindings.Stripe.UICore
 ```
 
 ## Requirements

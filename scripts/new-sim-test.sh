@@ -268,9 +268,9 @@ CSPROJ_PROPS
         IFS='|' read -r lib_name framework module subdir <<< "$entry"
         local lib_path
         if [ -n "$subdir" ]; then
-            lib_path="../../libraries/${lib_name}/${subdir}/Swift.${module}.csproj"
+            lib_path="../../libraries/${lib_name}/${subdir}/SwiftBindings.${module}.csproj"
         else
-            lib_path="../../libraries/${lib_name}/Swift.${module}.csproj"
+            lib_path="../../libraries/${lib_name}/SwiftBindings.${module}.csproj"
         fi
         echo "    <ProjectReference Include=\"${lib_path}\" />" >> "$csproj_path"
     done
