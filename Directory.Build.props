@@ -7,8 +7,8 @@
     <!-- Shared NuGet metadata -->
     <Authors>Justin Wojciechowski</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/jwojiechowski/swift-dotnet-packages</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/jwojiechowski/swift-dotnet-packages</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/justinwojo/swift-dotnet-packages</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/justinwojo/swift-dotnet-packages</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>swift;dotnet;interop;bindings</PackageTags>
   </PropertyGroup>

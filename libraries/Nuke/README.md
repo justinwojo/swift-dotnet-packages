@@ -17,13 +17,13 @@ dotnet add package Swift.Nuke
 ## Usage
 
 ```csharp
-using Swift.Nuke;
+using Nuke;
+
+// Access the shared image pipeline
+var pipeline = ImagePipeline.Shared;
 
 // Create an image request
 var request = new ImageRequest(url: "https://example.com/image.jpg");
-
-// Use ImagePipeline for loading
-var pipeline = ImagePipeline.Shared;
 ```
 
 ## Building from Source
