@@ -260,7 +260,7 @@ CSPROJ_HEADER
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- Reference library projects — brings in bindings and Swift.Runtime transitively -->
+  <!-- Reference library projects — brings in bindings and SwiftBindings.Runtime transitively -->
   <ItemGroup>
 CSPROJ_PROPS
 

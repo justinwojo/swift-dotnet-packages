@@ -18,7 +18,7 @@
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- Reference the library project — brings in bindings, native frameworks, and Swift.Runtime transitively -->
+  <!-- Reference the library project — brings in bindings, native frameworks, and SwiftBindings.Runtime transitively -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/BlinkID/Swift.BlinkID.csproj" />
   </ItemGroup>

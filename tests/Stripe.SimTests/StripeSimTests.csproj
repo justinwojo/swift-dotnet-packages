@@ -18,7 +18,7 @@
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- Reference library projects — brings in bindings and Swift.Runtime transitively -->
+  <!-- Reference library projects — brings in bindings and SwiftBindings.Runtime transitively -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/Stripe/StripeCore/Swift.StripeCore.csproj" />
     <!-- StripePayments excluded: generator produces invalid enum-as-NSObject bindings -->

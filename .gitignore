@@ -8,7 +8,7 @@ obj/
 tests/*/bin/
 tests/*/obj/
 
-# Local NuGet packages (temporary, until packages are published)
+# Local NuGet packages
 local-packages/
 
 # xcframework build artifacts
@@ -26,6 +26,11 @@ local-packages/
 *.suo
 *.vs/
 *.DotSettings.user
+
+# Secrets / credentials
+.env*
+*.key
+*.pem
 
 # macOS
 .DS_Store

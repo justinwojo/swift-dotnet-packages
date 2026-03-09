@@ -67,7 +67,7 @@ Each library's `build-xcframework.sh` is a thin wrapper: `../../scripts/build-xc
 
 ### Binding Generation
 
-Binding generation is handled automatically by the `Swift.Bindings.Sdk` NuGet package during `dotnet build`. The SDK reads the xcframework, generates C# bindings and a Swift wrapper into `obj/`, and compiles everything. No separate generation step is needed.
+Binding generation is handled automatically by the `SwiftBindings.Sdk` NuGet package during `dotnet build`. The SDK reads the xcframework, generates C# bindings and a Swift wrapper into `obj/`, and compiles everything. No separate generation step is needed.
 
 ### Key Naming Convention
 
@@ -180,8 +180,8 @@ CI auto-detects libraries from `libraries/*/library.json` — no manual matrix c
 
 ## Dependencies
 
-- **Swift.Bindings.Sdk** NuGet package — handles binding generation during `dotnet build`
-- **Swift.Runtime** NuGet package — pinned to `0.1.0-preview.1` (exact, not wildcard)
+- **SwiftBindings.Sdk** NuGet package — handles binding generation during `dotnet build`
+- **SwiftBindings.Runtime** NuGet package — pinned to `0.1.0-preview.1` (exact, not wildcard)
 - **.NET SDK 10.0** — pinned in `global.json`
 
 ## Multi-Product Vendor Libraries (e.g., Stripe)
@@ -223,6 +223,6 @@ Some products have Xcode schemes that differ from their framework name. Example:
 - Do NOT commit unless explicitly asked
 - Each library should be independently buildable
 - xcframework build artifacts are gitignored — always built from SPM source
-- Use exact version pins for `Swift.Runtime` (not wildcards)
+- Use exact version pins for `SwiftBindings.Runtime` (not wildcards)
 - Wrapper xcframework names follow `{ModuleName}SwiftBindings.xcframework` convention
 - See `CONTRIBUTING.md` for library structure patterns (single-package, multi-package vendor, dependent packages)
