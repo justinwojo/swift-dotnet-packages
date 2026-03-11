@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.1.0">
+<Project Sdk="SwiftBindings.Sdk/0.1.1">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -9,6 +9,7 @@
     <Description>.NET bindings for the Lottie Swift library</Description>
     <PackageTags>swift;dotnet;interop;lottie;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+
   </PropertyGroup>
 
   <!-- Package the README -->

@@ -1,7 +1,14 @@
 #!/bin/bash
-# Build Lottie simulator test app
+# Build Lottie test app
+# Usage: ./build-testapp.sh [--device]
 set -euo pipefail
 cd "$(dirname "$0")"
-echo "=== Building Lottie simulator tests ==="
-dotnet build . -c Debug
+
+if [[ "${1:-}" == "--device" ]]; then
+    echo "=== Building Lottie tests for device ==="
+    dotnet build . -c Debug -p:RuntimeIdentifier=ios-arm64
+else
+    echo "=== Building Lottie tests for simulator ==="
+    dotnet build . -c Debug
+fi
 echo "=== Build complete ==="

@@ -119,7 +119,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "Nuke Simulator Tests",
+            Text = "Nuke Binding Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,
@@ -164,7 +164,7 @@ public class MainViewController : UIViewController
         RunAllTests();
     }
 
-    private void RunAllTests()
+    private async void RunAllTests()
     {
         var logger = new TestLogger();
         var results = new TestResults();
@@ -176,6 +176,10 @@ public class MainViewController : UIViewController
         // Phase 2: Library-specific tests
         logger.Info("=== Phase 2: Library-Specific Tests ===");
         RunLibraryTests(logger, results);
+
+        // Phase 3: Async tests
+        logger.Info("=== Phase 3: Async Tests ===");
+        await RunAsyncTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -267,12 +271,33 @@ public class MainViewController : UIViewController
                 logger.Fail("ImageRequest: description is empty");
                 results.Fail("ImageRequest_Construction", "Empty description");
             }
-            request.Dispose();
         }
         catch (Exception ex)
         {
             logger.Fail($"ImageRequest construction: {ex.Message}");
             results.Fail("ImageRequest_Construction", ex.Message);
+        }
+
+        // ImagePipeline.ConfigurationValue
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            var config = pipeline.ConfigurationValue;
+            if (config != null)
+            {
+                logger.Pass("ImagePipeline.Configuration access");
+                results.Pass("ImagePipeline_Configuration");
+            }
+            else
+            {
+                logger.Fail("ImagePipeline.Configuration: returned null");
+                results.Fail("ImagePipeline_Configuration", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePipeline.Configuration: {ex.Message}");
+            results.Fail("ImagePipeline_Configuration", ex.Message);
         }
 
         // Priority enum cases
@@ -285,15 +310,15 @@ public class MainViewController : UIViewController
             var high = ImageRequest.Priority.High;
             var veryHigh = ImageRequest.Priority.VeryHigh;
 
-            var tags = new[]
+            var values = new[]
             {
-                veryLow.Tag, low.Tag, normal.Tag, high.Tag, veryHigh.Tag,
+                (int)veryLow, (int)low, (int)normal, (int)high, (int)veryHigh,
             };
 
-            logger.Info($"Priority tags: {string.Join(", ", tags)}");
+            logger.Info($"Priority values: {string.Join(", ", values)}");
 
-            // All 5 should be distinct tag values
-            var distinctCount = tags.Distinct().Count();
+            // All 5 should be distinct values
+            var distinctCount = values.Distinct().Count();
             if (distinctCount == 5)
             {
                 logger.Pass("Priority enum: 5 distinct cases");
@@ -304,12 +329,6 @@ public class MainViewController : UIViewController
                 logger.Fail($"Priority enum: expected 5 distinct, got {distinctCount}");
                 results.Fail("Priority_EnumCases", $"Expected 5 distinct, got {distinctCount}");
             }
-
-            veryLow.Dispose();
-            low.Dispose();
-            normal.Dispose();
-            high.Dispose();
-            veryHigh.Dispose();
         }
         catch (Exception ex)
         {
@@ -317,25 +336,24 @@ public class MainViewController : UIViewController
             results.Fail("Priority_EnumCases", ex.Message);
         }
 
-        // Priority FromRawValue with invalid value
+        // Priority cast from invalid raw value
         try
         {
-            var invalid = ImageRequest.Priority.FromRawValue(999);
-            if (invalid == null)
+            var invalid = (ImageRequest.Priority)999;
+            if (!Enum.IsDefined(typeof(ImageRequest.Priority), invalid))
             {
-                logger.Pass("Priority FromRawValue(999) returned null");
+                logger.Pass("Priority cast(999) is not a defined enum value");
                 results.Pass("Priority_InvalidRawValue");
             }
             else
             {
-                logger.Fail("Priority FromRawValue(999) should return null");
-                results.Fail("Priority_InvalidRawValue", "Expected null for invalid raw value");
-                invalid.Dispose();
+                logger.Fail("Priority cast(999) should not be defined");
+                results.Fail("Priority_InvalidRawValue", "Expected undefined for invalid raw value");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"Priority FromRawValue: {ex.Message}");
+            logger.Fail($"Priority invalid cast: {ex.Message}");
             results.Fail("Priority_InvalidRawValue", ex.Message);
         }
 
@@ -383,6 +401,56 @@ public class MainViewController : UIViewController
         {
             logger.Fail($"ImageProcessingContext metadata: {ex.Message}");
             results.Fail("ImageProcessingContext_Metadata", ex.Message);
+        }
+
+        // DataCache construction
+        logger.Info("--- DataCache ---");
+        try
+        {
+            var cache = new DataCache("binding-test");
+            if (cache != null)
+            {
+                logger.Pass("DataCache construction");
+                results.Pass("DataCache_Construction");
+            }
+            else
+            {
+                logger.Fail("DataCache construction: returned null");
+                results.Fail("DataCache_Construction", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DataCache construction: {ex.Message}");
+            results.Fail("DataCache_Construction", ex.Message);
+        }
+    }
+
+    private async Task RunAsyncTests(TestLogger logger, TestResults results)
+    {
+        // Image load (network) — async via ImagePipeline
+        logger.Info("--- Async Image Load ---");
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            var request = new ImageRequest("https://picsum.photos/200");
+            var image = await pipeline.ImageAsync(request);
+            bool loaded = image != null;
+            if (loaded)
+            {
+                logger.Pass($"Image load (network): {image!.Size.Width}x{image.Size.Height}");
+                results.Pass("ImageLoad_Network");
+            }
+            else
+            {
+                logger.Fail("Image load (network): returned null");
+                results.Fail("ImageLoad_Network", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Image load (network): {ex.Message}");
+            results.Fail("ImageLoad_Network", ex.Message);
         }
     }
 }

@@ -118,7 +118,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "BlinkIDUX Simulator Tests",
+            Text = "BlinkIDUX Binding Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,
@@ -319,9 +319,9 @@ public class MainViewController : UIViewController
         logger.Info("--- CameraStatus ---");
         try
         {
-            using var unknown = CameraStatus.Unknown;
-            using var running = CameraStatus.Running;
-            using var unauthorized = CameraStatus.Unauthorized;
+            var unknown = CameraStatus.Unknown;
+            var running = CameraStatus.Running;
+            var unauthorized = CameraStatus.Unauthorized;
             logger.Info($"CameraStatus: Unknown={unknown.Tag}, Running={running.Tag}, Unauthorized={unauthorized.Tag}");
             if (unknown.Tag != running.Tag && running.Tag != unauthorized.Tag)
             {
@@ -340,7 +340,7 @@ public class MainViewController : UIViewController
             results.Fail("CameraStatus_Cases", ex.Message);
         }
 
-        // MicroblinkColor enum cases — requires wrapper lib (may not be compiled)
+        // MicroblinkColor enum cases — now uses CaseByIndex instead of FromRawValue
         logger.Info("--- MicroblinkColor ---");
         try
         {
@@ -357,11 +357,6 @@ public class MainViewController : UIViewController
                 logger.Fail("MicroblinkColor cases: duplicate tags");
                 results.Fail("MicroblinkColor_Cases", "Duplicate tags");
             }
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Skip("MicroblinkColor cases: wrapper lib not compiled (pre-existing)");
-            results.Skip("MicroblinkColor_Cases", "Wrapper lib not compiled");
         }
         catch (Exception ex)
         {

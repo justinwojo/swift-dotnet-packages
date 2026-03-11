@@ -119,7 +119,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "Lottie Simulator Tests",
+            Text = "Lottie Binding Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,
@@ -176,6 +176,11 @@ public class MainViewController : UIViewController
         // Phase 2: Library-specific tests
         logger.Info("=== Phase 2: Library-Specific Tests ===");
         RunLibraryTests(logger, results);
+
+        // Phase 3: Constructor tests (may crash on device if @_cdecl wrappers not yet deployed)
+        // These are run last so other tests complete even if a SIGSEGV occurs.
+        logger.Info("=== Phase 3: Constructor Tests ===");
+        RunConstructorTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -272,15 +277,6 @@ public class MainViewController : UIViewController
             results.Fail("LottieConfiguration_Shared", ex.Message);
         }
 
-        // LottieColor constructor — skipped: non-blittable struct P/Invoke causes SIGSEGV
-        // The SwiftIndirectResult for this struct triggers a native crash in the marshalling layer
-        logger.Skip("LottieColor constructor (non-blittable struct P/Invoke causes SIGSEGV)");
-        results.Skip("LottieColor_Properties", "Non-blittable struct P/Invoke native crash");
-
-        // LottieColor.Interpolate — skipped: same non-blittable P/Invoke issue
-        logger.Skip("LottieColor.Interpolate (non-blittable P/Invoke limitation)");
-        results.Skip("LottieColor_Interpolate", "Non-blittable P/Invoke with Swift calling convention unsupported");
-
         // DecodingStrategy enum cases (C# enum — ObjC-backed)
         logger.Info("--- DecodingStrategy ---");
         try
@@ -332,10 +328,81 @@ public class MainViewController : UIViewController
             results.Fail("LottieLoopMode_Cases", ex.Message);
         }
 
-        // LottieAnimation.From — skipped: Swift.Data struct marshalling causes SIGSEGV
-        // The byte[] → Swift.Data conversion and indirect result return trigger native crash
-        logger.Skip("LottieAnimation.From (Swift.Data struct marshalling causes SIGSEGV)");
-        results.Skip("LottieAnimation_FromJSON", "Swift.Data struct P/Invoke native crash");
+        // LottieAnimation.Filepath — load from bundled JSON file
+        logger.Info("--- LottieAnimation ---");
+        try
+        {
+            var path = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
+            if (path == null)
+            {
+                logger.Fail("LottieAnimation.Filepath: PlaneAnimation.json not found in bundle");
+                results.Fail("LottieAnimation_Filepath", "Resource not found in bundle");
+            }
+            else
+            {
+                var animation = LottieAnimation.Filepath(path);
+                if (animation != null)
+                {
+                    var detail = $"{animation.Duration:F1}s, {animation.Framerate:F0}fps, {animation.StartFrame}-{animation.EndFrame} frames";
+                    logger.Pass($"LottieAnimation.Filepath: {detail}");
+                    results.Pass("LottieAnimation_Filepath");
+                }
+                else
+                {
+                    logger.Fail("LottieAnimation.Filepath: returned null");
+                    results.Fail("LottieAnimation_Filepath", "Returned null");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieAnimation.Filepath: {ex.Message}");
+            results.Fail("LottieAnimation_Filepath", ex.Message);
+        }
+    }
+
+    private void RunConstructorTests(TestLogger logger, TestResults results)
+    {
+        // These tests validate the @_cdecl constructor wrapper fix.
+        // Previously crashed with SIGSEGV on device due to CallConvSwift ABI mismatch.
+        // Run last so other tests complete even if a crash occurs.
+
+        // LottieColor constructor (non-frozen struct, requires @_cdecl wrapper)
+        logger.Info("--- LottieColor Constructor ---");
+        try
+        {
+            var color = new LottieColor(1.0, 0.0, 0.0, 1.0);
+            logger.Pass("LottieColor construction");
+            results.Pass("LottieColor_Construction");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieColor construction: {ex.Message}");
+            results.Fail("LottieColor_Construction", ex.Message);
+        }
+
+        // LottieAnimationView constructor (class with CGRect param, requires @_cdecl wrapper)
+        logger.Info("--- LottieAnimationView Constructor ---");
+        try
+        {
+            var frame = new CoreGraphics.CGRect(0, 0, 200, 200);
+            var view = new LottieAnimationView((Swift.CGRect)frame);
+            if (view != null)
+            {
+                logger.Pass("LottieAnimationView(CGRect) construction");
+                results.Pass("LottieAnimationView_Construction");
+            }
+            else
+            {
+                logger.Fail("LottieAnimationView(CGRect): returned null");
+                results.Fail("LottieAnimationView_Construction", "Returned null");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"LottieAnimationView(CGRect): {ex.Message}");
+            results.Fail("LottieAnimationView_Construction", ex.Message);
+        }
     }
 }
 

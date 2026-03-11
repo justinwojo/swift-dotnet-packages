@@ -117,7 +117,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "{{LIBRARY_NAME}} Simulator Tests",
+            Text = "{{LIBRARY_NAME}} Binding Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,

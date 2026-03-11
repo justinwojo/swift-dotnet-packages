@@ -242,7 +242,7 @@ generate_csproj() {
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-ios</TargetFramework>
-    <RuntimeIdentifier>iossimulator-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -371,7 +371,9 @@ echo ""
 echo "Next steps:"
 echo "  1. Build xcframework: cd libraries/${LIBRARY_NAME} && ./build-xcframework.sh"
 echo "  2. Build test app:    cd tests/${LIBRARY_NAME}.SimTests && ./build-testapp.sh"
+echo "     For device:       ./build-testapp.sh --device"
 echo "     (The SDK csproj generates bindings automatically during build)"
 echo "  3. Boot simulator:    xcrun simctl boot <device-udid>"
-echo "  4. Validate:          ./validate-sim.sh 15"
+echo "  4. Validate (sim):    ./validate-sim.sh 15"
+echo "     Validate (device): ./validate-device.sh 30"
 echo "  5. Add library-specific tests to Program.cs"

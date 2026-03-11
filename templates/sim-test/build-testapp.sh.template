@@ -1,7 +1,14 @@
 #!/bin/bash
-# Build {{LIBRARY_NAME}} simulator test app
+# Build {{LIBRARY_NAME}} test app
+# Usage: ./build-testapp.sh [--device]
 set -euo pipefail
 cd "$(dirname "$0")"
-echo "=== Building {{LIBRARY_NAME}} simulator tests ==="
-dotnet build . -c Debug
+
+if [[ "${1:-}" == "--device" ]]; then
+    echo "=== Building {{LIBRARY_NAME}} tests for device ==="
+    dotnet build . -c Debug -p:RuntimeIdentifier=ios-arm64
+else
+    echo "=== Building {{LIBRARY_NAME}} tests for simulator ==="
+    dotnet build . -c Debug
+fi
 echo "=== Build complete ==="

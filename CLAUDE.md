@@ -108,15 +108,16 @@ Generates: `library.json`, thin `build-xcframework.sh`, `SwiftBindings.{Module}.
 - Multi-product: generates csproj programmatically with all ProjectReference and NativeReference entries
 - Single-product: uses template with sed substitution
 
-## Simulator Tests
+## Binding Tests
 
-Each library can have a simulator test app (`tests/<Name>.SimTests/`) that validates bindings run correctly on iOS Simulator. Tests use a standard structure:
+Each library can have a test app (`tests/<Name>.SimTests/`) that validates bindings run correctly on both iOS Simulator and physical devices. Tests use a standard structure:
 
-- **Open DllImport resolver** — resolves ANY library name as `@rpath/{name}.framework/{name}` (no hard-coded list, handles transitive dependencies automatically)
-- **Framework loading verification** — confirms both primary and wrapper frameworks load
-- **Smoke tests** — SwiftString round-trip to validate Swift runtime interop
-- **Library-specific tests** — API-level tests (constructors, singletons, properties)
-- **Success marker** — prints `TEST SUCCESS` to stdout on pass; `validate-sim.sh` watches for this
+- **Framework loading** — resolved automatically by the library assembly's `[ModuleInitializer]`
+- **Smoke tests** — type metadata access to validate Swift runtime interop
+- **Library-specific tests** — API-level tests (constructors, singletons, properties, enums)
+- **Constructor tests** — run last (may crash on device if `@_cdecl` wrappers not deployed)
+- **Success marker** — prints `TEST SUCCESS` to stdout on pass; validation scripts watch for this
+- **No explicit Dispose** — avoid `using`/`.Dispose()` on ISwiftObject types (use GC instead)
 
 ### Template Placeholders
 
@@ -129,23 +130,26 @@ Each library can have a simulator test app (`tests/<Name>.SimTests/`) that valid
 
 Filename placeholder: `__LIBRARY_NAME__` in template filenames becomes the actual library name.
 
-### Running Simulator Tests Locally
+### Running Tests Locally
 
 ```bash
 # 1. Build xcframework (if not already done)
 cd libraries/Nuke && ./build-xcframework.sh
 
 # 2. Build the test app (SDK generates bindings automatically)
-cd tests/Nuke.SimTests && ./build-testapp.sh
+cd tests/Nuke.SimTests && ./build-testapp.sh          # simulator (default)
+cd tests/Nuke.SimTests && ./build-testapp.sh --device  # physical device
 
-# 3. Boot a simulator
+# 3a. Simulator: boot and validate
 xcrun simctl boot <device-udid>
-
-# 4. Validate
 ./validate-sim.sh 15
+
+# 3b. Device: validate on connected device
+./validate-device.sh 30              # auto-detect device
+./validate-device.sh 30 <device-udid> # specific device
 ```
 
-`validate-sim.sh` accepts `[timeout_seconds] [device_udid]`. It installs the app, watches console for `TEST SUCCESS` or crash signals, checks crash logs, and returns exit 0/1.
+`validate-sim.sh` accepts `[timeout_seconds] [device_udid]`. `validate-device.sh` accepts `[timeout_seconds] [device_udid]`. Both install the app, watch console for `TEST SUCCESS` or crash signals, and return exit 0/1.
 
 ### Adding Library-Specific Tests
 

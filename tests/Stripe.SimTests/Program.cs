@@ -129,7 +129,7 @@ public class MainViewController : UIViewController
 
         _titleLabel = new UILabel
         {
-            Text = "Stripe Simulator Tests",
+            Text = "Stripe Binding Tests",
             Font = UIFont.BoldSystemFontOfSize(20),
             TextAlignment = UITextAlignment.Center,
             TranslatesAutoresizingMaskIntoConstraints = false,
@@ -274,27 +274,25 @@ public class MainViewController : UIViewController
             results.Fail("STPSDKVersion", ex.Message);
         }
 
-        // StripeCore: StripeAPI.DefaultPublishableKey — skipped: wrapper framework empty
-        // Issue 6 (SwiftString setter) is fixed in the generator, but the wrapper xcframework
-        // fails to compile for StripeCore (duplicate @_cdecl attribute after broken wrapper stripping).
-        // The _optbuf P/Invoke entry points don't exist in the empty wrapper binary.
-        logger.Skip("StripeAPI.DefaultPublishableKey (wrapper framework compilation failure)");
-        results.Skip("StripeAPI_DefaultPublishableKey", "Wrapper xcframework empty — _optbuf entry points missing");
-
-        // StripePaymentSheet: DownloadManager.SharedManager singleton
-        logger.Info("--- StripePaymentSheet ---");
+        // StripeCore: StripeAPI.DefaultPublishableKey — wrapper now compiles (Issue Q fixed R10)
         try
         {
-            var manager = DownloadManager.SharedManager;
-            logger.Info($"DownloadManager.SharedManager: {manager}");
-            logger.Pass("DownloadManager.SharedManager access");
-            results.Pass("DownloadManager_SharedManager");
+            var key = StripeCore.StripeAPI.DefaultPublishableKey;
+            logger.Info($"StripeAPI.DefaultPublishableKey: '{key}'");
+            logger.Pass("StripeAPI.DefaultPublishableKey getter");
+            results.Pass("StripeAPI_DefaultPublishableKey");
         }
         catch (Exception ex)
         {
-            logger.Fail($"DownloadManager.SharedManager: {ex.Message}");
-            results.Fail("DownloadManager_SharedManager", ex.Message);
+            logger.Fail($"StripeAPI.DefaultPublishableKey: {ex.Message}");
+            results.Fail("StripeAPI_DefaultPublishableKey", ex.Message);
         }
+
+        // StripePaymentSheet: DownloadManager.SharedManager singleton
+        // DownloadManager was @_spi — correctly suppressed by SPI filter (R9)
+        logger.Info("--- StripePaymentSheet ---");
+        logger.Skip("DownloadManager.SharedManager (@_spi type correctly suppressed)");
+        results.Skip("DownloadManager_SharedManager", "@_spi type correctly suppressed by SPI filter");
 
         // StripePaymentsUI: STPImageLibrary — skipped: P/Invoke symbols not exported by wrapper framework
         logger.Info("--- StripePaymentsUI ---");
