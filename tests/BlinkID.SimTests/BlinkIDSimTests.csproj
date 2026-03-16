@@ -11,7 +11,7 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
-    <IncludeSwiftBindingsRuntimeNative>false</IncludeSwiftBindingsRuntimeNative>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,10 +28,20 @@
     <NativeReference Include="../../libraries/BlinkID/BlinkID.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
-    <NativeReference Include="../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework"
-                     Condition="Exists('../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework')">
-      <Kind>Framework</Kind>
-    </NativeReference>
   </ItemGroup>
+
+  <!-- Wrapper xcframework: must be in a Target (not static ItemGroup) so the Exists() check
+       runs AFTER the library project builds. Static ItemGroups evaluate before any build targets,
+       so on a clean build the wrapper doesn't exist yet and gets silently omitted. -->
+  <Target Name="_AddSwiftWrapperReference"
+          BeforeTargets="ResolveNativeReferences"
+          DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <NativeReference Include="../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+    </ItemGroup>
+  </Target>
 
 </Project>

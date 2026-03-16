@@ -11,27 +11,17 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
-    <IncludeSwiftBindingsRuntimeNative>false</IncludeSwiftBindingsRuntimeNative>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- Reference the library project — brings in bindings, native frameworks, and SwiftBindings.Runtime transitively -->
+  <!-- Reference the library project — NativeReference items (source + wrapper xcframeworks)
+       propagate automatically via the SDK's GetNativeManifest target. -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/{{LIBRARY_NAME}}/SwiftBindings.{{MODULE_NAME}}.csproj" />
-  </ItemGroup>
-
-  <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->
-  <ItemGroup>
-    <NativeReference Include="../../libraries/{{LIBRARY_NAME}}/{{MODULE_NAME}}.xcframework">
-      <Kind>Framework</Kind>
-    </NativeReference>
-    <NativeReference Include="../../libraries/{{LIBRARY_NAME}}/obj/Debug/net10.0-ios/swift-binding/{{MODULE_NAME}}SwiftBindings.xcframework"
-                     Condition="Exists('../../libraries/{{LIBRARY_NAME}}/obj/Debug/net10.0-ios/swift-binding/{{MODULE_NAME}}SwiftBindings.xcframework')">
-      <Kind>Framework</Kind>
-    </NativeReference>
   </ItemGroup>
 
 </Project>

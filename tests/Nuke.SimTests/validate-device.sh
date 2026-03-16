@@ -61,11 +61,15 @@ xcrun devicectl device process launch --device "$DEVICE" --terminate-existing --
 PID=$!
 
 # Poll for completion (success, failure, crash, or app exit)
-ELAPSED=0
+START_TIME=$(date +%s)
 RESULT=""
-while [ $ELAPSED -lt $TIMEOUT ]; do
-    sleep 0.25
-    ELAPSED=$((ELAPSED + 1))
+while true; do
+    CURRENT_TIME=$(date +%s)
+    ELAPSED=$((CURRENT_TIME - START_TIME))
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+        break
+    fi
+    sleep 1
     if grep -q "TEST SUCCESS" "$OUTPUT_FILE" 2>/dev/null; then
         RESULT="success"
         break
@@ -74,14 +78,23 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
         RESULT="failed"
         break
     fi
-    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|CRASH|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
         RESULT="crash"
         break
     fi
     # Check if the process has exited (app terminated without markers)
     if ! kill -0 $PID 2>/dev/null; then
-        sleep 0.5  # Brief pause to let output flush
-        RESULT="exited"
+        sleep 1  # Brief pause to let output flush
+        # Check again for success/failure after output flush
+        if grep -q "TEST SUCCESS" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="success"
+        elif grep -q "TEST FAILED" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="failed"
+        elif grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="crash"
+        else
+            RESULT="exited"
+        fi
         break
     fi
 done

@@ -11,7 +11,7 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
-    <IncludeSwiftBindingsRuntimeNative>false</IncludeSwiftBindingsRuntimeNative>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,20 +23,10 @@
     <BundleResource Include="Resources/PlaneAnimation.json" />
   </ItemGroup>
 
-  <!-- Reference the library project — brings in bindings, native frameworks, and SwiftBindings.Runtime transitively -->
+  <!-- Reference the library project — NativeReference items (source + wrapper xcframeworks)
+       propagate automatically via the SDK's GetNativeManifest target. -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/Lottie/SwiftBindings.Lottie.csproj" />
-  </ItemGroup>
-
-  <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->
-  <ItemGroup>
-    <NativeReference Include="../../libraries/Lottie/Lottie.xcframework">
-      <Kind>Framework</Kind>
-    </NativeReference>
-    <NativeReference Include="../../libraries/Lottie/obj/Debug/net10.0-ios/swift-binding/LottieSwiftBindings.xcframework"
-                     Condition="Exists('../../libraries/Lottie/obj/Debug/net10.0-ios/swift-binding/LottieSwiftBindings.xcframework')">
-      <Kind>Framework</Kind>
-    </NativeReference>
   </ItemGroup>
 
 </Project>
