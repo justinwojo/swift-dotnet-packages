@@ -1,5 +1,7 @@
 # SwiftBindings Packages
 
+> **Work in progress.** This repo will eventually provide published NuGet packages and sample apps for popular Swift libraries on .NET. Right now the infrastructure and initial libraries are being built out — expect rough edges.
+
 Native Swift interop bindings for popular Swift libraries on .NET. Each package uses the [SwiftBindings SDK](https://www.nuget.org/packages/SwiftBindings.Sdk) to auto-generate C# bindings from Swift xcframeworks, with every library validated end-to-end on an iOS Simulator.
 
 These are not traditional Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
