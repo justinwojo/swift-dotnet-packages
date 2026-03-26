@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.swiftbindings.samples</ApplicationId>
+    <ApplicationTitle>SwiftBindings Samples</ApplicationTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SwiftBindings.Nuke" Version="12.8.0" />
+    <PackageReference Include="SwiftBindings.Lottie" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <BundleResource Include="Resources/PlaneAnimation.json" />
+  </ItemGroup>
+
+</Project>

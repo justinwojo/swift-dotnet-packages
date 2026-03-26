@@ -10,12 +10,12 @@ Monorepo for NuGet packages providing .NET bindings for Swift libraries. Binding
 swift-dotnet-packages/
 ├── libraries/<Name>/         # One directory per bound Swift library
 ├── tests/<Name>.SimTests/    # Simulator test apps per library
-├── tests/<Name>.Tests/       # Unit/integration tests per library (future)
+├── samples/                  # Sample apps demonstrating binding usage
 ├── templates/sim-test/       # Simulator test app template files
 ├── templates/library/        # Library scaffolding template files
 ├── scripts/                  # Scaffolding and utility scripts
 ├── Directory.Build.props     # Shared NuGet metadata
-├── global.json               # .NET SDK version pin (10.0.102)
+├── global.json               # .NET SDK version pin (10.0.103)
 └── .github/workflows/ci.yml  # CI pipeline (build + sim test per library)
 ```
 
@@ -50,8 +50,8 @@ Each library root has a `library.json` declaring its SPM source and products:
 
 ### Build Modes
 
-- **Source mode**: Clone repo, build with xcodebuild (Nuke, Alamofire, etc.)
-- **Binary mode**: Use `swift package resolve` to download pre-built xcframeworks (Stripe, Firebase, etc.)
+- **Source mode**: Clone repo, build with xcodebuild (Nuke, Lottie, Stripe, etc.)
+- **Binary mode**: Use `swift package resolve` to download pre-built xcframeworks (BlinkID, Firebase, etc.)
 
 ### Shared Build Script
 
@@ -84,10 +84,10 @@ Binding generation is handled automatically by the `SwiftBindings.Sdk` NuGet pac
 ./scripts/new-library.sh Nuke --repo https://github.com/kean/Nuke.git --version 12.8.0 --mode source --scheme Nuke
 
 # Multi-product vendor:
-./scripts/new-library.sh Stripe --repo https://github.com/stripe/stripe-ios-spm.git --version 24.0.0 --mode binary --products StripeCore,StripePayments,StripePaymentSheet
+./scripts/new-library.sh Stripe --repo https://github.com/stripe/stripe-ios.git --version 25.6.2 --mode source --products StripeCore,StripePayments,StripePaymentSheet
 
 # Discover available products:
-./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios-spm.git
+./scripts/new-library.sh --discover https://github.com/stripe/stripe-ios.git
 ```
 
 Generates: `library.json`, thin `build-xcframework.sh`, `SwiftBindings.{Module}.csproj`, `README.md` per product. Multi-product creates subdirectory structure.
@@ -160,19 +160,9 @@ After scaffolding, edit `tests/LibraryName.SimTests/Program.cs`:
 
 ## CI Pipeline
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26` with a matrix over libraries:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26`. It dynamically detects which libraries changed in the PR and builds only those (or all libraries on `workflow_dispatch`).
 
-```yaml
-strategy:
-  matrix:
-    include:
-      - library: Nuke
-        build_dir: libraries/Nuke
-        test_dir: tests/Nuke.SimTests
-        build_flags: ""
-```
-
-**Steps:**
+**Steps per library:**
 1. **Build xcframeworks** — `./build-xcframework.sh $build_flags`
 2. **Resolve products** — `--resolve-products` for CI product iteration
 3. **Build libraries** — SDK generates bindings automatically during `dotnet build`
@@ -184,8 +174,8 @@ CI auto-detects libraries from `libraries/*/library.json` — no manual matrix c
 
 ## Dependencies
 
-- **SwiftBindings.Sdk** NuGet package — handles binding generation during `dotnet build`
-- **SwiftBindings.Runtime** NuGet package — pinned to `0.1.0-preview.1` (exact, not wildcard)
+- **SwiftBindings.Sdk** NuGet package (currently `0.3.0`) — handles binding generation during `dotnet build`
+- **SwiftBindings.Runtime** NuGet package — resolved transitively via the SDK (do not pin explicitly in csproj)
 - **.NET SDK 10.0** — pinned in `global.json`
 
 ## Multi-Product Vendor Libraries (e.g., Stripe)
@@ -199,7 +189,7 @@ Some vendors have internal frameworks (not public SPM products) that other produ
 2. Built alongside public products, but they don't need binding generation or csproj files
 3. Referenced as `NativeReference` in sim test csproj (needed at runtime)
 
-Example: Stripe has 3 internal dependencies: `Stripe3DS2`, `StripeUICore`, `StripeCameraCore`.
+Example: Stripe has 2 internal dependencies: `Stripe3DS2`, `StripeCameraCore`. (`StripeUICore` was originally internal but now has its own csproj and published bindings.)
 
 ### SwiftFrameworkDependency Items
 
@@ -227,6 +217,6 @@ Some products have Xcode schemes that differ from their framework name. Example:
 - Do NOT commit unless explicitly asked
 - Each library should be independently buildable
 - xcframework build artifacts are gitignored — always built from SPM source
-- Use exact version pins for `SwiftBindings.Runtime` (not wildcards)
+- Do not pin `SwiftBindings.Runtime` in csproj — it's resolved transitively via the SDK
 - Wrapper xcframework names follow `{ModuleName}SwiftBindings.xcframework` convention
 - See `CONTRIBUTING.md` for library structure patterns (single-package, multi-package vendor, dependent packages)

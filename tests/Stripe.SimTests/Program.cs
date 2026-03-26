@@ -194,6 +194,7 @@ public class MainViewController : UIViewController
         {
             logger.Pass("All tests passed!");
             Console.WriteLine("TEST SUCCESS");
+            Console.Out.Flush();
         }
         else
         {
@@ -201,6 +202,7 @@ public class MainViewController : UIViewController
             foreach (var failure in results.FailedTests)
                 logger.Fail($"  - {failure}");
             Console.WriteLine($"TEST FAILED: {results.Failed} failures");
+            Console.Out.Flush();
         }
 
         // Update UI
@@ -294,21 +296,23 @@ public class MainViewController : UIViewController
         logger.Skip("DownloadManager.SharedManager (@_spi type correctly suppressed)");
         results.Skip("DownloadManager_SharedManager", "@_spi type correctly suppressed by SPI filter");
 
-        // StripePaymentsUI: STPImageLibrary — skipped: P/Invoke symbols not exported by wrapper framework
+        // StripePaymentsUI: STPImageLibrary — skipped: wrapper xcframework not compiled
+        // Bindings reference StripePaymentsUISwiftBindings but no wrapper xcframework was produced
         logger.Info("--- StripePaymentsUI ---");
-        logger.Skip("STPImageLibrary card images (P/Invoke entry points not resolved)");
-        results.Skip("STPImageLibrary_Visa", "Wrapper framework does not export card image symbols");
-        results.Skip("STPImageLibrary_Amex", "Wrapper framework does not export card image symbols");
+        logger.Skip("STPImageLibrary card images (wrapper xcframework not compiled — DllNotFoundException)");
+        results.Skip("STPImageLibrary_Visa", "StripePaymentsUISwiftBindings wrapper xcframework not compiled");
+        results.Skip("STPImageLibrary_Amex", "StripePaymentsUISwiftBindings wrapper xcframework not compiled");
 
         // Enum tag tests (no-payload cases only)
         logger.Info("--- Enum Tags ---");
-        // CardScan and FinancialConnections wrappers don't compile in SDK 0.2.0,
-        // so enum type initializers fail (missing P/Invoke entry points)
-        logger.Skip("CardScanSheetResult.Canceled: wrapper not available (SDK 0.2.0)");
-        results.Skip("CardScanSheetResult_Canceled", "Wrapper compilation failed in SDK 0.2.0");
+        // CardScan and FinancialConnections wrapper xcframeworks were not compiled —
+        // bindings reference StripeCardScanSwiftBindings / StripeFinancialConnectionsSwiftBindings
+        // but those xcframeworks don't exist (DllNotFoundException at runtime)
+        logger.Skip("CardScanSheetResult.Canceled: wrapper xcframework not compiled (DllNotFoundException)");
+        results.Skip("CardScanSheetResult_Canceled", "StripeCardScanSwiftBindings wrapper xcframework not compiled");
 
-        logger.Skip("FinancialConnectionsSheet.Result.Canceled: wrapper not available (SDK 0.2.0)");
-        results.Skip("FinancialConnections_Canceled", "Wrapper compilation failed in SDK 0.2.0");
+        logger.Skip("FinancialConnectionsSheet.Result.Canceled: wrapper xcframework not compiled (DllNotFoundException)");
+        results.Skip("FinancialConnections_Canceled", "StripeFinancialConnectionsSwiftBindings wrapper xcframework not compiled");
 
         try
         {

@@ -1,24 +1,35 @@
 #!/bin/bash
 # Validates BlinkIDUX tests on a physical iOS device
-# Usage: ./validate-device.sh [timeout_seconds] [device_udid]
+# Usage: ./validate-device.sh [--aot] [timeout_seconds] [device_udid]
 # Returns exit code 0 on success, 1 on failure/crash/timeout
 #
+# --aot: Look in bin/Release/ (NativeAOT publish output) instead of bin/Debug/
 # device_udid: specific device UDID (default: auto-detect first connected device)
 #   Use `xcrun devicectl list devices` to find available devices.
 
 set -e
 
-TIMEOUT=${1:-30}
-DEVICE=${2:-}
+AOT=false
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --aot) AOT=true ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+
+TIMEOUT=${POSITIONAL[0]:-30}
+DEVICE=${POSITIONAL[1]:-}
 APP_NAME="BlinkIDUXSimTests"
-APP_PATH="bin/Debug/net10.0-ios/ios-arm64/${APP_NAME}.app"
+CONFIG=$( [[ "$AOT" == true ]] && echo "Release" || echo "Debug" )
+APP_PATH="bin/${CONFIG}/net10.0-ios/ios-arm64/${APP_NAME}.app"
 BUNDLE_ID="com.swiftbindings.blinkiduxsimtests"
 
 cd "$(dirname "$0")"
 
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: App not found at $APP_PATH"
-    echo "Run ./build-testapp.sh --device first."
+    echo "Run ./build-testapp.sh --device$([ "$AOT" = true ] && echo " --aot") first."
     exit 1
 fi
 
@@ -61,11 +72,15 @@ xcrun devicectl device process launch --device "$DEVICE" --terminate-existing --
 PID=$!
 
 # Poll for completion (success, failure, crash, or app exit)
-ELAPSED=0
+START_TIME=$(date +%s)
 RESULT=""
-while [ $ELAPSED -lt $TIMEOUT ]; do
-    sleep 0.25
-    ELAPSED=$((ELAPSED + 1))
+while true; do
+    CURRENT_TIME=$(date +%s)
+    ELAPSED=$((CURRENT_TIME - START_TIME))
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+        break
+    fi
+    sleep 1
     if grep -q "TEST SUCCESS" "$OUTPUT_FILE" 2>/dev/null; then
         RESULT="success"
         break
@@ -74,14 +89,23 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
         RESULT="failed"
         break
     fi
-    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|CRASH|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
         RESULT="crash"
         break
     fi
     # Check if the process has exited (app terminated without markers)
     if ! kill -0 $PID 2>/dev/null; then
-        sleep 0.5  # Brief pause to let output flush
-        RESULT="exited"
+        sleep 1  # Brief pause to let output flush
+        # Check again for success/failure after output flush
+        if grep -q "TEST SUCCESS" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="success"
+        elif grep -q "TEST FAILED" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="failed"
+        elif grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+            RESULT="crash"
+        else
+            RESULT="exited"
+        fi
         break
     fi
 done

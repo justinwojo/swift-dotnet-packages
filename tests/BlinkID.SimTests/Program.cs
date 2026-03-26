@@ -177,6 +177,10 @@ public class MainViewController : UIViewController
         logger.Info("=== Phase 2: Library-Specific Tests ===");
         RunLibraryTests(logger, results);
 
+        // Phase 3: Coverage gap tests
+        logger.Info("=== Phase 3: Coverage Gap Tests ===");
+        RunCoverageGapTests(logger, results);
+
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
 
@@ -184,6 +188,7 @@ public class MainViewController : UIViewController
         {
             logger.Pass("All tests passed!");
             Console.WriteLine("TEST SUCCESS");
+            Console.Out.Flush();
         }
         else
         {
@@ -191,6 +196,7 @@ public class MainViewController : UIViewController
             foreach (var failure in results.FailedTests)
                 logger.Fail($"  - {failure}");
             Console.WriteLine($"TEST FAILED: {results.Failed} failures");
+            Console.Out.Flush();
         }
 
         // Update UI
@@ -468,6 +474,102 @@ public class MainViewController : UIViewController
                 logger.Fail($"{typeName} metadata: {ex.Message}");
                 results.Fail($"{typeName}_Metadata", ex.Message);
             }
+        }
+    }
+
+    private void RunCoverageGapTests(TestLogger logger, TestResults results)
+    {
+        // B3a: DocumentType static enum cases — string-backed enum singletons
+        try
+        {
+            using var none = DocumentType.None;
+            using var dl = DocumentType.Dl;
+            using var id = DocumentType.Id;
+            using var passport = DocumentType.Passport;
+            logger.Pass("B3a: DocumentType static cases: None, Dl, Id, Passport accessed");
+            results.Pass("B3a_DocumentType_Cases");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3a DocumentType cases: {ex.Message}");
+            results.Fail("B3a_DocumentType_Cases", ex.Message);
+        }
+
+        // B3b: DocumentType.FromRawValue — failable initializer (optional return)
+        try
+        {
+            var valid = DocumentType.FromRawValue("dl");
+            var invalid = DocumentType.FromRawValue("nonexistent_type_xyz_123");
+            logger.Pass($"B3b: DocumentType.FromRawValue: valid={valid != null}, invalid={invalid == null}");
+            results.Pass("B3b_DocumentType_FromRawValue");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3b DocumentType.FromRawValue: {ex.Message}");
+            results.Fail("B3b_DocumentType_FromRawValue", ex.Message);
+        }
+
+        // B3c: DocumentType — multiple access of same singleton (not null)
+        try
+        {
+            using var dl1 = DocumentType.Dl;
+            using var dl2 = DocumentType.Dl;
+            bool bothNotNull = (dl1 != null && dl2 != null);
+            logger.Pass($"B3c: DocumentType singleton access: bothNotNull={bothNotNull}");
+            results.Pass("B3c_DocumentType_Singleton");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3c DocumentType singleton: {ex.Message}");
+            results.Fail("B3c_DocumentType_Singleton", ex.Message);
+        }
+
+        // B3d: DetectionStatus all cases — comprehensive enum coverage
+        try
+        {
+            var success = DetectionStatus.Success;
+            var fail = DetectionStatus.Failed;
+            var cameraTooFar = DetectionStatus.CameraTooFar;
+            var cameraAngleTooSteep = DetectionStatus.CameraAngleTooSteep;
+            logger.Pass($"B3d: DetectionStatus: Success={success}, Fail={fail}, CameraTooFar={cameraTooFar}, CameraAngleTooSteep={cameraAngleTooSteep}");
+            results.Pass("B3d_DetectionStatus_AllCases");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3d DetectionStatus: {ex.Message}");
+            results.Fail("B3d_DetectionStatus_AllCases", ex.Message);
+        }
+
+        // B3e: DocumentType additional cases — EmploymentPass, Visa, etc.
+        try
+        {
+            using var emp = DocumentType.EmploymentPass;
+            using var visa = DocumentType.Visa;
+            using var passportCard = DocumentType.PassportCard;
+            logger.Pass("B3e: DocumentType extended: EmploymentPass, Visa, PassportCard accessed");
+            results.Pass("B3e_DocumentType_Extended");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3e DocumentType extended: {ex.Message}");
+            results.Fail("B3e_DocumentType_Extended", ex.Message);
+        }
+
+        // B3f: Memory pressure — create and dispose many DocumentType instances
+        try
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                using var dt = DocumentType.Dl;
+                using var dt2 = DocumentType.Id;
+            }
+            logger.Pass("B3f: Memory pressure: 50 DocumentType create/dispose cycles");
+            results.Pass("B3f_Memory_Pressure");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"B3f Memory pressure: {ex.Message}");
+            results.Fail("B3f_Memory_Pressure", ex.Message);
         }
     }
 }

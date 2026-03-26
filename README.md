@@ -1,8 +1,8 @@
 # SwiftBindings Packages
 
-> **Work in progress.** This repo will eventually provide published NuGet packages and sample apps for popular Swift libraries on .NET. Right now the infrastructure and initial libraries are being built out — expect rough edges.
+> **Work in progress.** Published NuGet packages and sample apps are coming soon — the infrastructure and initial libraries are functional but expect rough edges.
 
-Native Swift interop bindings for popular Swift libraries on .NET. Each package uses the [SwiftBindings SDK](https://www.nuget.org/packages/SwiftBindings.Sdk) to auto-generate C# bindings from Swift xcframeworks, with every library validated end-to-end on an iOS Simulator.
+Native Swift interop bindings for popular Swift libraries on .NET. Each package uses the [SwiftBindings SDK](https://www.nuget.org/packages/SwiftBindings.Sdk) to auto-generate C# bindings from Swift xcframeworks, with every library validated end-to-end on iOS Simulator and physical devices.
 
 These are not traditional Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
@@ -14,9 +14,16 @@ These are not traditional Objective-C proxy wrappers — they use .NET 10's nati
 | `SwiftBindings.Lottie` | Lottie animation rendering | 4.6.0 | Source |
 | `SwiftBindings.BlinkID` | Identity document scanning (Microblink) | 7.6.2 | Binary |
 | `SwiftBindings.BlinkIDUX` | BlinkID scanning UI components | 7.6.2 | Source |
-| `SwiftBindings.Stripe.*` | Stripe payments SDK (11 products) | 25.6.2 | Source |
+| `SwiftBindings.Stripe.*` | Stripe payments SDK (12 packages) | 25.6.2 | Source |
 
-Stripe products: Core, Payments, PaymentSheet, PaymentsUI, ApplePay, Identity, Issuing, CardScan, FinancialConnections, Connect.
+Stripe packages: Stripe, Core, Payments, PaymentSheet, PaymentsUI, UICore, ApplePay, Identity, Issuing, CardScan, FinancialConnections, Connect.
+
+## Sample App
+
+The [`samples/SwiftBindingsSamples`](samples/SwiftBindingsSamples) directory contains a .NET for iOS app demonstrating real-world usage of the bindings:
+
+- **Nuke** — concurrent image loading grid with cache management and pipeline configuration
+- **Lottie** — animation playback with play/pause/stop, speed control, loop mode toggle, and frame scrubbing
 
 ## How It Works
 
@@ -24,7 +31,7 @@ Each library follows the same workflow:
 
 1. **Build xcframeworks** — fetch the Swift library via SPM and build device + simulator xcframeworks
 2. **Generate bindings** — `dotnet build` invokes the SwiftBindings SDK, which reads the xcframework and emits C# bindings + a Swift interop wrapper
-3. **Validate on simulator** — a .NET for iOS test app exercises the bindings on an iOS Simulator, verifying that Swift APIs are callable end-to-end from C#
+3. **Validate** — a .NET for iOS test app exercises the bindings on iOS Simulator and physical devices, verifying that Swift APIs are callable end-to-end from C#
 
 ## Quick Start
 

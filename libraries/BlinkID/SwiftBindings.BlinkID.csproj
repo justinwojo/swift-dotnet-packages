@@ -1,7 +1,9 @@
-<Project Sdk="SwiftBindings.Sdk/0.2.0">
+<Project Sdk="SwiftBindings.Sdk/0.3.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
+    <!-- Closed-source framework: wrapper compilation fails due to internal types -->
+    <SwiftWrapperRequired>false</SwiftWrapperRequired>
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.BlinkID</PackageId>

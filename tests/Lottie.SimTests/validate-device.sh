@@ -1,24 +1,35 @@
 #!/bin/bash
 # Validates Lottie tests on a physical iOS device
-# Usage: ./validate-device.sh [timeout_seconds] [device_udid]
+# Usage: ./validate-device.sh [--aot] [timeout_seconds] [device_udid]
 # Returns exit code 0 on success, 1 on failure/crash/timeout
 #
+# --aot: Look in bin/Release/ (NativeAOT publish output) instead of bin/Debug/
 # device_udid: specific device UDID (default: auto-detect first connected device)
 #   Use `xcrun devicectl list devices` to find available devices.
 
 set -e
 
-TIMEOUT=${1:-30}
-DEVICE=${2:-}
+AOT=false
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --aot) AOT=true ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+
+TIMEOUT=${POSITIONAL[0]:-30}
+DEVICE=${POSITIONAL[1]:-}
 APP_NAME="LottieSimTests"
-APP_PATH="bin/Debug/net10.0-ios/ios-arm64/${APP_NAME}.app"
+CONFIG=$( [[ "$AOT" == true ]] && echo "Release" || echo "Debug" )
+APP_PATH="bin/${CONFIG}/net10.0-ios/ios-arm64/${APP_NAME}.app"
 BUNDLE_ID="com.swiftbindings.lottiesimtests"
 
 cd "$(dirname "$0")"
 
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: App not found at $APP_PATH"
-    echo "Run ./build-testapp.sh --device first."
+    echo "Run ./build-testapp.sh --device$([ "$AOT" = true ] && echo " --aot") first."
     exit 1
 fi
 
