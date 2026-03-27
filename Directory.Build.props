@@ -11,5 +11,11 @@
     <RepositoryUrl>https://github.com/justinwojo/swift-dotnet-packages</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>swift;dotnet;interop;bindings</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
+
+  <!-- Package the icon from repo root -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="/" />
+  </ItemGroup>
 </Project>
