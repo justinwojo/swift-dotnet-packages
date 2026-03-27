@@ -91,13 +91,13 @@ class SimConfig:
     command_timeout: float = 60.0          # per-command timeout (GHA simctl can be slow)
 
     # Boot phase settings
-    boot_poll_interval: float = 3.0        # seconds between state polls
+    boot_poll_interval: float = 2.0        # seconds between state polls
     boot_timeout: float = 180.0            # max seconds to wait for Booted
 
     # Readiness probe settings (phase 2 after Booted)
     readiness_poll_interval: float = 2.0
     readiness_timeout: float = 120.0       # GHA runners can be very slow
-    readiness_probe_timeout: float = 30.0  # per-probe timeout (GHA simctl spawn is slow)
+    readiness_probe_timeout: float = 10.0  # per-probe timeout — fail fast, retry sooner
 
     # Preferred device types (in order)
     preferred_devices: list = field(default_factory=lambda: [
