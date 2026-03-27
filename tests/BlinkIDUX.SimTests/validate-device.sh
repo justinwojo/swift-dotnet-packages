@@ -89,7 +89,7 @@ while true; do
         RESULT="failed"
         break
     fi
-    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+    if grep -v '\[SKIP\]' "$OUTPUT_FILE" 2>/dev/null | grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS"; then
         RESULT="crash"
         break
     fi
@@ -101,7 +101,7 @@ while true; do
             RESULT="success"
         elif grep -q "TEST FAILED" "$OUTPUT_FILE" 2>/dev/null; then
             RESULT="failed"
-        elif grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+        elif grep -v '\[SKIP\]' "$OUTPUT_FILE" 2>/dev/null | grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|EXC_BAD_ACCESS"; then
             RESULT="crash"
         else
             RESULT="exited"

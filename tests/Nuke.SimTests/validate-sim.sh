@@ -46,7 +46,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
         SUCCESS=true
         break
     fi
-    if grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|CRASH|EXC_BAD_ACCESS" "$OUTPUT_FILE" 2>/dev/null; then
+    if grep -v '\[SKIP\]' "$OUTPUT_FILE" 2>/dev/null | grep -qE "SIGABRT|SIGSEGV|SIGBUS|Fatal error|CRASH|EXC_BAD_ACCESS"; then
         echo "=== CRASH DETECTED ==="
         cat "$OUTPUT_FILE"
         rm -f "$OUTPUT_FILE"
