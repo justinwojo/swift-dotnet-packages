@@ -124,7 +124,7 @@ def run_build(test_dir: str) -> None:
         raise RuntimeError(f"build-testapp.sh not found in {test_dir}")
 
     result = subprocess.run(
-        ["bash", build_script],
+        ["bash", "./build-testapp.sh"],
         cwd=test_dir,
         capture_output=True,
         text=True,
@@ -207,7 +207,7 @@ def run_tests(
 
         try:
             result = subprocess.run(
-                ["bash", validate_script, str(timeout), device_udid],
+                ["bash", "./validate-sim.sh", str(timeout), device_udid],
                 cwd=test_dir,
                 capture_output=True,
                 text=True,
