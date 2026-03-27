@@ -107,6 +107,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure local NuGet source exists
+        run: mkdir -p local-packages
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
