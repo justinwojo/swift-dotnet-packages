@@ -98,7 +98,7 @@ jobs:
           dotnet-quality: preview
 
       - name: Install workloads
-        run: dotnet workload restore
+        run: dotnet workload install ios
 
       - name: Determine build flags
         id: flags
