@@ -164,7 +164,7 @@ def run_tests(
         raise RuntimeError(f"validate-sim.sh not found in {test_dir}")
 
     bundle_id = resolve_bundle_id(test_dir)
-    BUILD_OVERHEAD = 300  # seconds — rebuild overhead if we need to retry
+    INSTALL_OVERHEAD = 480  # seconds — simctl install can be very slow on GHA runners
     last_output = ""
 
     for attempt in range(1, max_test_retries + 2):
@@ -196,9 +196,9 @@ def run_tests(
         # Calculate subprocess timeout
         if deadline is not None:
             remaining = deadline - time.time()
-            subprocess_timeout = min(timeout + BUILD_OVERHEAD, max(remaining - 30, timeout + 60))
+            subprocess_timeout = min(timeout + INSTALL_OVERHEAD, max(remaining - 30, timeout + 60))
         else:
-            subprocess_timeout = timeout + BUILD_OVERHEAD
+            subprocess_timeout = timeout + INSTALL_OVERHEAD
 
         log.info(
             "=== TESTS: Running validate-sim.sh (timeout=%ds, attempt=%d, subprocess_timeout=%.0fs) ===",
