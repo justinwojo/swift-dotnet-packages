@@ -193,37 +193,8 @@ jobs:
           echo "Packages produced:"
           ls "${{ runner.temp }}/ci-packages"/*.nupkg 2>/dev/null || echo "::warning::No .nupkg files produced"
 
-      - name: Boot iOS Simulator
-        id: boot-sim
-        run: |
-          DEVICE=$(xcrun simctl list devices available -j | \
-            python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          prefs = ['iPhone 16', 'iPhone 16 Pro', 'iPhone 15', 'iPhone 15 Pro']
-          for runtime, devices in data['devices'].items():
-              if 'iOS' not in runtime: continue
-              for pref in prefs:
-                  for d in devices:
-                      if d['name'] == pref and d['state'] != 'Booted':
-                          print(d['udid']); sys.exit(0)
-          for runtime, devices in data['devices'].items():
-              if 'iOS' not in runtime: continue
-              for d in devices:
-                  if 'iPhone' in d['name']:
-                      print(d['udid']); sys.exit(0)
-          sys.exit(1)
-          ")
-          if [ -z "$DEVICE" ]; then
-            echo "Error: No compatible iOS simulator found"
-            exit 1
-          fi
-          echo "Booting simulator: $DEVICE"
-          xcrun simctl boot "$DEVICE" 2>/dev/null || true
-          xcrun simctl bootstatus "$DEVICE" -b
-          echo "device_udid=$DEVICE" >> "$GITHUB_OUTPUT"
-
-      - name: Build and validate test app
+      - name: Build and validate on iOS Simulator
+        timeout-minutes: 20
         run: |
           TEST_DIR="tests/${{ matrix.library }}.SimTests"
 
@@ -232,6 +203,16 @@ jobs:
             exit 0
           fi
 
-          cd "$TEST_DIR"
-          ./build-testapp.sh
-          ./validate-sim.sh 30 ${{ steps.boot-sim.outputs.device_udid }}
+          python3 scripts/ci/ci_ios_test.py \
+            --test-dir "$TEST_DIR" \
+            --timeout 30 \
+            --step-timeout 1140
+
+      - name: Upload simulator diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-diagnostics-${{ matrix.library }}
+          path: /tmp/sim-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
