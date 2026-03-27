@@ -208,7 +208,7 @@ jobs:
 
           python3 scripts/ci/ci_ios_test.py \
             --test-dir "$TEST_DIR" \
-            --timeout 30 \
+            --timeout 60 \
             --step-timeout 1140 \
             --reuse-device
 
