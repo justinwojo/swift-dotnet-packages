@@ -1347,31 +1347,20 @@ public class MainViewController : UIViewController
             results.Fail("DataAsync_NSUrl", ex.Message);
         }
 
-        // DataAsync(ImageRequest) — SIGSEGV in dataOnComplete callback (xamarin_get_frame_length)
-        // when marshalling NSUrlResponse. Crashes on BOTH simulator and device Debug (Mono JIT).
-        // SDK 0.3.0 fixed the nullable tuple return type but the callback still crashes Mono.
-        // Only works on NativeAOT (dotnet publish -c Release).
+        // DataAsync(ImageRequest) — previously Mono JIT SIGSEGV, re-testing with SDK 0.5.0
         logger.Info("--- Async Data Load (ImageRequest) ---");
-        if (RuntimeEnvironment.IsMonoRuntime)
+        try
         {
-            logger.Skip("DataAsync(ImageRequest): Mono JIT SIGSEGV in NSUrlResponse callback — NativeAOT only");
-            results.Skip("DataAsync_ImageRequest", "Mono JIT crash in async callback — NativeAOT only");
+            var pipeline = ImagePipeline.Shared;
+            var request = new ImageRequest("https://picsum.photos/seed/datareq/100");
+            var (data, response) = await pipeline.DataAsync(request);
+            logger.Pass($"DataAsync(ImageRequest): data={data?.Length}");
+            results.Pass("DataAsync_ImageRequest");
         }
-        else
+        catch (Exception ex)
         {
-            try
-            {
-                var pipeline = ImagePipeline.Shared;
-                var request = new ImageRequest("https://picsum.photos/seed/datareq/100");
-                var (data, response) = await pipeline.DataAsync(request);
-                logger.Pass($"DataAsync(ImageRequest): data={data?.Length}");
-                results.Pass("DataAsync_ImageRequest");
-            }
-            catch (Exception ex)
-            {
-                logger.Fail($"DataAsync(ImageRequest): {ex.Message}");
-                results.Fail("DataAsync_ImageRequest", ex.Message);
-            }
+            logger.Fail($"DataAsync(ImageRequest): {ex.Message}");
+            results.Fail("DataAsync_ImageRequest", ex.Message);
         }
 
         // Async with CancellationToken — cancel immediately
@@ -1541,11 +1530,9 @@ public class MainViewController : UIViewController
             results.Skip("N1_ImageLoad_WithHeaders", "Depends on ImageRequest");
         }
 
-        // N1 bonus: URLRequest custom headers — skipped, API moved to ObjC bridge
-        // SDK 0.3.0: URLRequest is now Foundation.NSUrlRequest (ObjC bridge).
-        // Custom header tests require NSMutableUrlRequest which isn't in the generated API.
-        logger.Skip("N1 AddValue: URLRequest API moved to ObjC bridge (NSUrlRequest)");
-        results.Skip("N1_URLRequest_AddValue", "URLRequest API moved to ObjC bridge (NSUrlRequest)");
+        // N1 bonus: URLRequest custom headers — ImageRequest only accepts string, no NSUrlRequest constructor
+        logger.Skip("N1 AddValue: ImageRequest has no NSUrlRequest constructor (API gap)");
+        results.Skip("N1_URLRequest_AddValue", "ImageRequest has no NSUrlRequest constructor");
 
         // N2: ImageRequest.Processors property exists (throws NotSupportedException)
         logger.Info("--- N2: ImageRequest.Processors ---");

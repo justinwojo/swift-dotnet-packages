@@ -1468,15 +1468,71 @@ public class MainViewController : UIViewController
             results.Fail("Provider_Point", ex.Message);
         }
 
-        // SetValueProvider on view — SDK 0.3.0 fixed interface gap (L1)
-        // NOTE: SetValueProvider passes providers as IAnyValueProvider (protocol parameter),
-        // which triggers ExistentialContainer boxing that crashes the process (SIGKILL) on
-        // NativeAOT device. Skip to preserve prior test results.
-        logger.Info("--- SetValueProvider (L1: skipped — ExistentialContainer boxing) ---");
-        logger.Skip("L1 SetValueProvider: ExistentialContainer boxing crashes process (known limitation)");
-        results.Skip("L1_SetValueProvider_Float", "ExistentialContainer boxing crashes process");
-        results.Skip("L1_SetValueProvider_Size", "ExistentialContainer boxing crashes process");
-        results.Skip("L1_SetValueProvider_Point", "ExistentialContainer boxing crashes process");
+        // SetValueProvider on view — previously skipped (ExistentialContainer boxing), re-testing with SDK 0.5.0
+        logger.Info("--- SetValueProvider (L1) ---");
+        {
+            var viewPath = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
+            if (viewPath != null)
+            {
+                var view = new LottieAnimationView();
+                var animation = LottieAnimation.Filepath(viewPath);
+                view.Animation = animation;
+
+                // Float
+                try
+                {
+                    var floatProvider = new FloatValueProvider(0.5);
+                    var keypath = new AnimationKeypath("**.Opacity");
+                    view.SetValueProvider(floatProvider, keypath);
+                    logger.Pass("SetValueProvider(FloatValueProvider) succeeded");
+                    results.Pass("L1_SetValueProvider_Float");
+                }
+                catch (Exception ex)
+                {
+                    logger.Fail($"SetValueProvider(Float): {ex.Message}");
+                    results.Fail("L1_SetValueProvider_Float", ex.Message);
+                }
+
+                // Size
+                try
+                {
+                    var size = new CoreGraphics.CGSize(100, 200);
+                    var sizeProvider = new SizeValueProvider((Swift.CGSize)size);
+                    var keypath = new AnimationKeypath("**.Size");
+                    view.SetValueProvider(sizeProvider, keypath);
+                    logger.Pass("SetValueProvider(SizeValueProvider) succeeded");
+                    results.Pass("L1_SetValueProvider_Size");
+                }
+                catch (Exception ex)
+                {
+                    logger.Fail($"SetValueProvider(Size): {ex.Message}");
+                    results.Fail("L1_SetValueProvider_Size", ex.Message);
+                }
+
+                // Point
+                try
+                {
+                    var point = new CoreGraphics.CGPoint(50, 75);
+                    var pointProvider = new PointValueProvider((Swift.CGPoint)point);
+                    var keypath = new AnimationKeypath("**.Position");
+                    view.SetValueProvider(pointProvider, keypath);
+                    logger.Pass("SetValueProvider(PointValueProvider) succeeded");
+                    results.Pass("L1_SetValueProvider_Point");
+                }
+                catch (Exception ex)
+                {
+                    logger.Fail($"SetValueProvider(Point): {ex.Message}");
+                    results.Fail("L1_SetValueProvider_Point", ex.Message);
+                }
+            }
+            else
+            {
+                logger.Skip("SetValueProvider: no test file");
+                results.Skip("L1_SetValueProvider_Float", "No test file");
+                results.Skip("L1_SetValueProvider_Size", "No test file");
+                results.Skip("L1_SetValueProvider_Point", "No test file");
+            }
+        }
 
         // RemoveValueProvider (on a keypath with no provider set — should be a no-op)
         logger.Info("--- RemoveValueProvider ---");
@@ -1909,9 +1965,31 @@ public class MainViewController : UIViewController
                 logger.Pass("ColorValueProvider construction");
                 results.Pass("Provider_Color");
 
-                // L1+L2: SetValueProvider with ColorValueProvider — skipped, triggers ExistentialContainer boxing
-                logger.Skip("L1+L2 SetValueProvider Color: ExistentialContainer boxing crashes process");
-                results.Skip("L1L2_SetValueProvider_Color", "ExistentialContainer boxing crashes process");
+                // L1+L2: SetValueProvider with ColorValueProvider — previously skipped, re-testing with SDK 0.5.0
+                try
+                {
+                    var viewPath = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
+                    if (viewPath != null)
+                    {
+                        var view = new LottieAnimationView();
+                        var animation = LottieAnimation.Filepath(viewPath);
+                        view.Animation = animation;
+                        var keypath = new AnimationKeypath("**.Color");
+                        view.SetValueProvider(provider, keypath);
+                        logger.Pass("SetValueProvider(ColorValueProvider) succeeded");
+                        results.Pass("L1L2_SetValueProvider_Color");
+                    }
+                    else
+                    {
+                        logger.Skip("SetValueProvider Color: no test file");
+                        results.Skip("L1L2_SetValueProvider_Color", "No test file");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.Fail($"SetValueProvider(Color): {ex.Message}");
+                    results.Fail("L1L2_SetValueProvider_Color", ex.Message);
+                }
             }
             catch (Exception ex)
             {
