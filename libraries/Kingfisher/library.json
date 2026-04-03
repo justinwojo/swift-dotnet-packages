@@ -1,0 +1,7 @@
+{
+  "mode": "manual",
+  "minIOS": "13.0",
+  "products": [
+    { "framework": "Kingfisher" }
+  ]
+}
