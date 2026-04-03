@@ -1,0 +1,7 @@
+{
+  "mode": "manual",
+  "minIOS": "15.0",
+  "products": [
+    { "framework": "Mappedin" }
+  ]
+}
