@@ -246,102 +246,64 @@ build_source() {
 # ── Binary Mode ──────────────────────────────────────────────────────────────
 #
 # Binary mode downloads pre-built xcframeworks from an SPM package that wraps
-# a vendor's artifactbundle. Ideally this would go through spm-to-xcframework
-# --binary too, but upstream currently injects the resolved tag name verbatim
-# into the SPM manifest's `exact:` field, which rejects v-prefixed tags
-# (SPM exact: requires a bare semver). BlinkID pins to `v7.6.2`, so that path
-# fails at manifest-evaluation time.
+# a vendor's artifactbundle. Delegates to spm-to-xcframework --binary, which
+# resolves the tag via SPM and copies each matching xcframework out of
+# .build/artifacts. `useTarget` is source-mode-only and not honored here —
+# binary artifacts are always products.
 #
-# Until the upstream tool learns to strip or redirect v-prefixes in binary
-# mode, we drive SPM directly from here with a tiny resolver package. This is
-# the same logic the script has used historically — it works for any
-# binary-mode vendor package, not just BlinkID.
+# Revision pinning note: the upstream tool only verifies --revision in its
+# source-mode clone path. Binary mode resolves through SPM's resolver shim
+# and never calls verify_revision, so forwarding --revision to the tool would
+# silently degrade to "no verification". Until upstream extends verification
+# into the binary path, the wrapper does its own git ls-remote check before
+# the tool runs and refuses to call the tool on mismatch.
 
 build_binary() {
-    local BUILD_DIR="$LIBRARY_DIR/.build-workspace"
+    local tool
+    tool=$("$ENSURE_SPM_TOOL")
 
-    rm -rf "$BUILD_DIR"
-    mkdir -p "$BUILD_DIR/Sources"
-
-    # Optional tag SHA verification — matches the source-mode path
+    # Tag SHA verification — must run in the wrapper because the tool's
+    # binary path doesn't call its own verify_revision (see comment above).
     if [ -n "$REVISION" ]; then
-        echo "=== Verifying tag resolves to $REVISION ==="
+        echo "=== Verifying tag '$VERSION' resolves to $REVISION ==="
         local remote_sha
-        remote_sha=$(git ls-remote "$REPO" "refs/tags/$VERSION" "refs/tags/${VERSION}^{}" "refs/tags/v$VERSION" "refs/tags/v${VERSION}^{}" 2>/dev/null | tail -1 | awk '{print $1}')
+        remote_sha=$(git ls-remote "$REPO" \
+            "refs/tags/$VERSION" "refs/tags/${VERSION}^{}" \
+            "refs/tags/v$VERSION" "refs/tags/v${VERSION}^{}" 2>/dev/null \
+            | tail -1 | awk '{print $1}')
         [ -n "$remote_sha" ] || die "Tag '$VERSION' (or 'v$VERSION') not found in $REPO"
         [ "$remote_sha" = "$REVISION" ] || die "Tag '$VERSION' resolves to $remote_sha, expected $REVISION"
         echo "Revision verified."
     fi
 
-    # Convert minIOS (e.g. "15.0") to SPM platform version (e.g. ".v15")
-    local SPM_IOS_VER
-    SPM_IOS_VER=$(python3 -c "print(f'.v{\"$MIN_IOS\".split(\".\")[0]}')")
+    local BUILD_DIR="$LIBRARY_DIR/.build-workspace"
+    local OUTPUT_DIR="$BUILD_DIR/xcframeworks"
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$OUTPUT_DIR"
 
-    # Minimal resolver package: depends on the target repo exact: $VERSION,
-    # which SPM resolves to whichever tag form the remote publishes (v-prefixed
-    # or not). The dummy target keeps SPM happy.
-    cat > "$BUILD_DIR/Package.swift" << SWIFT
-// swift-tools-version:5.9
-import PackageDescription
-let package = Package(
-    name: "Resolver",
-    platforms: [.iOS($SPM_IOS_VER)],
-    dependencies: [
-        .package(url: "$REPO", exact: "$VERSION")
-    ],
-    targets: [.target(name: "Resolver", path: "Sources")]
-)
-SWIFT
-    echo "// placeholder" > "$BUILD_DIR/Sources/Resolver.swift"
-
-    echo "=== Resolving binary SPM artifacts ==="
-    (cd "$BUILD_DIR" && swift package resolve)
-
-    # SPM deposits binary xcframeworks under .build/artifacts. Locate each
-    # requested product and copy it into place. Skip __MACOSX resource-fork
-    # directories that some artifactbundles ship with.
-    local ARTIFACTS_DIR="$BUILD_DIR/.build/artifacts"
-
+    # Refuse to silently ignore the legacy `artifactPath` disambiguation
+    # field. The new tool's binary planner dedupes by product name (first
+    # match wins) and exposes no per-product path override. If a future
+    # vendor needs this, the right fix is upstream — fail loudly here so
+    # it can't ship a wrong-artifact build.
+    local PRODUCT_FLAGS=()
+    local idx framework artifact_path
     for idx in "${PRODUCT_INDICES[@]}"; do
-        local framework subdir output_dir artifact_path found_xcframework
         framework=$(json_product_field "$CONFIG" "$idx" framework)
-        subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
         artifact_path=$(json_product_field "$CONFIG" "$idx" artifactPath "")
-
-        if [ -n "$subdir" ]; then
-            output_dir="$LIBRARY_DIR/$subdir"
-        else
-            output_dir="$LIBRARY_DIR"
-        fi
-        mkdir -p "$output_dir"
-
-        local output_xcframework="$output_dir/${framework}.xcframework"
-        rm -rf "$output_xcframework"
-
-        if [ -n "$artifact_path" ]; then
-            found_xcframework="$ARTIFACTS_DIR/$artifact_path"
-            [ -d "$found_xcframework" ] || die "Artifact not found at specified path: $found_xcframework"
-        else
-            local matches match_count
-            matches=$(find "$ARTIFACTS_DIR" -name "__MACOSX" -prune -o -name "${framework}.xcframework" -type d -print 2>/dev/null || true)
-            match_count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
-            if [ "$match_count" -eq 0 ] || [ -z "$matches" ]; then
-                echo "Error: ${framework}.xcframework not found in artifacts." >&2
-                echo "Contents of $ARTIFACTS_DIR:" >&2
-                find "$ARTIFACTS_DIR" -name "*.xcframework" -type d 2>/dev/null | sed 's/^/  /' >&2
-                exit 1
-            elif [ "$match_count" -gt 1 ]; then
-                echo "Error: Multiple ${framework}.xcframework matches found:" >&2
-                echo "$matches" | sed 's/^/  /' >&2
-                echo "Use 'artifactPath' in library.json to disambiguate." >&2
-                exit 1
-            fi
-            found_xcframework=$(echo "$matches" | head -1)
-        fi
-
-        cp -R "$found_xcframework" "$output_xcframework"
-        echo "Installed $output_xcframework"
+        [ -z "$artifact_path" ] || die "Product '$framework' sets 'artifactPath', which is no longer supported. The pinned spm-to-xcframework binary planner dedupes by product name and has no per-product path override. Remove the field or file an upstream feature request."
+        PRODUCT_FLAGS+=(--product "$framework")
     done
+
+    echo "=== Building binary-mode xcframeworks via spm-to-xcframework ==="
+    "$tool" "$REPO" \
+        --version "$VERSION" \
+        --binary \
+        --output "$OUTPUT_DIR" \
+        --min-ios "$MIN_IOS" \
+        "${PRODUCT_FLAGS[@]}"
+
+    install_products "$OUTPUT_DIR"
 
     rm -rf "$BUILD_DIR"
 }

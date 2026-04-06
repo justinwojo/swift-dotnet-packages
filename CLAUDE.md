@@ -47,14 +47,14 @@ Each library root has a `library.json` declaring its SPM source and products:
 }
 ```
 
-**Fields:** `repository` (SPM URL — required for source/binary), `version` (git tag — required for source/binary), `revision` (optional SHA verification), `mode` (`"source"`, `"binary"`, or `"manual"`), `minIOS` (default `"15.0"`), `products[]` (framework, module, subdirectory, useTarget, internal, artifactPath).
+**Fields:** `repository` (SPM URL — required for source/binary), `version` (git tag — required for source/binary), `revision` (optional SHA verification), `mode` (`"source"`, `"binary"`, or `"manual"`), `minIOS` (default `"15.0"`), `products[]` (framework, module, subdirectory, useTarget, internal).
 
-**Per-product fields:** `framework` (required — SPM product/target name and output xcframework name), `module` (optional — Swift module name if different), `subdirectory` (optional — multi-product vendor layout), `useTarget` (optional — opt into spm-to-xcframework's `--target` escape hatch for SPM `.target(...)` entries not exposed as `.library(...)`; required for Stripe's 11 target-based modules), `internal` (optional — no C# bindings/csproj, build xcframework only), `artifactPath` (optional — binary-mode disambiguation).
+**Per-product fields:** `framework` (required — SPM product/target name and output xcframework name), `module` (optional — Swift module name if different), `subdirectory` (optional — multi-product vendor layout), `useTarget` (optional — opt into spm-to-xcframework's `--target` escape hatch for SPM `.target(...)` entries not exposed as `.library(...)`; required for Stripe's 11 target-based modules), `internal` (optional — no C# bindings/csproj, build xcframework only).
 
 ### Build Modes
 
-- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, etc.
-- **Binary mode** — Runs `swift package resolve` against a tiny inline resolver Package.swift and copies each product's prebuilt xcframework out of `.build/artifacts/`. Currently driven directly from `build-xcframework.sh` (not via `spm-to-xcframework --binary`) because the upstream tool injects the resolved tag verbatim into SPM's `exact:` field, which rejects v-prefixed tags like BlinkID's `v7.6.2`. Used only by BlinkID today.
+- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, GRDB, etc.
+- **Binary mode** — Delegates to `spm-to-xcframework --binary`, which resolves the tag via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today.
 - **Manual mode** — No build. Verifies that the expected `<framework>.xcframework` directories already exist under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be provisioned out-of-band. Manual xcframeworks are never committed to the repo.
 
 ### Shared Build Script
@@ -81,13 +81,9 @@ Per-library test scripts in `tests/<Name>.SimTests/` are 3-line wrappers that de
 
 ### `.tools/` cache and `spm-to-xcframework` pinning
 
-`scripts/ensure-spm-to-xcframework.sh` downloads the `spm-to-xcframework` tool (plain-text bash script, ~1700 lines) into `.tools/spm-to-xcframework-<short-sha>`, pinned by commit SHA and SHA-256 of the script contents. The three constants at the top of the script (`SPM_TO_XCF_REF`, `SPM_TO_XCF_SHA256`, `SPM_TO_XCF_URL`) must be bumped together when updating the tool. Cached copies with mismatched checksums are rejected — there is no silent fallback to stale contents.
+`scripts/ensure-spm-to-xcframework.sh` downloads the `spm-to-xcframework` tool (single-file Python 3.9+ script, ~5300 lines) into `.tools/spm-to-xcframework-<short-sha>`, pinned by commit SHA and SHA-256 of the script contents. The three constants at the top of the script (`SPM_TO_XCF_REF`, `SPM_TO_XCF_SHA256`, `SPM_TO_XCF_URL`) must be bumped together when updating the tool. Cached copies with mismatched checksums are rejected — there is no silent fallback to stale contents.
 
-`build-xcframework.sh` calls `ensure-spm-to-xcframework.sh` at the start of every source-mode build to resolve the cached tool path, then invokes `<tool> <repo> --version <ver> --output <tmp> --min-ios <ver> --product ... --target ...` with one `--product` or `--target` flag per selected product (driven by the `useTarget` field in `library.json`). Outputs land in `.build-workspace/xcframeworks/` under the library root, and `install_products` moves each `<framework>.xcframework` to its final location (honoring `subdirectory` for multi-product vendors).
-
-Known upstream gaps that our wrapper still works around:
-- **Binary mode + v-prefixed tags** — `spm-to-xcframework --binary` calls `normalize_version_tag` which resolves e.g. `7.6.2` → `v7.6.2` and then feeds the v-prefixed tag into SPM's `.package(url:, exact:)`, which rejects non-semver strings. `build-xcframework.sh` runs the old inline SPM resolver package path for binary mode (BlinkID).
-- **Source mode + packages without generated Xcode schemes** — when `xcodebuild -list` cannot read the package's Package.swift (happens with some swift-tools-version pins), `discover_schemes` returns early without initializing `SCHEME_LIST=()`, and `find_scheme_for_product` then hits an unbound-variable error. GRDB is affected and still uses manual mode until the upstream fix lands.
+`build-xcframework.sh` calls `ensure-spm-to-xcframework.sh` at the start of every source- or binary-mode build to resolve the cached tool path, then invokes `<tool> <repo> --version <ver> --output <tmp> --min-ios <ver> [--binary] --product ... --target ...` with one `--product` or `--target` flag per selected product (driven by the `useTarget` field in `library.json`). Outputs land in `.build-workspace/xcframeworks/` under the library root, and `install_products` moves each `<framework>.xcframework` to its final location (honoring `subdirectory` for multi-product vendors). The tool also drops a `.spm-to-xcframework-manifest.json` in the output directory for its own stale-output cleanup; the wrapper wipes the workspace after install so the manifest never reaches the library root.
 
 ### Binding Generation
 

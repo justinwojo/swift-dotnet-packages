@@ -26,8 +26,8 @@
 set -euo pipefail
 
 # ── Pinning (bump these three constants together) ───────────────────────────
-SPM_TO_XCF_REF="c926f0fea48387f7bc3dd277f83701a83522f844"
-SPM_TO_XCF_SHA256="702f08f3009218b723b979e64f14246fa3f0b2022707b5f2e4ea516c49afeb6e"
+SPM_TO_XCF_REF="d0a6729812cb80ebe467c88bfdb5ca4490b4bf27"
+SPM_TO_XCF_SHA256="5b57db39a2e9bd161462cd9653a4bd9f7f9bb42f2916c24ed067cc96e48b9377"
 SPM_TO_XCF_URL="https://raw.githubusercontent.com/justinwojo/spm-to-xcframework/${SPM_TO_XCF_REF}/spm-to-xcframework"
 
 # ── Paths ────────────────────────────────────────────────────────────────────

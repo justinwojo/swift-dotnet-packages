@@ -252,7 +252,6 @@ Each library root has a `library.json` that declares its SPM source and products
 | `products[].module` | no | Swift module name (defaults to `framework`) |
 | `products[].subdirectory` | no | Subdirectory for multi-product vendors |
 | `products[].useTarget` | no | `true` → pass `--target` to `spm-to-xcframework` instead of `--product`. Required for SPM `.target(...)` entries not exposed as `.library(...)` — e.g. 11 of Stripe's 14 modules. |
-| `products[].artifactPath` | binary only | Override artifact lookup path |
 | `products[].internal` | no | `true` to mark as internal-only (no bindings, excluded from `--resolve-products` and sim-test scaffolding) |
 
 ### Build Modes
@@ -261,7 +260,7 @@ The `mode` field tells `build-xcframework.sh` how to obtain the compiled framewo
 
 **Source mode** (`"mode": "source"`): Delegates to the pinned `spm-to-xcframework` tool in `.tools/`. The tool clones the repository, discovers schemes, archives each requested product for iOS device and iOS Simulator, and merges the slices into one `<framework>.xcframework` per product. `build-xcframework.sh` then moves each output into the library's directory layout (honoring `subdirectory` for multi-product vendors). Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, etc.
 
-**Binary mode** (`"mode": "binary"`): Runs `swift package resolve` against a tiny inline `Package.swift` that depends on the vendor's binary SPM package, then copies each product's prebuilt xcframework out of `.build/artifacts/` into place. This path is currently driven directly from `build-xcframework.sh` (not via `spm-to-xcframework --binary`) because the upstream tool injects the resolved tag verbatim into `.package(url:, exact:)`, which rejects v-prefixed tags like BlinkID's `v7.6.2`. Used only by BlinkID today.
+**Binary mode** (`"mode": "binary"`): Delegates to `spm-to-xcframework --binary`, which resolves the vendor's binary SPM package via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today. The wrapper still handles `revision` SHA verification itself before calling the tool, because the tool's binary path doesn't run its source-mode `verify_revision` check.
 
 **Manual mode** (`"mode": "manual"`): No build — the xcframework is provisioned out-of-band. `build-xcframework.sh` verifies each expected `<framework>.xcframework` directory exists under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be downloaded from a vendor portal. Manual xcframeworks are never committed.
 
