@@ -1,12 +1,17 @@
 #!/bin/bash
 # Shared SPM-aware xcframework build script.
-# Reads library.json from a library directory and builds xcframeworks.
+#
+# Reads library.json from a library directory and produces xcframeworks. For
+# source and binary modes, delegates the actual build to the pinned
+# spm-to-xcframework tool in .tools/. Manual mode is a verification-only path
+# used for proprietary xcframeworks that must be provisioned out-of-band.
 #
 # Usage: scripts/build-xcframework.sh <library-dir> [--products P1,P2] [--all-products] [--resolve-products]
 #
-# Modes:
-#   source  — Clone repo, build from source with xcodebuild
-#   binary  — Use swift package resolve to download pre-built xcframeworks
+# Modes (set in library.json):
+#   source  — Clone repo, build from source with spm-to-xcframework
+#   binary  — Use spm-to-xcframework --binary to download pre-built xcframeworks
+#   manual  — Verify xcframeworks exist at expected locations (no build)
 #
 # Product selection:
 #   Single product in config (no flags needed)  — builds it automatically
@@ -20,6 +25,9 @@ set -euo pipefail
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 source "$(dirname "$0")/lib.sh"
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENSURE_SPM_TOOL="$REPO_ROOT/scripts/ensure-spm-to-xcframework.sh"
 
 # ── Argument Parsing ─────────────────────────────────────────────────────────
 
@@ -66,18 +74,29 @@ CONFIG="$LIBRARY_DIR/library.json"
 
 # ── Read Config ──────────────────────────────────────────────────────────────
 
-REPO=$(json_field "$CONFIG" repository)
-VERSION=$(json_field "$CONFIG" version)
-TAG=$(json_field "$CONFIG" tag "$VERSION")   # git tag — defaults to version if not set
-REVISION=$(json_field "$CONFIG" revision "")
 MODE=$(json_field "$CONFIG" mode)
 MIN_IOS=$(json_field "$CONFIG" minIOS "15.0")
 PRODUCT_COUNT=$(json_array_len "$CONFIG" products)
 
-[ -n "$REPO" ] || die "repository is required in library.json"
-[ -n "$VERSION" ] || die "version is required in library.json"
 [ -n "$MODE" ] || die "mode is required in library.json"
 [ "$PRODUCT_COUNT" -gt 0 ] || die "products array is empty in library.json"
+
+# repository/version are required for source and binary modes, not for manual
+REPO=$(json_field "$CONFIG" repository "")
+VERSION=$(json_field "$CONFIG" version "")
+REVISION=$(json_field "$CONFIG" revision "")
+
+case "$MODE" in
+    source|binary)
+        [ -n "$REPO" ] || die "repository is required in library.json for $MODE mode"
+        [ -n "$VERSION" ] || die "version is required in library.json for $MODE mode"
+        ;;
+    manual)
+        ;;
+    *)
+        die "Unknown mode '$MODE'. Must be 'source', 'binary', or 'manual'."
+        ;;
+esac
 
 # ── Resolve Product List ─────────────────────────────────────────────────────
 
@@ -137,12 +156,8 @@ if [ "$RESOLVE_ONLY" = true ]; then
         else
             subdir_path="$LIBRARY_DIR"
         fi
-        # Discover the actual csproj on disk instead of constructing the name
-        csproj_file=$(ls "$subdir_path"/SwiftBindings.*.csproj 2>/dev/null | head -1)
-        if [ -z "$csproj_file" ]; then
-            framework=$(json_product_field "$CONFIG" "$idx" framework)
-            die "No SwiftBindings.*.csproj found in $subdir_path for product '$framework'. Every non-internal product must have a csproj."
-        fi
+        # Discover the actual csproj on disk via the shared helper (fails on 0 or >1 matches)
+        csproj_file=$(discover_single_csproj "$subdir_path")
         csproj_name=$(basename "$csproj_file")
         if [ -n "$subdir" ]; then
             echo "${subdir}|${csproj_name}"
@@ -153,181 +168,118 @@ if [ "$RESOLVE_ONLY" = true ]; then
     exit 0
 fi
 
-# ── Shared Verification ──────────────────────────────────────────────────────
+# ── Install xcframework from tool output dir into library layout ────────────
 
-verify_revision() {
-    if [ -n "$REVISION" ]; then
-        echo "=== Verifying tag $TAG resolves to $REVISION ==="
-        REMOTE_SHA=$(git ls-remote "$REPO" "refs/tags/$TAG" "refs/tags/$TAG^{}" 2>/dev/null | tail -1 | awk '{print $1}')
-        if [ -z "$REMOTE_SHA" ]; then
-            die "Tag '$TAG' not found in $REPO"
+# Moves $OUTPUT_DIR/<framework>.xcframework into the product's final location
+# inside LIBRARY_DIR. Honors the optional `subdirectory` field in library.json
+# so multi-product vendors (e.g. Stripe) get their xcframeworks placed under
+# libraries/Stripe/StripeCore/StripeCore.xcframework etc.
+install_products() {
+    local output_dir="$1"
+    for idx in "${PRODUCT_INDICES[@]}"; do
+        local framework subdir target_dir src dst
+        framework=$(json_product_field "$CONFIG" "$idx" framework)
+        subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
+
+        if [ -n "$subdir" ]; then
+            target_dir="$LIBRARY_DIR/$subdir"
+        else
+            target_dir="$LIBRARY_DIR"
         fi
-        if [ "$REMOTE_SHA" != "$REVISION" ]; then
-            die "Tag '$TAG' resolves to $REMOTE_SHA, expected $REVISION"
-        fi
-        echo "Revision verified."
-    fi
+
+        src="$output_dir/${framework}.xcframework"
+        dst="$target_dir/${framework}.xcframework"
+
+        [ -d "$src" ] || die "Expected $src after build, not found. The tool did not produce this product."
+
+        mkdir -p "$target_dir"
+        rm -rf "$dst"
+        mv "$src" "$dst"
+        echo "Installed $dst"
+    done
 }
 
 # ── Source Mode ──────────────────────────────────────────────────────────────
 
+# Walks selected product indices and emits --product/--target flags for
+# spm-to-xcframework. The `useTarget` field opts into the tool's SPM-target
+# escape hatch (frameworks shipped as .target() rather than .library() —
+# e.g. most of Stripe's modules). Inlined because bash 3.2 (macOS default)
+# doesn't support `local -n` namerefs for returning an array.
 build_source() {
+    local tool
+    tool=$("$ENSURE_SPM_TOOL")
+
     local BUILD_DIR="$LIBRARY_DIR/.build-workspace"
-    local ARCHIVES_DIR="$BUILD_DIR/archives"
-    local DERIVED_DATA="$BUILD_DIR/DerivedData"
-
-    # Clean previous build
+    local OUTPUT_DIR="$BUILD_DIR/xcframeworks"
     rm -rf "$BUILD_DIR"
-    mkdir -p "$BUILD_DIR"
+    mkdir -p "$OUTPUT_DIR"
 
-    verify_revision
-
-    echo "=== Cloning $REPO @ $TAG ==="
-    git clone --depth 1 --branch "$TAG" "$REPO" "$BUILD_DIR/source"
-
-    # Read buildSettings overrides from library.json
-    local BUILD_SETTINGS=()
-    while IFS= read -r line; do
-        [ -n "$line" ] && BUILD_SETTINGS+=("$line")
-    done < <(json_build_settings "$CONFIG")
-
-    # Scheme preflight: verify all requested schemes exist
-    echo "=== Verifying schemes ==="
-    local AVAILABLE_SCHEMES
-    AVAILABLE_SCHEMES=$(cd "$BUILD_DIR/source" && xcodebuild -list -json 2>/dev/null | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    # Handle both workspace and project formats
-    if 'workspace' in data:
-        schemes = data['workspace'].get('schemes', [])
-    elif 'project' in data:
-        schemes = data['project'].get('schemes', [])
-    else:
-        schemes = []
-    for s in schemes:
-        print(s)
-except:
-    pass
-") || true
-
+    local PRODUCT_FLAGS=()
+    local idx framework use_target
     for idx in "${PRODUCT_INDICES[@]}"; do
-        local scheme
-        scheme=$(json_product_field "$CONFIG" "$idx" scheme "")
-        [ -n "$scheme" ] || die "Product at index $idx missing 'scheme' field (required for source mode)"
-
-        if [ -n "$AVAILABLE_SCHEMES" ] && ! echo "$AVAILABLE_SCHEMES" | grep -qx "$scheme"; then
-            echo "Error: Scheme '$scheme' not found." >&2
-            echo "Available schemes:" >&2
-            echo "$AVAILABLE_SCHEMES" | sed 's/^/  - /' >&2
-            exit 1
-        fi
-    done
-
-    # Build each product
-    for idx in "${PRODUCT_INDICES[@]}"; do
-        local scheme framework module subdir output_dir
-        scheme=$(json_product_field "$CONFIG" "$idx" scheme)
         framework=$(json_product_field "$CONFIG" "$idx" framework)
-        module=$(json_product_field "$CONFIG" "$idx" module "$framework")
-        subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
-
-        if [ -n "$subdir" ]; then
-            output_dir="$LIBRARY_DIR/$subdir"
+        use_target=$(json_product_bool "$CONFIG" "$idx" useTarget)
+        if [ "$use_target" = "true" ]; then
+            PRODUCT_FLAGS+=(--target "$framework")
         else
-            output_dir="$LIBRARY_DIR"
+            PRODUCT_FLAGS+=(--product "$framework")
         fi
-
-        local output_xcframework="$output_dir/${framework}.xcframework"
-        rm -rf "$output_xcframework"
-        mkdir -p "$output_dir"
-
-        echo "=== Building $framework (scheme: $scheme) for iOS device ==="
-        (cd "$BUILD_DIR/source" && xcodebuild archive \
-            -scheme "$scheme" \
-            -destination "generic/platform=iOS" \
-            -archivePath "$ARCHIVES_DIR/${framework}-ios-arm64" \
-            -derivedDataPath "$DERIVED_DATA/device" \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            SKIP_INSTALL=NO \
-            MACH_O_TYPE=mh_dylib \
-            IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
-            ${BUILD_SETTINGS[@]+"${BUILD_SETTINGS[@]}"} \
-            -quiet)
-
-        echo "=== Building $framework (scheme: $scheme) for iOS Simulator ==="
-        (cd "$BUILD_DIR/source" && xcodebuild archive \
-            -scheme "$scheme" \
-            -destination "generic/platform=iOS Simulator" \
-            -archivePath "$ARCHIVES_DIR/${framework}-ios-simulator" \
-            -derivedDataPath "$DERIVED_DATA/simulator" \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            SKIP_INSTALL=NO \
-            MACH_O_TYPE=mh_dylib \
-            IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
-            ${BUILD_SETTINGS[@]+"${BUILD_SETTINGS[@]}"} \
-            -quiet)
-
-        echo "=== Creating ${framework}.xcframework ==="
-        # Find the framework in the archive — location varies by project type:
-        #   Xcode projects: Products/Library/Frameworks/
-        #   SPM packages:   Products/usr/local/lib/
-        local device_fw simulator_fw
-        device_fw=$(find "$ARCHIVES_DIR/${framework}-ios-arm64.xcarchive/Products" -name "${framework}.framework" -type d | head -1)
-        simulator_fw=$(find "$ARCHIVES_DIR/${framework}-ios-simulator.xcarchive/Products" -name "${framework}.framework" -type d | head -1)
-        [ -n "$device_fw" ] || die "${framework}.framework not found in device archive"
-        [ -n "$simulator_fw" ] || die "${framework}.framework not found in simulator archive"
-
-        # SPM dynamic library archives don't include Swift module interfaces in the
-        # installed framework. Copy them from DerivedData intermediates if missing.
-        local dd_variant
-        for fw_path in "$device_fw" "$simulator_fw"; do
-            # Match the DerivedData subdirectory to the framework slice
-            if [ "$fw_path" = "$device_fw" ]; then dd_variant="device"; else dd_variant="simulator"; fi
-            if [ ! -d "$fw_path/Modules/${framework}.swiftmodule" ]; then
-                local swiftmod
-                swiftmod=$(find "$DERIVED_DATA/$dd_variant" -path "*/ArchiveIntermediates/${scheme}/BuildProductsPath/*/${framework}.swiftmodule" -type d 2>/dev/null | head -1)
-                if [ -n "$swiftmod" ]; then
-                    echo "  Injecting Swift module interfaces into $(basename "$(dirname "$fw_path")")"
-                    mkdir -p "$fw_path/Modules"
-                    cp -R "$swiftmod" "$fw_path/Modules/"
-                fi
-            fi
-        done
-
-        xcodebuild -create-xcframework \
-            -framework "$device_fw" \
-            -framework "$simulator_fw" \
-            -output "$output_xcframework"
-
-        echo "=== ${framework}.xcframework built successfully ==="
-        ls -la "$output_xcframework"
     done
 
-    # Clean up
+    local EXTRA_FLAGS=()
+    [ -n "$REVISION" ] && EXTRA_FLAGS+=(--revision "$REVISION")
+
+    echo "=== Building source-mode xcframeworks via spm-to-xcframework ==="
+    "$tool" "$REPO" \
+        --version "$VERSION" \
+        --output "$OUTPUT_DIR" \
+        --min-ios "$MIN_IOS" \
+        "${PRODUCT_FLAGS[@]}" \
+        ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+    install_products "$OUTPUT_DIR"
+
     rm -rf "$BUILD_DIR"
 }
 
 # ── Binary Mode ──────────────────────────────────────────────────────────────
+#
+# Binary mode downloads pre-built xcframeworks from an SPM package that wraps
+# a vendor's artifactbundle. Ideally this would go through spm-to-xcframework
+# --binary too, but upstream currently injects the resolved tag name verbatim
+# into the SPM manifest's `exact:` field, which rejects v-prefixed tags
+# (SPM exact: requires a bare semver). BlinkID pins to `v7.6.2`, so that path
+# fails at manifest-evaluation time.
+#
+# Until the upstream tool learns to strip or redirect v-prefixes in binary
+# mode, we drive SPM directly from here with a tiny resolver package. This is
+# the same logic the script has used historically — it works for any
+# binary-mode vendor package, not just BlinkID.
 
 build_binary() {
     local BUILD_DIR="$LIBRARY_DIR/.build-workspace"
 
-    # Clean previous build
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR/Sources"
 
-    verify_revision
+    # Optional tag SHA verification — matches the source-mode path
+    if [ -n "$REVISION" ]; then
+        echo "=== Verifying tag resolves to $REVISION ==="
+        local remote_sha
+        remote_sha=$(git ls-remote "$REPO" "refs/tags/$VERSION" "refs/tags/${VERSION}^{}" "refs/tags/v$VERSION" "refs/tags/v${VERSION}^{}" 2>/dev/null | tail -1 | awk '{print $1}')
+        [ -n "$remote_sha" ] || die "Tag '$VERSION' (or 'v$VERSION') not found in $REPO"
+        [ "$remote_sha" = "$REVISION" ] || die "Tag '$VERSION' resolves to $remote_sha, expected $REVISION"
+        echo "Revision verified."
+    fi
 
     # Convert minIOS (e.g. "15.0") to SPM platform version (e.g. ".v15")
     local SPM_IOS_VER
-    SPM_IOS_VER=$(python3 -c "
-v = '$MIN_IOS'
-major = v.split('.')[0]
-print(f'.v{major}')
-")
+    SPM_IOS_VER=$(python3 -c "print(f'.v{\"$MIN_IOS\".split(\".\")[0]}')")
 
-    # Create a minimal Package.swift that depends on the target repo
+    # Minimal resolver package: depends on the target repo exact: $VERSION,
+    # which SPM resolves to whichever tag form the remote publishes (v-prefixed
+    # or not). The dummy target keeps SPM happy.
     cat > "$BUILD_DIR/Package.swift" << SWIFT
 // swift-tools-version:5.9
 import PackageDescription
@@ -340,20 +292,19 @@ let package = Package(
     targets: [.target(name: "Resolver", path: "Sources")]
 )
 SWIFT
-
-    # Dummy source so SPM is happy
     echo "// placeholder" > "$BUILD_DIR/Sources/Resolver.swift"
 
-    echo "=== Resolving SPM dependencies (binary mode) ==="
+    echo "=== Resolving binary SPM artifacts ==="
     (cd "$BUILD_DIR" && swift package resolve)
 
-    # Find and copy each product's xcframework
+    # SPM deposits binary xcframeworks under .build/artifacts. Locate each
+    # requested product and copy it into place. Skip __MACOSX resource-fork
+    # directories that some artifactbundles ship with.
     local ARTIFACTS_DIR="$BUILD_DIR/.build/artifacts"
 
     for idx in "${PRODUCT_INDICES[@]}"; do
-        local framework module subdir output_dir artifact_path
+        local framework subdir output_dir artifact_path found_xcframework
         framework=$(json_product_field "$CONFIG" "$idx" framework)
-        module=$(json_product_field "$CONFIG" "$idx" module "$framework")
         subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
         artifact_path=$(json_product_field "$CONFIG" "$idx" artifactPath "")
 
@@ -367,18 +318,13 @@ SWIFT
         local output_xcframework="$output_dir/${framework}.xcframework"
         rm -rf "$output_xcframework"
 
-        local found_xcframework=""
         if [ -n "$artifact_path" ]; then
-            # Explicit path override
             found_xcframework="$ARTIFACTS_DIR/$artifact_path"
             [ -d "$found_xcframework" ] || die "Artifact not found at specified path: $found_xcframework"
         else
-            # Search for the xcframework in artifacts (exclude __MACOSX resource fork dirs)
-            local matches
+            local matches match_count
             matches=$(find "$ARTIFACTS_DIR" -name "__MACOSX" -prune -o -name "${framework}.xcframework" -type d -print 2>/dev/null || true)
-            local match_count
             match_count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
-
             if [ "$match_count" -eq 0 ] || [ -z "$matches" ]; then
                 echo "Error: ${framework}.xcframework not found in artifacts." >&2
                 echo "Contents of $ARTIFACTS_DIR:" >&2
@@ -393,14 +339,48 @@ SWIFT
             found_xcframework=$(echo "$matches" | head -1)
         fi
 
-        echo "=== Copying ${framework}.xcframework ==="
         cp -R "$found_xcframework" "$output_xcframework"
-        echo "=== ${framework}.xcframework copied successfully ==="
-        ls -la "$output_xcframework"
+        echo "Installed $output_xcframework"
     done
 
-    # Clean up
     rm -rf "$BUILD_DIR"
+}
+
+# ── Manual Mode ──────────────────────────────────────────────────────────────
+
+# Manual mode is a verification-only path: the xcframework is provisioned
+# out-of-band (for proprietary libraries like Mappedin that ship via a vendor
+# portal). We never commit these artifacts, so the build pipeline just checks
+# that they are present in the expected location on the local machine.
+verify_manual() {
+    local missing=()
+    for idx in "${PRODUCT_INDICES[@]}"; do
+        local framework subdir xcfw_path
+        framework=$(json_product_field "$CONFIG" "$idx" framework)
+        subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
+        if [ -n "$subdir" ]; then
+            xcfw_path="$LIBRARY_DIR/$subdir/${framework}.xcframework"
+        else
+            xcfw_path="$LIBRARY_DIR/${framework}.xcframework"
+        fi
+        if [ -d "$xcfw_path" ]; then
+            echo "Manual xcframework present: $xcfw_path"
+        else
+            missing+=("$xcfw_path")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "" >&2
+        echo "Error: manual-mode library requires these xcframeworks to be provisioned:" >&2
+        for p in "${missing[@]}"; do
+            echo "  - $p" >&2
+        done
+        echo "" >&2
+        echo "Manual-mode xcframeworks are proprietary artifacts and are not committed" >&2
+        echo "to the repo. Download them from the vendor portal and place them at the" >&2
+        echo "paths above before running the build." >&2
+        exit 1
+    fi
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -412,8 +392,8 @@ case "$MODE" in
     binary)
         build_binary
         ;;
-    *)
-        die "Unknown mode '$MODE'. Must be 'source' or 'binary'."
+    manual)
+        verify_manual
         ;;
 esac
 

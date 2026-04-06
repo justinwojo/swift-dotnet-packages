@@ -88,11 +88,14 @@ resolve_library_products() {
     fi
 
     for idx in "${indices[@]}"; do
-        local framework module subdir
+        local framework module subdir is_internal
         framework=$(json_product_field "$config" "$idx" framework)
         module=$(json_product_field "$config" "$idx" module "$framework")
         subdir=$(json_product_field "$config" "$idx" subdirectory "")
-        echo "$lib_name|$framework|$module|$subdir"
+        is_internal=$(json_product_bool "$config" "$idx" internal)
+        # Fifth pipe-separated field: "true" when the product is internal
+        # (framework built, no csproj/bindings — runtime-only dep).
+        echo "$lib_name|$framework|$module|$subdir|$is_internal"
     done
 }
 
@@ -188,12 +191,12 @@ TOTAL_PRODUCTS=${#RESOLVED_PRODUCTS[@]}
 
 # Apply --module override for single-product case
 if [ -n "$MODULE_NAME" ] && [ "$TOTAL_PRODUCTS" -eq 1 ]; then
-    IFS='|' read -r rp_lib rp_fw rp_mod rp_sub <<< "${RESOLVED_PRODUCTS[0]}"
-    RESOLVED_PRODUCTS[0]="$rp_lib|$rp_fw|$MODULE_NAME|$rp_sub"
+    IFS='|' read -r rp_lib rp_fw rp_mod rp_sub rp_int <<< "${RESOLVED_PRODUCTS[0]}"
+    RESOLVED_PRODUCTS[0]="$rp_lib|$rp_fw|$MODULE_NAME|$rp_sub|$rp_int"
 fi
 
 # Extract the first module name for template placeholders (used in single-product templates)
-IFS='|' read -r _ _ FIRST_MODULE _ <<< "${RESOLVED_PRODUCTS[0]}"
+IFS='|' read -r _ _ FIRST_MODULE _ _ <<< "${RESOLVED_PRODUCTS[0]}"
 
 # If --module was not explicitly set and we're in single-product mode, use the resolved module
 if [ -z "$MODULE_NAME" ]; then
@@ -219,7 +222,9 @@ fi
 
 USING_STATEMENTS=""
 for entry in "${RESOLVED_PRODUCTS[@]}"; do
-    IFS='|' read -r _ _ mod _ <<< "$entry"
+    IFS='|' read -r _ _ mod _ is_int <<< "$entry"
+    # Internal products have no bindings namespace — skip the using statement
+    [ "$is_int" = "true" ] && continue
     USING_STATEMENTS+="using ${mod};"$'\n'
 done
 # Remove trailing newline
@@ -265,14 +270,20 @@ CSPROJ_HEADER
 CSPROJ_PROPS
 
     for entry in "${RESOLVED_PRODUCTS[@]}"; do
-        IFS='|' read -r lib_name framework module subdir <<< "$entry"
-        local lib_path
-        if [ -n "$subdir" ]; then
-            lib_path="../../libraries/${lib_name}/${subdir}/SwiftBindings.${module}.csproj"
-        else
-            lib_path="../../libraries/${lib_name}/SwiftBindings.${module}.csproj"
-        fi
-        echo "    <ProjectReference Include=\"${lib_path}\" />" >> "$csproj_path"
+        IFS='|' read -r lib_name framework module subdir is_int <<< "$entry"
+        # Internal products have no csproj — they're NativeReference-only
+        [ "$is_int" = "true" ] && continue
+        # Discover the actual csproj filename on disk — it may differ from
+        # SwiftBindings.${module}.csproj for vendor-prefixed packages
+        # (e.g. SwiftBindings.Stripe.Core.csproj for module StripeCore).
+        local disk_dir="$REPO_ROOT/libraries/${lib_name}"
+        [ -n "$subdir" ] && disk_dir="$disk_dir/$subdir"
+        local csproj_file csproj_name rel_dir
+        csproj_file=$(discover_single_csproj "$disk_dir")
+        csproj_name=$(basename "$csproj_file")
+        rel_dir="../../libraries/${lib_name}"
+        [ -n "$subdir" ] && rel_dir="$rel_dir/$subdir"
+        echo "    <ProjectReference Include=\"${rel_dir}/${csproj_name}\" />" >> "$csproj_path"
     done
 
     cat >> "$csproj_path" << 'CSPROJ_REFS_END'
@@ -283,12 +294,23 @@ CSPROJ_PROPS
 CSPROJ_REFS_END
 
     for entry in "${RESOLVED_PRODUCTS[@]}"; do
-        IFS='|' read -r lib_name framework module subdir <<< "$entry"
+        IFS='|' read -r lib_name framework module subdir is_int <<< "$entry"
         local base_path
         if [ -n "$subdir" ]; then
             base_path="../../libraries/${lib_name}/${subdir}"
         else
             base_path="../../libraries/${lib_name}"
+        fi
+
+        # Internal products get only the primary xcframework NativeReference —
+        # no binding wrapper exists (they have no csproj to generate one).
+        if [ "$is_int" = "true" ]; then
+            cat >> "$csproj_path" << CSPROJ_NATIVE_INTERNAL
+    <NativeReference Include="${base_path}/${framework}.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
+CSPROJ_NATIVE_INTERNAL
+            continue
         fi
 
         cat >> "$csproj_path" << CSPROJ_NATIVE
@@ -360,11 +382,13 @@ echo "Created tests/${LIBRARY_NAME}.SimTests/"
 echo ""
 echo "Resolved products ($TOTAL_PRODUCTS):"
 for entry in "${RESOLVED_PRODUCTS[@]}"; do
-    IFS='|' read -r lib_name framework module subdir <<< "$entry"
+    IFS='|' read -r lib_name framework module subdir is_int <<< "$entry"
+    local_tag=""
+    [ "$is_int" = "true" ] && local_tag=" [internal]"
     if [ -n "$subdir" ]; then
-        echo "  - $framework (module: $module, path: libraries/$lib_name/$subdir)"
+        echo "  - $framework (module: $module, path: libraries/$lib_name/$subdir)$local_tag"
     else
-        echo "  - $framework (module: $module, path: libraries/$lib_name)"
+        echo "  - $framework (module: $module, path: libraries/$lib_name)$local_tag"
     fi
 done
 echo ""

@@ -1,11 +1,11 @@
-# SwiftBindings.{{MODULE_NAME}}
+# {{PACKAGE_ID}}
 
-Native Swift interop bindings for [{{MODULE_NAME}}]({{REPOSITORY}}) on .NET.
+Native Swift interop bindings for {{MODULE_LINK}} on .NET.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.{{MODULE_NAME}}
+dotnet add package {{PACKAGE_ID}}
 ```
 
 ## Requirements
@@ -14,10 +14,11 @@ dotnet add package SwiftBindings.{{MODULE_NAME}}
 - iOS 15.0+
 - Apple platform (macOS host for development)
 
-## Building from Source
+## Building Locally
 
 ```bash
-# 1. Build the xcframework from SPM
+# 1. Build or verify the xcframework (SPM for source/binary mode;
+#    vendor-provided artifact for manual mode)
 ./build-xcframework.sh
 
 # 2. Build the package (SDK generates bindings automatically)

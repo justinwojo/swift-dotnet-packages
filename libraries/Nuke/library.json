@@ -4,6 +4,6 @@
   "mode": "source",
   "minIOS": "15.0",
   "products": [
-    { "scheme": "Nuke", "framework": "Nuke" }
+    { "framework": "Nuke" }
   ]
 }

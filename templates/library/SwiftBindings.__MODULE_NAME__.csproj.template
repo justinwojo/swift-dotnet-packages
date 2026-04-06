@@ -4,7 +4,7 @@
     <TargetFramework>net10.0-ios</TargetFramework>
 
     <!-- NuGet package metadata -->
-    <PackageId>SwiftBindings.{{MODULE_NAME}}</PackageId>
+    <PackageId>{{PACKAGE_ID}}</PackageId>
     <Version>{{VERSION}}</Version>
     <Description>Native Swift interop bindings for the {{MODULE_NAME}} library</Description>
     <PackageTags>swift;dotnet;interop;{{MODULE_NAME_LOWER}};ios</PackageTags>

@@ -68,3 +68,34 @@ for k, v in data.get('buildSettings', {}).items():
     print(f'{k}={v}')
 "
 }
+
+# discover_single_csproj <dir>
+#
+# Find the single SwiftBindings.*.csproj file in <dir>. Prints the absolute
+# path to stdout on success. Fails loudly via die() when:
+#   - no SwiftBindings.*.csproj exists in <dir>
+#   - more than one SwiftBindings.*.csproj exists in <dir>
+#
+# This is the canonical way to resolve a product csproj on disk when the
+# filename may differ from the module name (e.g. vendor-prefixed packages
+# like SwiftBindings.Stripe.Core.csproj for module StripeCore).
+discover_single_csproj() {
+    local dir="$1"
+    [ -n "$dir" ] || die "discover_single_csproj: directory argument is required"
+    [ -d "$dir" ] || die "discover_single_csproj: directory not found: $dir"
+
+    # Collect matches without relying on nullglob so we work in any shell state
+    local matches=()
+    local f
+    for f in "$dir"/SwiftBindings.*.csproj; do
+        [ -e "$f" ] && matches+=("$f")
+    done
+
+    if [ "${#matches[@]}" -eq 0 ]; then
+        die "No SwiftBindings.*.csproj found in $dir"
+    fi
+    if [ "${#matches[@]}" -gt 1 ]; then
+        die "Multiple SwiftBindings.*.csproj found in $dir: ${matches[*]}"
+    fi
+    echo "${matches[0]}"
+}

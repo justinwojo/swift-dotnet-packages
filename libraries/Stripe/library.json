@@ -3,81 +3,74 @@
   "version": "25.6.2",
   "mode": "source",
   "minIOS": "15.0",
-  "buildSettings": {
-    "GCC_TREAT_WARNINGS_AS_ERRORS": "NO",
-    "SWIFT_TREAT_WARNINGS_AS_ERRORS": "NO"
-  },
   "products": [
     {
-      "framework": "StripeCore",
-      "scheme": "StripeCore",
-      "subdirectory": "StripeCore"
+      "framework": "Stripe",
+      "subdirectory": "Stripe"
     },
     {
       "framework": "StripePayments",
-      "scheme": "StripePayments",
       "subdirectory": "StripePayments"
     },
     {
       "framework": "StripePaymentSheet",
-      "scheme": "StripePaymentSheet",
       "subdirectory": "StripePaymentSheet"
     },
     {
-      "framework": "Stripe",
-      "scheme": "StripeiOS",
-      "subdirectory": "Stripe"
-    },
-    {
-      "framework": "StripePaymentsUI",
-      "scheme": "StripePaymentsUI",
-      "subdirectory": "StripePaymentsUI"
-    },
-    {
-      "framework": "StripeApplePay",
-      "scheme": "StripeApplePay",
-      "subdirectory": "StripeApplePay"
-    },
-    {
-      "framework": "StripeIdentity",
-      "scheme": "StripeIdentity",
-      "subdirectory": "StripeIdentity"
-    },
-    {
-      "framework": "StripeIssuing",
-      "scheme": "StripeIssuing",
-      "subdirectory": "StripeIssuing"
-    },
-    {
-      "framework": "StripeCardScan",
-      "scheme": "StripeCardScan",
-      "subdirectory": "StripeCardScan"
-    },
-    {
-      "framework": "StripeFinancialConnections",
-      "scheme": "StripeFinancialConnections",
-      "subdirectory": "StripeFinancialConnections"
-    },
-    {
-      "framework": "StripeConnect",
-      "scheme": "StripeConnect",
-      "subdirectory": "StripeConnect"
-    },
-    {
-      "framework": "Stripe3DS2",
-      "scheme": "Stripe3DS2",
-      "subdirectory": "Stripe3DS2",
-      "internal": true
+      "framework": "StripeCore",
+      "subdirectory": "StripeCore",
+      "useTarget": true
     },
     {
       "framework": "StripeUICore",
-      "scheme": "StripeUICore",
-      "subdirectory": "StripeUICore"
+      "subdirectory": "StripeUICore",
+      "useTarget": true
+    },
+    {
+      "framework": "StripePaymentsUI",
+      "subdirectory": "StripePaymentsUI",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeApplePay",
+      "subdirectory": "StripeApplePay",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeIdentity",
+      "subdirectory": "StripeIdentity",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeIssuing",
+      "subdirectory": "StripeIssuing",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeCardScan",
+      "subdirectory": "StripeCardScan",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeFinancialConnections",
+      "subdirectory": "StripeFinancialConnections",
+      "useTarget": true
+    },
+    {
+      "framework": "StripeConnect",
+      "subdirectory": "StripeConnect",
+      "useTarget": true
+    },
+    {
+      "framework": "Stripe3DS2",
+      "subdirectory": "Stripe3DS2",
+      "useTarget": true,
+      "internal": true
     },
     {
       "framework": "StripeCameraCore",
-      "scheme": "StripeCameraCore",
       "subdirectory": "StripeCameraCore",
+      "useTarget": true,
       "internal": true
     }
   ]

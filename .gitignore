@@ -17,6 +17,9 @@ local-packages/
 **/DerivedData/
 **/*.xcframework/
 
+# Cached tool binaries (e.g. spm-to-xcframework — pinned + sha256-verified)
+.tools/
+
 # Generator output
 **/output/
 **/test-output/

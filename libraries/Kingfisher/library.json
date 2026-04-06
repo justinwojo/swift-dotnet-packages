@@ -1,5 +1,7 @@
 {
-  "mode": "manual",
+  "repository": "https://github.com/onevcat/Kingfisher.git",
+  "version": "8.7.0",
+  "mode": "source",
   "minIOS": "13.0",
   "products": [
     { "framework": "Kingfisher" }

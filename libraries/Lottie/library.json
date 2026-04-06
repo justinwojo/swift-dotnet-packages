@@ -4,9 +4,6 @@
   "mode": "source",
   "minIOS": "15.0",
   "products": [
-    {
-      "scheme": "Lottie (iOS)",
-      "framework": "Lottie"
-    }
+    { "framework": "Lottie" }
   ]
 }

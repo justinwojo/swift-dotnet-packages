@@ -1,13 +1,9 @@
 {
   "repository": "https://github.com/BlinkID/blinkid-ios.git",
   "version": "7.6.2",
-  "tag": "v7.6.2",
   "mode": "source",
   "minIOS": "16.0",
   "products": [
-    {
-      "scheme": "BlinkIDUX",
-      "framework": "BlinkIDUX"
-    }
+    { "framework": "BlinkIDUX" }
   ]
 }

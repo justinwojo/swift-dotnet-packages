@@ -30,7 +30,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 import time
@@ -79,36 +78,33 @@ def is_infra_failure(error: Exception) -> bool:
 # Test directory introspection
 # ---------------------------------------------------------------------------
 
-def resolve_app_name(test_dir: str) -> Optional[str]:
-    """Extract the app name from validate-sim.sh in the test directory."""
-    validate_script = os.path.join(test_dir, "validate-sim.sh")
-    if not os.path.isfile(validate_script):
+def _resolve_lib_name(test_dir: str) -> Optional[str]:
+    """Extract the library name from the test directory basename.
+
+    tests/Foo.SimTests -> "Foo"
+    Returns None if the directory basename doesn't match the .SimTests convention.
+    """
+    name = os.path.basename(os.path.abspath(test_dir))
+    if not name.endswith(".SimTests"):
         return None
-    try:
-        with open(validate_script) as f:
-            content = f.read()
-        match = re.search(r'APP_NAME="([^"]+)"', content)
-        if match:
-            return match.group(1)
-    except Exception:
-        pass
-    return None
+    lib = name[: -len(".SimTests")]
+    return lib or None
+
+
+def resolve_app_name(test_dir: str) -> Optional[str]:
+    """Derive the app name from the test directory convention."""
+    lib = _resolve_lib_name(test_dir)
+    if lib is None:
+        return None
+    return f"{lib}SimTests"
 
 
 def resolve_bundle_id(test_dir: str) -> Optional[str]:
-    """Extract the bundle ID from validate-sim.sh in the test directory."""
-    validate_script = os.path.join(test_dir, "validate-sim.sh")
-    if not os.path.isfile(validate_script):
+    """Derive the bundle id from the test directory convention."""
+    lib = _resolve_lib_name(test_dir)
+    if lib is None:
         return None
-    try:
-        with open(validate_script) as f:
-            content = f.read()
-        match = re.search(r'BUNDLE_ID="([^"]+)"', content)
-        if match:
-            return match.group(1)
-    except Exception:
-        pass
-    return None
+    return f"com.swiftbindings.{lib.lower()}simtests"
 
 
 # ---------------------------------------------------------------------------
