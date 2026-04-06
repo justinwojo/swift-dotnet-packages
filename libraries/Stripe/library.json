@@ -72,8 +72,7 @@
     {
       "framework": "StripeUICore",
       "scheme": "StripeUICore",
-      "subdirectory": "StripeUICore",
-      "internal": true
+      "subdirectory": "StripeUICore"
     },
     {
       "framework": "StripeCameraCore",

@@ -131,13 +131,23 @@ if [ "$RESOLVE_ONLY" = true ]; then
         if [ "$(json_product_bool "$CONFIG" "$idx" internal)" = "true" ]; then
             continue
         fi
-        framework=$(json_product_field "$CONFIG" "$idx" framework)
-        module=$(json_product_field "$CONFIG" "$idx" module "$framework")
         subdir=$(json_product_field "$CONFIG" "$idx" subdirectory "")
         if [ -n "$subdir" ]; then
-            echo "${subdir}|SwiftBindings.${module}.csproj"
+            subdir_path="$LIBRARY_DIR/$subdir"
         else
-            echo "|SwiftBindings.${module}.csproj"
+            subdir_path="$LIBRARY_DIR"
+        fi
+        # Discover the actual csproj on disk instead of constructing the name
+        csproj_file=$(ls "$subdir_path"/SwiftBindings.*.csproj 2>/dev/null | head -1)
+        if [ -z "$csproj_file" ]; then
+            framework=$(json_product_field "$CONFIG" "$idx" framework)
+            die "No SwiftBindings.*.csproj found in $subdir_path for product '$framework'. Every non-internal product must have a csproj."
+        fi
+        csproj_name=$(basename "$csproj_file")
+        if [ -n "$subdir" ]; then
+            echo "${subdir}|${csproj_name}"
+        else
+            echo "|${csproj_name}"
         fi
     done
     exit 0

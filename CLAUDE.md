@@ -189,7 +189,7 @@ Some vendors have internal frameworks (not public SPM products) that other produ
 2. Built alongside public products, but they don't need binding generation or csproj files
 3. Referenced as `NativeReference` in sim test csproj (needed at runtime)
 
-Example: Stripe has 2 internal dependencies: `Stripe3DS2`, `StripeCameraCore`. (`StripeUICore` was originally internal but now has its own csproj and published bindings.)
+Example: Stripe has 2 internal dependencies: `Stripe3DS2`, `StripeCameraCore`.
 
 ### SwiftFrameworkDependency Items
 

@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.5.0">
+<Project Sdk="SwiftBindings.Sdk/0.6.1">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -9,6 +9,7 @@
     <Description>.NET bindings for the StripeIdentity Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripeidentity;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <SwiftWrapperRequired>false</SwiftWrapperRequired>
   </PropertyGroup>
 
   <!-- Package the README -->
@@ -19,9 +20,13 @@
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
     <SwiftFrameworkDependency Include="../StripeCameraCore/StripeCameraCore.xcframework" />
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.6.2" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.6.2" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
+
+  <ItemGroup>
+    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
+  </ItemGroup>
 
 </Project>
