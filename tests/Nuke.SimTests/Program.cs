@@ -1530,9 +1530,21 @@ public class MainViewController : UIViewController
             results.Skip("N1_ImageLoad_WithHeaders", "Depends on ImageRequest");
         }
 
-        // N1 bonus: URLRequest custom headers — ImageRequest only accepts string, no NSUrlRequest constructor
-        logger.Skip("N1 AddValue: ImageRequest has no NSUrlRequest constructor (API gap)");
-        results.Skip("N1_URLRequest_AddValue", "ImageRequest has no NSUrlRequest constructor");
+        // N1 bonus: ImageRequest from NSUrlRequest
+        logger.Info("--- N1: ImageRequest from NSUrlRequest ---");
+        try
+        {
+            var url = new Foundation.NSUrl("https://example.com/test.jpg");
+            var urlRequest = new Foundation.NSUrlRequest(url);
+            var imageReq = new ImageRequest(urlRequest, Array.Empty<IImageProcessing>());
+            logger.Pass("ImageRequest(NSUrlRequest, processors) construction");
+            results.Pass("N1_URLRequest_AddValue");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImageRequest(NSUrlRequest): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("N1_URLRequest_AddValue", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
         // N2: ImageRequest.Processors property exists (throws NotSupportedException)
         logger.Info("--- N2: ImageRequest.Processors ---");

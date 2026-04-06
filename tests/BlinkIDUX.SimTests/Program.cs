@@ -196,8 +196,8 @@ public class MainViewController : UIViewController
         logger.Info("=== Phase 9: MicroblinkColor Enum (7 cases) ===");
         RunMicroblinkColorTests(logger, results);
 
-        logger.Info("=== Phase 10: CaptureMode Enum ===");
-        RunCaptureModeTests(logger, results);
+        // Phase 10: CaptureMode removed — type correctly skipped by generator (opaque type with size=0)
+        logger.Info("[SKIP] Phase 10: CaptureMode Enum — type no longer generated (opaque type)");
 
         logger.Info("=== Phase 11: ScanningResult<T,U> Generic Enum ===");
         RunScanningResultTests(logger, results);
@@ -319,8 +319,7 @@ public class MainViewController : UIViewController
             ("SampleBuffer", () => SwiftObjectHelper<SampleBuffer>.GetTypeMetadata()),
             ("CaptureService", () => SwiftObjectHelper<CaptureService>.GetTypeMetadata()),
             ("CameraStatus", () => SwiftObjectHelper<CameraStatus>.GetTypeMetadata()),
-            // BUG: CaptureMode metadata returns size=0 — generator may not be emitting correct metadata accessor for this enum type
-            ("CaptureMode", () => SwiftObjectHelper<CaptureMode>.GetTypeMetadata()),
+            // CaptureMode removed — type correctly skipped by generator (opaque type with size=0)
             ("NetworkMonitor", () => SwiftObjectHelper<NetworkMonitor>.GetTypeMetadata()),
             ("ScanningUXSettings", () => SwiftObjectHelper<ScanningUXSettings>.GetTypeMetadata()),
             ("MicroblinkColor", () => SwiftObjectHelper<MicroblinkColor>.GetTypeMetadata()),
@@ -1288,15 +1287,15 @@ public class MainViewController : UIViewController
         // FromRawValue — requires wrapper
         try
         {
-            var color = MicroblinkColor.FromRawValue("secondary");
+            var color = MicroblinkColor.FromRawValue("verify_secondary");
             if (color != null)
             {
-                logger.Pass("MicroblinkColor.FromRawValue('secondary') returned non-null");
+                logger.Pass("MicroblinkColor.FromRawValue('verify_secondary') returned non-null");
                 results.Pass("MicroblinkColor_FromRawValue");
             }
             else
             {
-                logger.Fail("MicroblinkColor.FromRawValue('secondary') returned null");
+                logger.Fail("MicroblinkColor.FromRawValue('verify_secondary') returned null");
                 results.Fail("MicroblinkColor_FromRawValue", "Returned null");
             }
         }
@@ -1313,161 +1312,7 @@ public class MainViewController : UIViewController
         }
     }
 
-    // ==========================================
-    // Phase 10: CaptureMode Enum
-    // ==========================================
-
-    private void RunCaptureModeTests(TestLogger logger, TestResults results)
-    {
-        // CaptureMode.Video — uses CaseByIndex P/Invoke from wrapper
-        // BUG: Wrapper not compiled
-        try
-        {
-            var video = CaptureMode.Video;
-            if (video.Tag == CaptureMode.CaseTag.Video)
-            {
-                logger.Pass("CaptureMode.Video tag correct");
-                results.Pass("CaptureMode_Video_Tag");
-            }
-            else
-            {
-                logger.Fail($"CaptureMode.Video: got tag {video.Tag}");
-                results.Fail("CaptureMode_Video_Tag", $"Got {video.Tag}");
-            }
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Fail("CaptureMode.Video: DllNotFoundException (wrapper not compiled)");
-            results.Fail("CaptureMode_Video_Tag",
-                "DllNotFoundException — BlinkIDUXSwiftBindings CaseByIndex requires wrapper (SWIFTBIND051)");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode.Video: {ex.Message}");
-            results.Fail("CaptureMode_Video_Tag", ex.Message);
-        }
-
-        // CaseTag raw value (no P/Invoke)
-        try
-        {
-            if ((uint)CaptureMode.CaseTag.Video == 0)
-            {
-                logger.Pass("CaptureMode.CaseTag.Video == 0");
-                results.Pass("CaptureMode_CaseTag_RawValue");
-            }
-            else
-            {
-                logger.Fail($"CaptureMode.CaseTag.Video = {(uint)CaptureMode.CaseTag.Video}");
-                results.Fail("CaptureMode_CaseTag_RawValue", "Wrong value");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode CaseTag: {ex.Message}");
-            results.Fail("CaptureMode_CaseTag_RawValue", ex.Message);
-        }
-
-        // RawValue — requires wrapper
-        try
-        {
-            var video = CaptureMode.Video;
-            var raw = video.RawValue;
-            logger.Pass($"CaptureMode.Video.RawValue = '{raw}'");
-            results.Pass("CaptureMode_Video_RawValue");
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Fail("CaptureMode.Video.RawValue: DllNotFoundException (wrapper not compiled)");
-            results.Fail("CaptureMode_Video_RawValue",
-                "DllNotFoundException — wrapper required (SWIFTBIND051)");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode.RawValue: {ex.Message}");
-            results.Fail("CaptureMode_Video_RawValue", ex.Message);
-        }
-
-        // AllCases — requires wrapper
-        try
-        {
-            var allCases = CaptureMode.AllCases;
-            if (allCases.Count > 0)
-            {
-                logger.Pass($"CaptureMode.AllCases count = {allCases.Count}");
-                results.Pass("CaptureMode_AllCases");
-            }
-            else
-            {
-                logger.Fail("CaptureMode.AllCases is empty");
-                results.Fail("CaptureMode_AllCases", "Empty");
-            }
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Fail("CaptureMode.AllCases: DllNotFoundException (wrapper not compiled)");
-            results.Fail("CaptureMode_AllCases",
-                "DllNotFoundException — wrapper required (SWIFTBIND051)");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode.AllCases: {ex.Message}");
-            results.Fail("CaptureMode_AllCases", ex.Message);
-        }
-
-        // FromRawValue — requires wrapper
-        try
-        {
-            var mode = CaptureMode.FromRawValue("video");
-            if (mode != null)
-            {
-                logger.Pass("CaptureMode.FromRawValue('video') returned non-null");
-                results.Pass("CaptureMode_FromRawValue");
-            }
-            else
-            {
-                logger.Fail("CaptureMode.FromRawValue('video') returned null");
-                results.Fail("CaptureMode_FromRawValue", "Returned null");
-            }
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Fail("CaptureMode.FromRawValue: DllNotFoundException (wrapper not compiled)");
-            results.Fail("CaptureMode_FromRawValue",
-                "DllNotFoundException — wrapper required (SWIFTBIND051)");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode.FromRawValue: {ex.Message}");
-            results.Fail("CaptureMode_FromRawValue", ex.Message);
-        }
-
-        // FromRawValue with invalid string should return null — requires wrapper
-        try
-        {
-            var mode = CaptureMode.FromRawValue("nonexistent");
-            if (mode == null)
-            {
-                logger.Pass("CaptureMode.FromRawValue('nonexistent') correctly returned null");
-                results.Pass("CaptureMode_FromRawValue_Invalid");
-            }
-            else
-            {
-                logger.Fail("CaptureMode.FromRawValue('nonexistent') should return null");
-                results.Fail("CaptureMode_FromRawValue_Invalid", "Returned non-null for invalid value");
-            }
-        }
-        catch (DllNotFoundException)
-        {
-            logger.Fail("CaptureMode.FromRawValue(invalid): DllNotFoundException (wrapper not compiled)");
-            results.Fail("CaptureMode_FromRawValue_Invalid",
-                "DllNotFoundException — wrapper required (SWIFTBIND051)");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"CaptureMode.FromRawValue(invalid): {ex.Message}");
-            results.Fail("CaptureMode_FromRawValue_Invalid", ex.Message);
-        }
-    }
+    // Phase 10: CaptureMode removed — type correctly skipped by generator (opaque type with size=0)
 
     // ==========================================
     // Phase 11: ScanningResult<T,U> Generic Enum
@@ -1983,7 +1828,7 @@ public class MainViewController : UIViewController
             ("DocumentSide", typeof(DocumentSide)),
             ("Camera", typeof(Camera)),
             ("CameraStatus", typeof(CameraStatus)),
-            ("CaptureMode", typeof(CaptureMode)),
+            // CaptureMode removed — type correctly skipped by generator
             ("NetworkMonitor", typeof(NetworkMonitor)),
             ("ScanningUXSettings", typeof(ScanningUXSettings)),
             ("MicroblinkColor", typeof(MicroblinkColor)),

@@ -52,4 +52,16 @@
     </ItemGroup>
   </Target>
 
+  <!-- Copy SPM resource bundle stubs into the app so resource_bundle_accessor.swift can find them at runtime -->
+  <Target Name="_CopySwiftResourceBundleStubs"
+          AfterTargets="_CreateAppBundle"
+          DependsOnTargets="ResolveProjectReferences"
+          Condition="Exists('../../libraries/BlinkIDUX/obj/Debug/net10.0-ios/swift-binding/_resource-bundles.txt')">
+    <ReadLinesFromFile File="../../libraries/BlinkIDUX/obj/Debug/net10.0-ios/swift-binding/_resource-bundles.txt">
+      <Output TaskParameter="Lines" ItemName="_BlinkIDUXResourceBundleName" />
+    </ReadLinesFromFile>
+    <MakeDir Directories="$(AppBundleDir)/%(_BlinkIDUXResourceBundleName.Identity).bundle"
+             Condition="'%(_BlinkIDUXResourceBundleName.Identity)' != ''" />
+  </Target>
+
 </Project>

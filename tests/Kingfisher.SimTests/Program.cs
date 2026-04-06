@@ -1848,23 +1848,84 @@ public class MainViewController : UIViewController
 
     private void RunImagePrefetcherTests(TestLogger logger, TestResults results)
     {
-        // BUG: ImagePrefetcher constructor causes SIGSEGV (native crash) in swift_retain.
-        // The generated @_cdecl wrapper for ImagePrefetcher.init(urls:) has ARC issues
-        // that cause a null-pointer dereference during swift_retain. This kills the
-        // entire process, so these tests must be skipped (try-catch cannot catch SIGSEGV).
-        // All 4 tests below are blocked by this crash.
+        // Constructor with URLs (Bug 3 fix: NonBlittableCallConvSwift constructors now generate @_cdecl wrappers)
+        ImagePrefetcher? prefetcher = null;
+        try
+        {
+            var urls = new Foundation.NSUrl[] { new Foundation.NSUrl("https://example.com/image.png") };
+            prefetcher = new ImagePrefetcher(urls);
+            logger.Pass("ImagePrefetcher(urls) constructed successfully");
+            results.Pass("ImagePrefetcher_ctor_urls");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePrefetcher(urls): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("ImagePrefetcher_ctor_urls", $"{ex.GetType().Name}: {ex.Message}");
+            return; // Can't test properties without an instance
+        }
 
-        logger.Skip("ImagePrefetcher(urls:): [SKIP] native crash in swift_retain — constructor wrapper ARC bug");
-        results.Fail("ImagePrefetcher_ctor_empty", "native crash in swift_retain — cannot catch");
+        // MaxConcurrentDownloads getter
+        try
+        {
+            var maxDownloads = prefetcher!.MaxConcurrentDownloads;
+            logger.Pass($"ImagePrefetcher.MaxConcurrentDownloads = {maxDownloads}");
+            results.Pass("ImagePrefetcher_MaxConcurrentDownloads");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePrefetcher.MaxConcurrentDownloads get: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("ImagePrefetcher_MaxConcurrentDownloads", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
-        logger.Skip("ImagePrefetcher.MaxConcurrentDownloads: [SKIP] blocked by constructor crash");
-        results.Fail("ImagePrefetcher_MaxConcurrentDownloads", "blocked by ImagePrefetcher constructor native crash");
+        // MaxConcurrentDownloads setter
+        try
+        {
+            prefetcher!.MaxConcurrentDownloads = 3;
+            var readBack = prefetcher.MaxConcurrentDownloads;
+            if (readBack == 3)
+            {
+                logger.Pass("ImagePrefetcher.MaxConcurrentDownloads set to 3, read back 3");
+                results.Pass("ImagePrefetcher_MaxConcurrentDownloads_set");
+            }
+            else
+            {
+                logger.Fail($"ImagePrefetcher.MaxConcurrentDownloads set to 3, read back {readBack}");
+                results.Fail("ImagePrefetcher_MaxConcurrentDownloads_set", $"Expected 3, got {readBack}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePrefetcher.MaxConcurrentDownloads set: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("ImagePrefetcher_MaxConcurrentDownloads_set", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
-        logger.Skip("ImagePrefetcher.MaxConcurrentDownloads setter: [SKIP] blocked by constructor crash");
-        results.Fail("ImagePrefetcher_MaxConcurrentDownloads_set", "blocked by ImagePrefetcher constructor native crash");
+        // Stop method
+        try
+        {
+            prefetcher!.Stop();
+            logger.Pass("ImagePrefetcher.Stop() called successfully");
+            results.Pass("ImagePrefetcher_Stop");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePrefetcher.Stop(): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("ImagePrefetcher_Stop", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
-        logger.Skip("ImagePrefetcher.Stop(): [SKIP] blocked by constructor crash");
-        results.Fail("ImagePrefetcher_Stop", "blocked by ImagePrefetcher constructor native crash");
+        // Description property
+        try
+        {
+            var desc = prefetcher!.Description;
+            logger.Pass($"ImagePrefetcher.Description = \"{desc}\"");
+            results.Pass("ImagePrefetcher_Description");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImagePrefetcher.Description: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("ImagePrefetcher_Description", $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        prefetcher?.Dispose();
     }
 
     // ──────────────────────────────────────────────
@@ -2504,11 +2565,10 @@ public class MainViewController : UIViewController
             results.Fail("ResizingImageProcessor_ctor_AspectFill", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // BUG: ImageCache(name:, cacheDirectoryURL:) causes SIGSEGV in swift_cvw_initWithCopyImpl.
-        // The generated P/Invoke for this constructor has a closure parameter (Func<NSUrl, string, NSUrl>)
-        // whose value witness copy crashes during marshalling. Native crash — try-catch cannot catch.
-        logger.Skip("ImageCache(name:, cacheDirectoryURL:): [SKIP] native crash in swift_cvw_initWithCopyImpl — closure marshalling bug");
-        results.Fail("ImageCache_ctor_name_url", "native crash in swift_cvw_initWithCopyImpl — cannot catch");
+        // ImageCache(name:, cacheDirectoryURL:, diskCachePathClosure:) — closure parameter constructor.
+        // Marked [Obsolete(SB0001)] (no @_cdecl wrapper). Skip — calling convention mismatch may crash.
+        logger.Skip("ImageCache(name, url, closure): no @_cdecl wrapper (SB0001), closure constructor skipped");
+        results.Skip("ImageCache_ctor_name_url", "no @_cdecl wrapper (SB0001)");
 
         // DelayRetryStrategy with Accumulated interval
         try

@@ -21,8 +21,7 @@
   <!-- Reference library projects — brings in bindings and SwiftBindings.Runtime transitively -->
   <ItemGroup>
     <ProjectReference Include="../../libraries/Stripe/StripeCore/SwiftBindings.Stripe.Core.csproj" />
-    <!-- StripePayments excluded: generator produces invalid enum-as-NSObject bindings -->
-    <!-- <ProjectReference Include="../../libraries/Stripe/StripePayments/SwiftBindings.Stripe.Payments.csproj" /> -->
+    <ProjectReference Include="../../libraries/Stripe/StripePayments/SwiftBindings.Stripe.Payments.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripePaymentSheet/SwiftBindings.Stripe.PaymentSheet.csproj" />
     <ProjectReference Include="../../libraries/Stripe/Stripe/SwiftBindings.Stripe.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripePaymentsUI/SwiftBindings.Stripe.PaymentsUI.csproj" />

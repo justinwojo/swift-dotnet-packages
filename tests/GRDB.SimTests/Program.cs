@@ -1100,15 +1100,45 @@ public class MainViewController : UIViewController
             results.Fail("DatabasePool_Configuration", ex.Message);
         }
 
-        // BUG: DatabaseSnapshotPool requires a WAL database with actual WAL data written.
-        // Creating and immediately disposing a DatabasePool leaves an empty WAL, which
-        // causes "Can't create snapshot from a missing or empty wal file." We can't write
-        // data through the bindings because Database.execute() isn't bound. Skip these.
-        logger.Skip("DatabaseSnapshotPool(path) — requires WAL data (no Database.execute binding)");
-        results.Skip("DatabaseSnapshotPool_Constructor_Path", "Requires WAL data");
+        // DatabaseSnapshotPool(path) — requires WAL database with data.
+        // Uses UnsafeReentrantWrite + Database.Execute to write WAL data.
+        // NOTE: The Database received in the closure callback is a borrowed reference.
+        // We must call GC.SuppressFinalize(db) to prevent the managed wrapper from
+        // double-releasing the native handle when the GC collects it.
+        try
+        {
+            var snapshotPath = Path.Combine(tmpDir, "test_snapshot_pool.sqlite");
+            using var writePool = new DatabasePool(snapshotPath);
+            using var args = new StatementArguments();
+            writePool.UnsafeReentrantWrite(db =>
+            {
+                db.Execute("CREATE TABLE test_snapshot(id INTEGER PRIMARY KEY)", args);
+                db.Execute("INSERT INTO test_snapshot(id) VALUES(1)", args);
+                GC.SuppressFinalize(db);
+                GC.SuppressFinalize(db.Payload);
+            });
+            using var snapshotPool = new DatabaseSnapshotPool(snapshotPath);
+            logger.Pass("DatabaseSnapshotPool(path) construction with WAL data");
+            results.Pass("DatabaseSnapshotPool_Constructor_Path");
 
-        logger.Skip("DatabaseSnapshotPool.Path — requires WAL data");
-        results.Skip("DatabaseSnapshotPool_Path", "Requires WAL data");
+            var retrievedPath = snapshotPool.Path;
+            if (!string.IsNullOrEmpty(retrievedPath))
+            {
+                logger.Pass($"DatabaseSnapshotPool.Path = '{retrievedPath}'");
+                results.Pass("DatabaseSnapshotPool_Path");
+            }
+            else
+            {
+                logger.Fail("DatabaseSnapshotPool.Path returned empty");
+                results.Fail("DatabaseSnapshotPool_Path", "Path was empty");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DatabaseSnapshotPool(path): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("DatabaseSnapshotPool_Constructor_Path", $"{ex.GetType().Name}: {ex.Message}");
+            results.Fail("DatabaseSnapshotPool_Path", "Depends on constructor");
+        }
 
         // Cleanup
         try { Directory.Delete(tmpDir, true); } catch { }
@@ -1574,9 +1604,29 @@ public class MainViewController : UIViewController
         var tmpDir = Path.Combine(Path.GetTempPath(), "grdb_snapshot_tests");
         Directory.CreateDirectory(tmpDir);
 
-        // BUG: Same WAL issue as above — skip
-        logger.Skip("DatabaseSnapshotPool(path, config) — requires WAL data");
-        results.Skip("DatabaseSnapshotPool_Constructor_Config", "Requires WAL data");
+        // DatabaseSnapshotPool(path, config) — requires WAL database with data
+        try
+        {
+            var snapshotPath = Path.Combine(tmpDir, "test_snapshot_config.sqlite");
+            using var pool = new DatabasePool(snapshotPath);
+            using var args = new StatementArguments();
+            pool.UnsafeReentrantWrite(db =>
+            {
+                db.Execute("CREATE TABLE test_snap_cfg(id INTEGER PRIMARY KEY)", args);
+                db.Execute("INSERT INTO test_snap_cfg(id) VALUES(1)", args);
+                GC.SuppressFinalize(db);
+                GC.SuppressFinalize(db.Payload);
+            });
+            using var config = new Configuration();
+            using var snapshotPool = new DatabaseSnapshotPool(snapshotPath, config);
+            logger.Pass("DatabaseSnapshotPool(path, config) construction");
+            results.Pass("DatabaseSnapshotPool_Constructor_Config");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DatabaseSnapshotPool(path, config): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("DatabaseSnapshotPool_Constructor_Config", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
         // Cleanup
         try { Directory.Delete(tmpDir, true); } catch { }
@@ -3055,9 +3105,29 @@ public class MainViewController : UIViewController
             results.Fail("DatabaseQueue_MultiplePaths", ex.Message);
         }
 
-        // BUG: Same WAL issue as above — skip
-        logger.Skip("DatabaseSnapshotPool(path, config, ext) — requires WAL data");
-        results.Skip("DatabaseSnapshotPool_ConfigPath", "Requires WAL data");
+        // DatabaseSnapshotPool(Database, Configuration) — pass Database instance from write closure
+        try
+        {
+            var snapshotPath = Path.Combine(tmpDir, "test_snapshot_db.sqlite");
+            using var pool = new DatabasePool(snapshotPath);
+            using var args = new StatementArguments();
+            pool.UnsafeReentrantWrite(db =>
+            {
+                db.Execute("CREATE TABLE test_snap_db(id INTEGER PRIMARY KEY)", args);
+                db.Execute("INSERT INTO test_snap_db(id) VALUES(1)", args);
+                using var config = new Configuration();
+                using var snapshotPool = new DatabaseSnapshotPool(db, config);
+                logger.Pass("DatabaseSnapshotPool(Database, config) from write closure");
+                results.Pass("DatabaseSnapshotPool_ConfigPath");
+                GC.SuppressFinalize(db);
+                GC.SuppressFinalize(db.Payload);
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DatabaseSnapshotPool(Database, config): {ex.GetType().Name}: {ex.Message}");
+            results.Fail("DatabaseSnapshotPool_ConfigPath", $"{ex.GetType().Name}: {ex.Message}");
+        }
 
         // Cleanup
         try { Directory.Delete(tmpDir, true); } catch { }
