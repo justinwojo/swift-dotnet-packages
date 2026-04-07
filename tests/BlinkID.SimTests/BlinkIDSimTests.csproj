@@ -37,8 +37,8 @@
           BeforeTargets="ResolveNativeReferences"
           DependsOnTargets="ResolveProjectReferences">
     <ItemGroup>
-      <NativeReference Include="../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/BlinkID/obj/Debug/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/BlinkID/obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/BlinkID/obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
     </ItemGroup>
