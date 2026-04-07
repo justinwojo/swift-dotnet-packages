@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "definitions": {
+    "Host": {
+      "type": "string",
+      "enum": [
+        "AppVeyor",
+        "AzurePipelines",
+        "Bamboo",
+        "Bitbucket",
+        "Bitrise",
+        "GitHubActions",
+        "GitLab",
+        "Jenkins",
+        "Rider",
+        "SpaceAutomation",
+        "TeamCity",
+        "Terminal",
+        "TravisCI",
+        "VisualStudio",
+        "VSCode"
+      ]
+    },
+    "ExecutableTarget": {
+      "type": "string",
+      "enum": [
+        "BuildAllLibraries",
+        "BuildAllXcframeworks",
+        "BuildLibrary",
+        "BuildTestApp",
+        "BuildXcframework",
+        "Clean",
+        "CleanSwiftBindingOutput",
+        "Compile",
+        "InjectFrameworkDeps",
+        "InjectProjectRefs",
+        "ListLibraries",
+        "Restore",
+        "ValidateRewriter"
+      ]
+    },
+    "Verbosity": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "Verbose",
+        "Normal",
+        "Minimal",
+        "Quiet"
+      ]
+    },
+    "NukeBuild": {
+      "properties": {
+        "Continue": {
+          "type": "boolean",
+          "description": "Indicates to continue a previously failed build attempt"
+        },
+        "Help": {
+          "type": "boolean",
+          "description": "Shows the help text for this build assembly"
+        },
+        "Host": {
+          "description": "Host for execution. Default is 'automatic'",
+          "$ref": "#/definitions/Host"
+        },
+        "NoLogo": {
+          "type": "boolean",
+          "description": "Disables displaying the NUKE logo"
+        },
+        "Partition": {
+          "type": "string",
+          "description": "Partition to use on CI"
+        },
+        "Plan": {
+          "type": "boolean",
+          "description": "Shows the execution plan (HTML)"
+        },
+        "Profile": {
+          "type": "array",
+          "description": "Defines the profiles to load",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Root": {
+          "type": "string",
+          "description": "Root directory during build execution"
+        },
+        "Skip": {
+          "type": "array",
+          "description": "List of targets to be skipped. Empty list skips all dependencies",
+          "items": {
+            "$ref": "#/definitions/ExecutableTarget"
+          }
+        },
+        "Target": {
+          "type": "array",
+          "description": "List of targets to be invoked. Default is '{default_target}'",
+          "items": {
+            "$ref": "#/definitions/ExecutableTarget"
+          }
+        },
+        "Verbosity": {
+          "description": "Logging verbosity during build execution. Default is 'Normal'",
+          "$ref": "#/definitions/Verbosity"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "AllProducts": {
+          "type": "boolean",
+          "description": "Build all products in library.json"
+        },
+        "Aot": {
+          "type": "boolean",
+          "description": "Use NativeAOT publish for the test app (requires --device + codesign env vars)"
+        },
+        "CleanFirst": {
+          "type": "boolean",
+          "description": "Wipe swift-binding/ before pass 1"
+        },
+        "Configuration": {
+          "type": "string",
+          "description": "Build configuration",
+          "enum": [
+            "Debug",
+            "Release"
+          ]
+        },
+        "Device": {
+          "type": "boolean",
+          "description": "Build the test app for a physical device (ios-arm64) instead of the simulator"
+        },
+        "DeviceUdid": {
+          "type": "string",
+          "description": "Simulator UDID (default: booted)"
+        },
+        "Library": {
+          "type": "string",
+          "description": "Library name (matches libraries/<name>/)"
+        },
+        "NuGetApiKey": {
+          "type": "string",
+          "default": "Secrets must be entered via 'nuke :secrets [profile]'"
+        },
+        "Products": {
+          "type": "array",
+          "description": "Comma-separated product subset (e.g. StripeCore,StripePayments)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ReuseSim": {
+          "type": "boolean",
+          "description": "Reuse already-booted simulator (CI)"
+        },
+        "RewriterFixture": {
+          "type": "string",
+          "description": "Fixture directory for ValidateRewriter target"
+        },
+        "RuntimeIdentifier": {
+          "type": "string",
+          "description": "iOS RID — overrides default of iossimulator-arm64"
+        },
+        "Timeout": {
+          "type": "integer",
+          "description": "Sim test timeout in seconds",
+          "format": "int32"
+        },
+        "Version": {
+          "type": "string",
+          "description": "Package version override"
+        }
+      }
+    },
+    {
+      "$ref": "#/definitions/NukeBuild"
+    }
+  ]
+}

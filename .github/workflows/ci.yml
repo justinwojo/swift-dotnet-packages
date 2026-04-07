@@ -126,28 +126,15 @@ jobs:
 
           PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
 
-          HAS_INTERNAL=$(python3 -c "
-          import json
-          products = json.load(open('$CONFIG'))['products']
-          print('true' if any(p.get('internal') for p in products) else 'false')
-          ")
-
           if [ "$PRODUCT_COUNT" -gt 1 ]; then
             echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
           else
             echo "build_flags=" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ "$HAS_INTERNAL" = "true" ] || [ "$PRODUCT_COUNT" -gt 3 ]; then
-            echo "build_passes=2" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_passes=1" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build xcframeworks
+      - name: Build library (xcframeworks + dependency injection + dotnet build)
         run: |
-          cd "libraries/${{ matrix.library }}"
-          ./build-xcframework.sh ${{ steps.flags.outputs.build_flags }}
+          ./build.sh BuildLibrary --library "${{ matrix.library }}" ${{ steps.flags.outputs.build_flags }}
 
       - name: Resolve built products
         id: resolve
@@ -156,28 +143,6 @@ jobs:
           echo "products<<EOF" >> "$GITHUB_OUTPUT"
           echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Build libraries (SDK generates bindings automatically)
-        run: |
-          PRODUCTS="${{ steps.resolve.outputs.products }}"
-          PASSES=${{ steps.flags.outputs.build_passes }}
-
-          for ((pass=1; pass<=PASSES; pass++)); do
-            echo "=== Build pass $pass of $PASSES ==="
-
-            while IFS='|' read -r dir csproj; do
-              [ -z "$csproj" ] && continue
-
-              BUILD_PATH="libraries/${{ matrix.library }}"
-              [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-              if [ "$pass" -lt "$PASSES" ]; then
-                dotnet build "$BUILD_PATH/$csproj" || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"
-              else
-                dotnet build "$BUILD_PATH/$csproj"
-              fi
-            done <<< "$PRODUCTS"
-          done
 
       - name: Validate packaging
         run: |

@@ -8,6 +8,14 @@ obj/
 tests/*/bin/
 tests/*/obj/
 
+# Nuke build harness output
+build/bin/
+build/obj/
+.nuke/temp/
+
+# Claude Code local state
+.claude/
+
 # Local NuGet packages
 local-packages/
 

@@ -111,31 +111,18 @@ jobs:
 
           PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
 
-          # Count non-internal products to decide if multi-pass is needed
-          HAS_INTERNAL=$(python3 -c "
-          import json
-          products = json.load(open('$CONFIG'))['products']
-          print('true' if any(p.get('internal') for p in products) else 'false')
-          ")
-
           if [ "$PRODUCT_COUNT" -gt 1 ]; then
             echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
           else
             echo "build_flags=" >> "$GITHUB_OUTPUT"
           fi
 
-          # Multi-pass needed when there are internal/cross-module dependencies
-          if [ "$HAS_INTERNAL" = "true" ] || [ "$PRODUCT_COUNT" -gt 3 ]; then
-            echo "build_passes=2" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_passes=1" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build xcframeworks
+      - name: Build library (xcframeworks + dependency injection + dotnet build)
         run: |
           LIBRARY="${{ steps.parse.outputs.library }}"
-          cd "libraries/$LIBRARY"
-          ./build-xcframework.sh ${{ steps.flags.outputs.build_flags }}
+          # --configuration Release is mandatory: dotnet pack --no-build below
+          # looks under bin/Release/net10.0-ios for the .dll/.pdb to package.
+          ./build.sh BuildLibrary --library "$LIBRARY" --configuration Release ${{ steps.flags.outputs.build_flags }}
 
       - name: Resolve built products
         id: resolve
@@ -145,30 +132,6 @@ jobs:
           echo "products<<EOF" >> "$GITHUB_OUTPUT"
           echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Build libraries (SDK generates bindings automatically)
-        run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          PRODUCTS="${{ steps.resolve.outputs.products }}"
-          PASSES=${{ steps.flags.outputs.build_passes }}
-
-          for ((pass=1; pass<=PASSES; pass++)); do
-            echo "=== Build pass $pass of $PASSES ==="
-
-            while IFS='|' read -r dir csproj; do
-              [ -z "$csproj" ] && continue
-
-              BUILD_PATH="libraries/$LIBRARY"
-              [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-              # Tolerate build failures on non-final passes (wrapper compilation)
-              if [ "$pass" -lt "$PASSES" ]; then
-                dotnet build "$BUILD_PATH/$csproj" -c Release || echo "::warning::Pass $pass: $csproj build failed (expected for multi-pass)"
-              else
-                dotnet build "$BUILD_PATH/$csproj" -c Release
-              fi
-            done <<< "$PRODUCTS"
-          done
 
       - name: Build and validate on iOS Simulator
         timeout-minutes: 20
