@@ -258,7 +258,7 @@ CSPROJ_HEADER
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
-    <IncludeSwiftBindingsRuntimeNative>false</IncludeSwiftBindingsRuntimeNative>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
   <ItemGroup>
@@ -302,30 +302,46 @@ CSPROJ_REFS_END
             base_path="../../libraries/${lib_name}"
         fi
 
-        # Internal products get only the primary xcframework NativeReference —
-        # no binding wrapper exists (they have no csproj to generate one).
-        if [ "$is_int" = "true" ]; then
-            cat >> "$csproj_path" << CSPROJ_NATIVE_INTERNAL
-    <NativeReference Include="${base_path}/${framework}.xcframework">
-      <Kind>Framework</Kind>
-    </NativeReference>
-CSPROJ_NATIVE_INTERNAL
-            continue
-        fi
-
         cat >> "$csproj_path" << CSPROJ_NATIVE
     <NativeReference Include="${base_path}/${framework}.xcframework">
-      <Kind>Framework</Kind>
-    </NativeReference>
-    <NativeReference Include="${base_path}/obj/Debug/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework"
-                     Condition="Exists('${base_path}/obj/Debug/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework')">
       <Kind>Framework</Kind>
     </NativeReference>
 CSPROJ_NATIVE
     done
 
-    cat >> "$csproj_path" << 'CSPROJ_END'
+    cat >> "$csproj_path" << 'CSPROJ_NATIVE_END'
   </ItemGroup>
+
+  <!-- Wrapper xcframework: must be in a Target (not static ItemGroup) so the Exists() check
+       runs AFTER the library project builds. Static ItemGroups evaluate before any build targets,
+       so on a clean build the wrapper doesn't exist yet and gets silently omitted. -->
+  <Target Name="_AddSwiftWrapperReference"
+          BeforeTargets="ResolveNativeReferences"
+          DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+CSPROJ_NATIVE_END
+
+    for entry in "${RESOLVED_PRODUCTS[@]}"; do
+        IFS='|' read -r lib_name framework module subdir is_int <<< "$entry"
+        # Internal products have no csproj — no binding wrapper to reference.
+        [ "$is_int" = "true" ] && continue
+        local base_path
+        if [ -n "$subdir" ]; then
+            base_path="../../libraries/${lib_name}/${subdir}"
+        else
+            base_path="../../libraries/${lib_name}"
+        fi
+        cat >> "$csproj_path" << CSPROJ_WRAPPER
+      <NativeReference Include="${base_path}/obj/\$(Configuration)/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework"
+                       Condition="Exists('${base_path}/obj/\$(Configuration)/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+CSPROJ_WRAPPER
+    done
+
+    cat >> "$csproj_path" << 'CSPROJ_END'
+    </ItemGroup>
+  </Target>
 
 </Project>
 CSPROJ_END

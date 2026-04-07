@@ -20,10 +20,11 @@
 
   <!-- Reference library projects — brings in bindings and SwiftBindings.Runtime transitively -->
   <ItemGroup>
-    <ProjectReference Include="../../libraries/Stripe/StripeCore/SwiftBindings.Stripe.Core.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/Stripe/SwiftBindings.Stripe.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripePayments/SwiftBindings.Stripe.Payments.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripePaymentSheet/SwiftBindings.Stripe.PaymentSheet.csproj" />
-    <ProjectReference Include="../../libraries/Stripe/Stripe/SwiftBindings.Stripe.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeCore/SwiftBindings.Stripe.Core.csproj" />
+    <ProjectReference Include="../../libraries/Stripe/StripeUICore/SwiftBindings.Stripe.UICore.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripePaymentsUI/SwiftBindings.Stripe.PaymentsUI.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripeApplePay/SwiftBindings.Stripe.ApplePay.csproj" />
     <ProjectReference Include="../../libraries/Stripe/StripeIdentity/SwiftBindings.Stripe.Identity.csproj" />
@@ -35,7 +36,7 @@
 
   <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->
   <ItemGroup>
-    <NativeReference Include="../../libraries/Stripe/StripeCore/StripeCore.xcframework">
+    <NativeReference Include="../../libraries/Stripe/Stripe/Stripe.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
     <NativeReference Include="../../libraries/Stripe/StripePayments/StripePayments.xcframework">
@@ -44,7 +45,10 @@
     <NativeReference Include="../../libraries/Stripe/StripePaymentSheet/StripePaymentSheet.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
-    <NativeReference Include="../../libraries/Stripe/Stripe/Stripe.xcframework">
+    <NativeReference Include="../../libraries/Stripe/StripeCore/StripeCore.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
+    <NativeReference Include="../../libraries/Stripe/StripeUICore/StripeUICore.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
     <NativeReference Include="../../libraries/Stripe/StripePaymentsUI/StripePaymentsUI.xcframework">
@@ -68,11 +72,7 @@
     <NativeReference Include="../../libraries/Stripe/StripeConnect/StripeConnect.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
-    <!-- Internal dependency frameworks (no bindings, needed at runtime) -->
     <NativeReference Include="../../libraries/Stripe/Stripe3DS2/Stripe3DS2.xcframework">
-      <Kind>Framework</Kind>
-    </NativeReference>
-    <NativeReference Include="../../libraries/Stripe/StripeUICore/StripeUICore.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
     <NativeReference Include="../../libraries/Stripe/StripeCameraCore/StripeCameraCore.xcframework">
@@ -87,48 +87,52 @@
           BeforeTargets="ResolveNativeReferences"
           DependsOnTargets="ResolveProjectReferences">
     <ItemGroup>
-      <NativeReference Include="../../libraries/Stripe/StripeCore/obj/Debug/net10.0-ios/swift-binding/StripeCoreSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeCore/obj/Debug/net10.0-ios/swift-binding/StripeCoreSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/Stripe/obj/$(Configuration)/net10.0-ios/swift-binding/StripeSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/Stripe/obj/$(Configuration)/net10.0-ios/swift-binding/StripeSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripePayments/obj/Debug/net10.0-ios/swift-binding/StripePaymentsSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripePayments/obj/Debug/net10.0-ios/swift-binding/StripePaymentsSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripePayments/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentsSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripePayments/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentsSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripePaymentSheet/obj/Debug/net10.0-ios/swift-binding/StripePaymentSheetSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripePaymentSheet/obj/Debug/net10.0-ios/swift-binding/StripePaymentSheetSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripePaymentSheet/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentSheetSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripePaymentSheet/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentSheetSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/Stripe/obj/Debug/net10.0-ios/swift-binding/StripeSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/Stripe/obj/Debug/net10.0-ios/swift-binding/StripeSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeCore/obj/$(Configuration)/net10.0-ios/swift-binding/StripeCoreSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeCore/obj/$(Configuration)/net10.0-ios/swift-binding/StripeCoreSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripePaymentsUI/obj/Debug/net10.0-ios/swift-binding/StripePaymentsUISwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripePaymentsUI/obj/Debug/net10.0-ios/swift-binding/StripePaymentsUISwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeUICore/obj/$(Configuration)/net10.0-ios/swift-binding/StripeUICoreSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeUICore/obj/$(Configuration)/net10.0-ios/swift-binding/StripeUICoreSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeApplePay/obj/Debug/net10.0-ios/swift-binding/StripeApplePaySwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeApplePay/obj/Debug/net10.0-ios/swift-binding/StripeApplePaySwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripePaymentsUI/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentsUISwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripePaymentsUI/obj/$(Configuration)/net10.0-ios/swift-binding/StripePaymentsUISwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeIdentity/obj/Debug/net10.0-ios/swift-binding/StripeIdentitySwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeIdentity/obj/Debug/net10.0-ios/swift-binding/StripeIdentitySwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeApplePay/obj/$(Configuration)/net10.0-ios/swift-binding/StripeApplePaySwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeApplePay/obj/$(Configuration)/net10.0-ios/swift-binding/StripeApplePaySwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeIssuing/obj/Debug/net10.0-ios/swift-binding/StripeIssuingSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeIssuing/obj/Debug/net10.0-ios/swift-binding/StripeIssuingSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeIdentity/obj/$(Configuration)/net10.0-ios/swift-binding/StripeIdentitySwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeIdentity/obj/$(Configuration)/net10.0-ios/swift-binding/StripeIdentitySwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeCardScan/obj/Debug/net10.0-ios/swift-binding/StripeCardScanSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeCardScan/obj/Debug/net10.0-ios/swift-binding/StripeCardScanSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeIssuing/obj/$(Configuration)/net10.0-ios/swift-binding/StripeIssuingSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeIssuing/obj/$(Configuration)/net10.0-ios/swift-binding/StripeIssuingSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeFinancialConnections/obj/Debug/net10.0-ios/swift-binding/StripeFinancialConnectionsSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeFinancialConnections/obj/Debug/net10.0-ios/swift-binding/StripeFinancialConnectionsSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeCardScan/obj/$(Configuration)/net10.0-ios/swift-binding/StripeCardScanSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeCardScan/obj/$(Configuration)/net10.0-ios/swift-binding/StripeCardScanSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../../libraries/Stripe/StripeConnect/obj/Debug/net10.0-ios/swift-binding/StripeConnectSwiftBindings.xcframework"
-                       Condition="Exists('../../libraries/Stripe/StripeConnect/obj/Debug/net10.0-ios/swift-binding/StripeConnectSwiftBindings.xcframework')">
+      <NativeReference Include="../../libraries/Stripe/StripeFinancialConnections/obj/$(Configuration)/net10.0-ios/swift-binding/StripeFinancialConnectionsSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeFinancialConnections/obj/$(Configuration)/net10.0-ios/swift-binding/StripeFinancialConnectionsSwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+      <NativeReference Include="../../libraries/Stripe/StripeConnect/obj/$(Configuration)/net10.0-ios/swift-binding/StripeConnectSwiftBindings.xcframework"
+                       Condition="Exists('../../libraries/Stripe/StripeConnect/obj/$(Configuration)/net10.0-ios/swift-binding/StripeConnectSwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
     </ItemGroup>

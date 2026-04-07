@@ -855,11 +855,33 @@ with open(csproj_file, 'r') as f:
     content = f.read()
     original = content
 
+# Preserve any extra attributes (e.g. PackageId, PackageVersion) on existing
+# SwiftFrameworkDependency items so a re-run of --inject doesn't strip them.
+# Keyed by Include path — if the new auto-block re-emits the same Include,
+# the preserved attrs come along. Covers both the in-block re-write case
+# (subsequent runs) and the migration case (first run on a csproj that has
+# hand-authored sibling entries with attrs).
+preserved_attrs = {}
+_sfd_elem_re = re.compile(r'<SwiftFrameworkDependency\b([^>]*?)/>', re.DOTALL)
+_attr_re = re.compile(r'(\w+)\s*=\s*\"([^\"]*)\"')
+for _m in _sfd_elem_re.finditer(original):
+    _attrs = dict(_attr_re.findall(_m.group(1)))
+    _inc = _attrs.pop('Include', None)
+    if _inc and _attrs:
+        preserved_attrs[_inc] = _attrs
+
+def _format_sfd(inc):
+    extra = preserved_attrs.get(inc)
+    if extra:
+        attr_str = ''.join(f' {k}=\"{v}\"' for k, v in extra.items())
+        return f'    <SwiftFrameworkDependency Include=\"{inc}\"{attr_str} />'
+    return f'    <SwiftFrameworkDependency Include=\"{inc}\" />'
+
 # Build the auto-detected block
 if dep_includes:
     lines = [BEGIN_MARKER, '  <ItemGroup>']
     for inc in sorted(dep_includes):
-        lines.append(f'    <SwiftFrameworkDependency Include=\"{inc}\" />')
+        lines.append(_format_sfd(inc))
     lines.append('  </ItemGroup>')
     lines.append('  ' + END_MARKER)
     deps_block = '\n'.join(lines)
