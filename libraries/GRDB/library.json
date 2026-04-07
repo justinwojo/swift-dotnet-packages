@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/groue/GRDB.swift.git",
-  "version": "7.9.0",
+  "version": "7.10.0",
   "mode": "source",
   "minIOS": "13.0",
   "products": [
