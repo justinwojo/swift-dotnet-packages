@@ -45,6 +45,18 @@ partial class Build : NukeBuild
     [Parameter("Reuse already-booted simulator (CI)")]
     readonly bool ReuseSim;
 
+    [Parameter("Outer wall-clock budget for RunCiSimTest in seconds (default: 1140)")]
+    readonly int StepTimeout = 1140;
+
+    [Parameter("Max retries for test-timeout (RunCiSimTest)")]
+    readonly int MaxTestRetries = 1;
+
+    [Parameter("Max retries for infrastructure failures (RunCiSimTest)")]
+    readonly int MaxInfraRetries = 1;
+
+    [Parameter("Diagnostics dir for sim diagnostics (default: /tmp/sim-diagnostics)")]
+    readonly string DiagDir = "/tmp/sim-diagnostics";
+
     [Parameter("Package version override")]
     readonly string? Version;
 
@@ -62,6 +74,17 @@ partial class Build : NukeBuild
     AbsolutePath LibraryDir(string lib) => LibrariesDir / lib;
     AbsolutePath LibraryConfigPath(string lib) => LibraryDir(lib) / "library.json";
     AbsolutePath TestDir(string lib) => TestsDir / $"{lib}.SimTests";
+
+    /// <summary>
+    /// Resolve the effective iOS runtime identifier for the currently-running
+    /// target. Returns the user's <c>--runtime-identifier</c> override if set,
+    /// otherwise the given default. Callers pass <c>"iossimulator-arm64"</c>
+    /// for simulator paths and <c>"ios-arm64"</c> for device paths. This is
+    /// the single place the RID parameter is honored so the build-time RID
+    /// and the post-build bin path always agree.
+    /// </summary>
+    string ResolveRid(string defaultRid) =>
+        !string.IsNullOrEmpty(RuntimeIdentifier) ? RuntimeIdentifier : defaultRid;
 
     // ── Stub targets ────────────────────────────────────────────────────────
 

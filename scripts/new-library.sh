@@ -394,9 +394,9 @@ echo "Created libraries/$LIBRARY_NAME/library.json"
 
 # ── Generate Files From Templates ────────────────────────────────────────────
 
-# build-xcframework.sh (thin wrapper — same for all libraries)
-cp "$TEMPLATE_DIR/build-xcframework.sh.template" "$LIB_DIR/build-xcframework.sh"
-chmod +x "$LIB_DIR/build-xcframework.sh"
+# No per-library build-xcframework.sh wrapper is written. The Nuke harness
+# at repo root (./build.sh BuildXcframework --library <Name>) invokes
+# spm-to-xcframework directly — see build/Build.BuildLibrary.cs.
 
 # Build set of internal product names for skipping file generation
 INTERNAL_SET=()
@@ -470,7 +470,6 @@ done
 echo ""
 echo "Created libraries/$LIBRARY_NAME/ with:"
 echo "  - library.json"
-echo "  - build-xcframework.sh (thin wrapper)"
 for product_name in "${PRODUCT_LIST[@]}"; do
     product_name=$(echo "$product_name" | xargs)
     suffix=$(vendor_package_id_suffix "$VENDOR" "$product_name")
@@ -515,66 +514,50 @@ if [ "$MODE" = "manual" ]; then
     if [ "$IS_MULTI" = true ]; then
         cat << EOF
   2. Verify all xcframeworks are in place:
-       cd libraries/$LIBRARY_NAME && ./build-xcframework.sh --all-products
+       ./build.sh BuildXcframework --library $LIBRARY_NAME --all-products
 
   3. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
 
   4. Build + validate:
-       cd tests/$LIBRARY_NAME.SimTests && ./build-testapp.sh && ./validate-sim.sh 30
+       ./build.sh BuildTestApp --library $LIBRARY_NAME
+       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 30
 EOF
     else
         cat << EOF
   2. Verify the xcframework is in place:
-       cd libraries/$LIBRARY_NAME && ./build-xcframework.sh
+       ./build.sh BuildXcframework --library $LIBRARY_NAME
 
   3. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME
 
   4. Build + validate:
-       cd tests/$LIBRARY_NAME.SimTests && ./build-testapp.sh && ./validate-sim.sh 15
+       ./build.sh BuildTestApp --library $LIBRARY_NAME
+       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 15
 EOF
     fi
 elif [ "$IS_MULTI" = true ]; then
-    # Canonical multi-product source/binary flow (see CONTRIBUTING.md). Steps
-    # 3-6 are the two-pass binding-generation dance required when products
-    # reference each other — ProjectReferences can only be injected after the
-    # first build emits fresh C# that detect-dependencies.sh can grep for
-    # cross-module type usage.
+    # Canonical multi-product source/binary flow. BuildLibrary orchestrates
+    # the two-pass binding-generation dance internally (xcframework build →
+    # InjectFrameworkDeps → pass 1 dotnet build → InjectProjectRefs → pass 2
+    # dotnet build) so the user no longer has to chain targets by hand.
     cat << EOF
-  1. Build xcframeworks:
-       cd libraries/$LIBRARY_NAME && ./build-xcframework.sh --all-products
+  1. Build library end-to-end (xcframeworks + two-pass build):
+       ./build.sh BuildLibrary --library $LIBRARY_NAME --all-products
 
-  2. Inject SwiftFrameworkDependency items (enables sibling module resolution):
-       ./scripts/detect-dependencies.sh libraries/$LIBRARY_NAME --all-products --inject
-
-  3. Clean stale generated output (fresh-generation boundary for pass 4):
-       for d in \$(./scripts/build-xcframework.sh libraries/$LIBRARY_NAME --all-products --resolve-products); do
-           sub=\${d%%|*}
-           rm -rf libraries/$LIBRARY_NAME/\${sub:+\$sub/}obj/Debug/net10.0-ios/swift-binding/
-       done
-
-  4. First-pass build — SDK generates fresh C# into obj/.../swift-binding/
-     (wrapper compile may fail; that's expected):
-       # iterate products via --resolve-products and 'dotnet build' each csproj
-
-  5. Inject ProjectReferences (uses freshly generated C# to find real type deps):
-       ./scripts/detect-dependencies.sh libraries/$LIBRARY_NAME --all-products --inject-project-refs
-
-  6. Second-pass build — full build with ProjectReferences in place.
-
-  7. Scaffold tests:
+  2. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
 
-  8. Build test app and validate:
-       cd tests/$LIBRARY_NAME.SimTests && ./build-testapp.sh && ./validate-sim.sh 30
+  3. Build test app and validate:
+       ./build.sh BuildTestApp --library $LIBRARY_NAME
+       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 30
 EOF
 else
     cat << EOF
-  1. Build xcframework: cd libraries/$LIBRARY_NAME && ./build-xcframework.sh
-  2. Scaffold tests:    ./scripts/new-sim-test.sh $LIBRARY_NAME
-  3. Build test app:    cd tests/$LIBRARY_NAME.SimTests && ./build-testapp.sh
+  1. Build library: ./build.sh BuildLibrary --library $LIBRARY_NAME
+  2. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME
+  3. Build test app: ./build.sh BuildTestApp --library $LIBRARY_NAME
      (The SDK csproj generates bindings automatically during build)
-  4. Validate (sim):    ./validate-sim.sh 15
+  4. Validate (sim): ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 15
 EOF
 fi

@@ -55,7 +55,6 @@ Libraries that produce one NuGet package go directly under `libraries/`:
 ```
 libraries/Nuke/
 ├── library.json
-├── build-xcframework.sh
 ├── SwiftBindings.Nuke.csproj
 └── README.md
 ```
@@ -69,7 +68,6 @@ When a vendor distributes 2+ related frameworks from a single SPM repository, gr
 ```
 libraries/Stripe/
 ├── library.json
-├── build-xcframework.sh
 ├── StripeCore/
 │   └── SwiftBindings.Stripe.Core.csproj
 ├── StripePayments/
@@ -87,7 +85,6 @@ When two or more related libraries have a dependency, group them under a parent 
 ```
 libraries/BlinkID/
 ├── library.json
-├── build-xcframework.sh
 ├── BlinkID/
 │   └── SwiftBindings.BlinkID.csproj
 └── BlinkIDUX/
@@ -138,91 +135,44 @@ Internal products:
 - Don't get a csproj or README
 - Are excluded from `--resolve-products` (CI skips them for binding generation)
 
-#### SwiftFrameworkDependency auto-detection
+#### Cross-module dependency injection
 
-Products that import sibling Swift modules need `<SwiftFrameworkDependency>` items in their csproj. Use `detect-dependencies.sh` to auto-detect these from `.swiftinterface` files:
+Multi-product libraries where products import sibling Swift modules need `<SwiftFrameworkDependency>` items (for the SDK's binding generator) and `<ProjectReference>` items (for the C# compiler) in each product csproj. Both are produced by Nuke targets in `build/Build.Dependencies.cs`:
 
-```bash
-# Report mode (stdout):
-scripts/detect-dependencies.sh libraries/Stripe --all-products
+- `InjectFrameworkDeps --library Foo [--all-products]` — writes a `<!-- BEGIN/END auto-detected SwiftFrameworkDependency -->` block by inspecting `.swiftinterface` files inside each xcframework. Idempotent. ObjC-only frameworks (no `.swiftmodule`) are filtered out automatically — never add them as `SwiftFrameworkDependency` or the generator will silently produce no output.
+- `InjectProjectRefs --library Foo [--all-products]` — writes a `<!-- BEGIN/END auto-detected ProjectReference -->` block. **Behavior-derived**: it greps the freshly generated C# under `obj/.../swift-binding/*.cs` for `\bModuleName\.Identifier` and adds a `ProjectReference` only when the generated code actually mentions the sibling. Idempotent on re-runs.
+- `CleanSwiftBindingOutput --library Foo [--all-products]` — wipes every product's `swift-binding/` directory before a fresh first-pass build.
 
-# Inject into csproj files:
-scripts/detect-dependencies.sh libraries/Stripe --all-products --inject
-```
-
-The `--inject` flag:
-- Uses XML comment markers (`<!-- BEGIN/END auto-detected SwiftFrameworkDependency -->`) for idempotent updates
-- Migrates existing manual entries on first run (removes sibling entries, keeps non-sibling ones)
-- Running twice produces identical output
-
-**Prerequisite**: xcframeworks must be built before running.
-
-**Important**: ObjC-only frameworks (no `.swiftmodule`) are automatically excluded from generated deps. Never add them as `SwiftFrameworkDependency` — this causes the generator to silently produce no output.
-
-#### ProjectReference auto-detection (`--inject-project-refs`)
-
-Separate from `--inject`, `--inject-project-refs` adds `<ProjectReference>` items when a product's generated C# actually references a sibling's module namespace. The decision is derived from compile-time evidence in `obj/.../swift-binding/*.cs` — not from the `SwiftFrameworkDependency` list, which would over-inject for runtime-only deps (e.g. `StripePaymentSheet` has a `SwiftFrameworkDependency` on `StripeUICore`, but its generated C# contains zero `StripeUICore.` type references, so no `ProjectReference` is needed).
-
-```bash
-scripts/detect-dependencies.sh libraries/Stripe --all-products --inject-project-refs
-```
-
-The script enforces a strict freshness boundary. `obj/.../swift-binding/swift-binding.stamp` must exist and be newer than both:
+`InjectProjectRefs` enforces a strict freshness boundary. `obj/.../swift-binding/swift-binding.stamp` must exist and be newer than both:
 - the csproj (csproj hasn't been re-injected since the last generation)
 - `<framework>.xcframework/Info.plist` (xcframework hasn't been rebuilt since the last generation)
 
-If either check fails, the run aborts without touching any csproj. Pass `--clean-first` on a separate invocation to wipe every product's `swift-binding/` directory before the first-pass rebuild.
+If either check fails for any product, the run aborts without touching any csproj.
 
-The injector is idempotent: on re-runs it strips the previous `<!-- BEGIN/END auto-detected ProjectReference -->` block and re-emits it from scratch. Comments in the generated C# (XML doc comments like `/// communicates with Stripe.`) are stripped before the grep to avoid false positives.
+#### Canonical multi-product build
 
-#### Canonical two-pass build (multi-product libraries)
-
-Multi-product libraries with cross-module dependencies require a two-pass build so that `--inject-project-refs` can read freshly generated C#. Follow this order:
+`BuildLibrary` chains everything internally — no manual two-pass dance:
 
 ```bash
-cd libraries/Stripe
-
-# 1. Build xcframeworks for every product
-./build-xcframework.sh --all-products
-
-# 2. Inject SwiftFrameworkDependency items — the SDK needs these during
-#    binding generation to resolve sibling modules at the Swift level
-../../scripts/detect-dependencies.sh . --all-products --inject
-
-# 3. (On re-runs) clean stale swift-binding/ output so pass-4 rebuild
-#    produces fresh C# for --inject-project-refs to grep
-../../scripts/detect-dependencies.sh . --all-products --inject-project-refs --clean-first
-
-# 4. First-pass build — SDK generates fresh C#. Wrapper compile may fail
-#    (the SDK records a fingerprint and second-pass skips regeneration).
-while IFS='|' read -r sub csproj; do
-    dotnet build "${sub:+$sub/}$csproj" || true
-done < <(../../scripts/build-xcframework.sh . --all-products --resolve-products)
-
-# 5. Inject ProjectReferences — derived from the fresh C# grep
-../../scripts/detect-dependencies.sh . --all-products --inject-project-refs
-
-# 6. Second-pass build — with ProjectReferences in place, wrapper compile succeeds
-while IFS='|' read -r sub csproj; do
-    dotnet build "${sub:+$sub/}$csproj"
-done < <(../../scripts/build-xcframework.sh . --all-products --resolve-products)
+./build.sh BuildLibrary --library Stripe --all-products
 ```
 
-**In CI:** Set `build_passes: 2` in the matrix entry. The CI workflow automatically runs multiple passes, tolerating build failures on non-final passes.
+Under the hood:
+1. `BuildXcframework` for every product
+2. `InjectFrameworkDeps`
+3. Pass 1 `dotnet build` for each product csproj (wrapper compile may fail; expected — generator emits fresh C#)
+4. `InjectProjectRefs` (reads the fresh C# from step 3)
+5. Pass 2 `dotnet build` for each product csproj (must succeed)
 
-**When auto-detection is insufficient:** If pass 6 still fails with missing-type errors, the grep may have missed a reference. Look at the failing `.cs` file, identify the sibling module being referenced, and verify it appears in that product's `obj/.../swift-binding/*.cs` (the script only greps module-level type references of the form `\bModuleName\.Identifier`). If the reference lives only in the Swift wrapper (`*.Wrapper.swift`) and not in the generated C#, injection won't pick it up — either split the wrapper generation into a later pass, or hand-author the `ProjectReference` outside the `<!-- BEGIN/END auto-detected ProjectReference -->` block (hand-authored refs inside the auto-block are rewritten on every run).
+**When auto-detection is insufficient:** If pass 5 still fails with missing-type errors, the grep may have missed a reference. Look at the failing `.cs` file, identify the sibling module being referenced, and verify it appears in that product's `obj/.../swift-binding/*.cs`. If the reference lives only in the Swift wrapper (`*.Wrapper.swift`) and not in the generated C#, injection won't pick it up — hand-author the `ProjectReference` outside the `<!-- BEGIN/END auto-detected ProjectReference -->` block (hand-authored refs inside the auto-block are rewritten on every run).
 
 #### Onboarding checklist for new multi-product vendors
 
-1. Run `--discover` to list products and identify ObjC-only frameworks
+1. Run `./scripts/new-library.sh --discover <repo-url>` to list products and identify ObjC-only frameworks
 2. Scaffold with `--vendor`, `--products`, and `--internal` flags
-3. Build xcframeworks: `./build-xcframework.sh --all-products`
-4. Auto-detect SFDs: `scripts/detect-dependencies.sh libraries/Vendor --all-products --inject`
-5. First-pass `dotnet build` for each product (SDK emits fresh C# — wrapper may fail)
-6. Auto-detect ProjectRefs: `scripts/detect-dependencies.sh libraries/Vendor --all-products --inject-project-refs`
-7. Second-pass `dotnet build` for each product (should succeed clean)
-8. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
-9. Add to CI matrix with appropriate `build_flags` and `build_passes`
+3. Build the library end-to-end: `./build.sh BuildLibrary --library Vendor --all-products`
+4. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
+5. Push the branch — CI auto-detects the new library from `library.json`
 
 ## Library Config (`library.json`)
 
@@ -256,13 +206,13 @@ Each library root has a `library.json` that declares its SPM source and products
 
 ### Build Modes
 
-The `mode` field tells `build-xcframework.sh` how to obtain the compiled frameworks:
+The `mode` field tells `BuildXcframework` how to obtain the compiled frameworks:
 
-**Source mode** (`"mode": "source"`): Delegates to the pinned `spm-to-xcframework` tool in `.tools/`. The tool clones the repository, discovers schemes, archives each requested product for iOS device and iOS Simulator, and merges the slices into one `<framework>.xcframework` per product. `build-xcframework.sh` then moves each output into the library's directory layout (honoring `subdirectory` for multi-product vendors). Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, etc.
+**Source mode** (`"mode": "source"`): Delegates to the pinned `spm-to-xcframework` tool in `.tools/`. The tool clones the repository, discovers schemes, archives each requested product for iOS device and iOS Simulator, and merges the slices into one `<framework>.xcframework` per product. The Nuke harness then moves each output into the library's directory layout (honoring `subdirectory` for multi-product vendors). Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, etc.
 
-**Binary mode** (`"mode": "binary"`): Delegates to `spm-to-xcframework --binary`, which resolves the vendor's binary SPM package via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today. The wrapper still handles `revision` SHA verification itself before calling the tool, because the tool's binary path doesn't run its source-mode `verify_revision` check.
+**Binary mode** (`"mode": "binary"`): Delegates to `spm-to-xcframework --binary`, which resolves the vendor's binary SPM package via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today. The harness still handles `revision` SHA verification itself before calling the tool, because the tool's binary path doesn't run its source-mode `verify_revision` check.
 
-**Manual mode** (`"mode": "manual"`): No build — the xcframework is provisioned out-of-band. `build-xcframework.sh` verifies each expected `<framework>.xcframework` directory exists under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be downloaded from a vendor portal. Manual xcframeworks are never committed.
+**Manual mode** (`"mode": "manual"`): No build — the xcframework is provisioned out-of-band. `BuildXcframework` verifies each expected `<framework>.xcframework` directory exists under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be downloaded from a vendor portal. Manual xcframeworks are never committed.
 
 **Naming tip:** For source mode, `framework` must match a real SPM product or target name, because it's passed to `spm-to-xcframework` as `--product` or `--target`. The old `scheme` field (previously used for `xcodebuild -scheme`) is no longer needed — the tool auto-discovers schemes from the package. For example, Stripe's umbrella product used to carry `"scheme": "StripeiOS"` alongside `"framework": "Stripe"`; now only `"framework": "Stripe"` is kept, and the tool figures out the `StripeiOS` scheme internally.
 
@@ -273,46 +223,41 @@ Each library directory should contain:
 | File | Purpose |
 |------|---------|
 | `library.json` | SPM source, version, mode, products |
-| `build-xcframework.sh` | Thin wrapper calling `scripts/build-xcframework.sh` |
 | `SwiftBindings.{Name}.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet package) |
 
-## Build Scripts
+Build orchestration lives in the Nuke harness at the repo root (`./build.sh <Target>`); no per-library shell wrappers are written.
 
-### Shared build script
+## Build Targets
 
-The shared `scripts/build-xcframework.sh` reads `library.json` and handles both build modes:
+The Nuke harness exposes one target per concern. The most common entry points:
 
 ```bash
-# Build single product (auto-detected)
-cd libraries/Nuke && ./build-xcframework.sh
+# Build the xcframework(s) for a library
+./build.sh BuildXcframework --library Nuke
+./build.sh BuildXcframework --library Stripe --products StripeCore,StripePayments
+./build.sh BuildXcframework --library Stripe --all-products
 
-# Build specific products
-cd libraries/Stripe && ./build-xcframework.sh --products StripeCore,StripePayments
+# End-to-end build (xcframeworks + dependency injection + dotnet build)
+./build.sh BuildLibrary --library Stripe --all-products
 
-# Build all products
-cd libraries/Stripe && ./build-xcframework.sh --all-products
+# Pack
+./build.sh Pack --library Nuke --version 12.8.0 --output /tmp/packages
 
-# Dry-run: resolve products (for CI)
-scripts/build-xcframework.sh libraries/Stripe --all-products --resolve-products
+# Release flow (build + pack at -c Release + manifest)
+./build.sh BuildAndPackRelease --library Nuke --version 12.8.0 --output /tmp/packages --dry-run
+
+# CI matrix detection
+./build.sh ListChangedLibraries --base-sha origin/main --head-sha HEAD --json
 ```
 
 ## CI
 
-The GitHub Actions workflow auto-detects libraries from `libraries/*/library.json`. On PRs, it only builds libraries with changed files; on `workflow_dispatch`, it builds all. Build flags (multi-product, two-pass) are derived from `library.json` at runtime — no manual matrix configuration needed.
+The GitHub Actions workflow auto-detects libraries from `libraries/*/library.json`. On PRs, `ListChangedLibraries` emits a GHA matrix containing only the libraries touched by the diff (or every library when shared infra under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `global.json`, or `.github/workflows/ci.yml` is affected). On `workflow_dispatch`, `--all` rebuilds everything.
 
-Product lists are resolved via `--resolve-products` to avoid drift between config and CI. Internal products are automatically excluded.
+Internal products are automatically excluded from binding generation. Build flags (multi-product, two-pass) are derived from `library.json` at runtime — no manual matrix configuration needed.
 
-For dependent packages, use `needs:` to enforce build order:
-
-```yaml
-jobs:
-  build-blinkid:
-    # builds first
-  build-blinkidux:
-    needs: build-blinkid
-    # builds after
-```
+Per-library CI steps live in `.github/workflows/ci.yml` and call `BuildLibrary`, `PackValidate`, and `RunCiSimTest`. Cross-library ordering for dependent packages (e.g. `BlinkIDUX` after `BlinkID`) is handled inside the matrix entry — `BuildLibrary` builds dependents bottom-up using the multi-pass orchestration.
 
 ## Simulator Tests
 
@@ -343,32 +288,30 @@ Use `--force` to overwrite an existing test directory.
 
 ### Running tests locally
 
-Per-library test scripts are 3-line wrappers that delegate to shared scripts in `scripts/`. APP name and bundle ID are derived from the test directory basename, so there's nothing to configure per library.
+The Nuke harness derives `APP_NAME` and `BUNDLE_ID` from the test directory basename, so there's nothing to configure per library.
 
 ```bash
-cd tests/LibraryName.SimTests
-
 # Simulator build + validate (default)
-./build-testapp.sh
-# Boot simulator first: xcrun simctl boot <udid>
-./validate-sim.sh 15
+./build.sh BuildTestApp --library LibraryName
+./build.sh BootSim
+./build.sh ValidateSim --library LibraryName --timeout 15
 
 # Physical device (Mono AOT — Debug)
-./build-testapp.sh --device
-./validate-device.sh 30
+./build.sh BuildTestApp --library LibraryName --device
+./build.sh ValidateDevice --library LibraryName --timeout 30
 
 # Physical device (NativeAOT — Release; used for release validation)
 export CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
 export PROVISIONING_PROFILE="Wildcard Dev"
 export TEAM_ID="TL2K6QUQEH"
-./build-testapp.sh --device --aot
-./validate-device.sh --aot 30
+./build.sh BuildTestApp --library LibraryName --device --aot
+./build.sh ValidateDevice --library LibraryName --aot --timeout 30
 ```
 
 **AOT device test prerequisites** (manual QA only — not run in CI):
 - Physical iOS device connected via USB or on the same network
 - Xcode with a working `xcrun devicectl` toolchain
-- Signing credentials exported as `CODESIGN_IDENTITY`, `PROVISIONING_PROFILE`, `TEAM_ID` env vars. The shared `build-testapp.sh` fails with a clear error listing the missing vars when `--aot --device` is invoked without them. CI does not have these credentials, so `--aot --device` is manual-QA-only — confirm the critical libraries (the 5 that historically supported NativeAOT: BlinkID, BlinkIDUX, Lottie, Nuke, Stripe) before cutting a release.
+- Signing credentials exported as `CODESIGN_IDENTITY`, `PROVISIONING_PROFILE`, `TEAM_ID` env vars. `BuildTestApp` fails with a clear error listing the missing vars when `--aot --device` is invoked without them. CI does not have these credentials, so `--aot --device` is manual-QA-only — confirm the critical libraries (the 5 that historically supported NativeAOT: BlinkID, BlinkIDUX, Lottie, Nuke, Stripe) before cutting a release.
 
 ### Adding library-specific tests
 
@@ -377,11 +320,11 @@ Edit `tests/LibraryName.SimTests/Program.cs` — add test methods in `RunLibrary
 2. Log pass/fail via the `TestLogger`
 3. Record result via `TestResults.Pass()` / `.Fail()`
 
-The validate script watches for `TEST SUCCESS` in console output and detects crashes automatically.
+`ValidateSim` / `ValidateDevice` watch stdout for `TEST SUCCESS` and detect crashes automatically.
 
 ## Pinned Tools (`.tools/`)
 
-External tooling used by the build pipeline is pinned by version and SHA-256 inside `scripts/ensure-spm-to-xcframework.sh`. The cached binary lives in `.tools/spm-to-xcframework-<short-sha>` and is gitignored.
+External tooling used by the build pipeline is pinned by version and SHA-256 inside `build/Build.Xcframework.cs`. The cached binary lives in `.tools/spm-to-xcframework-<short-sha>` and is gitignored.
 
 To bump the pinned `spm-to-xcframework` version:
 
@@ -390,14 +333,14 @@ To bump the pinned `spm-to-xcframework` version:
    ```bash
    curl -sfL "https://raw.githubusercontent.com/justinwojo/spm-to-xcframework/<sha>/spm-to-xcframework" | shasum -a 256
    ```
-3. Update the three constants at the top of `scripts/ensure-spm-to-xcframework.sh`:
-   - `SPM_TO_XCF_REF` — the new commit SHA (or tag)
-   - `SPM_TO_XCF_SHA256` — the computed digest
-   - `SPM_TO_XCF_URL` — derived from `SPM_TO_XCF_REF` (only changes if the URL scheme changes)
+3. Update the three constants at the top of `build/Build.Xcframework.cs`:
+   - `SpmToXcfRef` — the new commit SHA (or tag)
+   - `SpmToXcfSha256` — the computed digest
+   - `SpmToXcfUrl` — derived from `SpmToXcfRef` (only changes if the URL scheme changes)
 4. Remove any stale `.tools/spm-to-xcframework-*` files (the filename embeds the short SHA, so older copies become orphans once the pin moves).
-5. Re-run `./scripts/ensure-spm-to-xcframework.sh` to confirm it downloads and verifies cleanly.
+5. Re-run `./build.sh BuildXcframework --library Nuke` to confirm the harness downloads and verifies cleanly.
 
-The ensure script refuses to use a cached copy whose SHA-256 doesn't match the pin — there is no silent fallback to stale contents.
+The harness refuses to use a cached copy whose SHA-256 doesn't match the pin — there is no silent fallback to stale contents.
 
 ## NuGet Naming
 

@@ -20,7 +20,6 @@ on:
         default: true
 
 concurrency:
-  # One release at a time per tag (prevents partial-failure reruns from racing)
   group: release-${{ github.ref_name || github.event.inputs.tag }}
   cancel-in-progress: false
 
@@ -34,19 +33,20 @@ jobs:
     outputs:
       library: ${{ steps.parse.outputs.library }}
       version: ${{ steps.parse.outputs.version }}
-      dry_run: ${{ steps.config.outputs.dry_run }}
-      packages: ${{ steps.pack.outputs.packages }}
+      dry_run: ${{ steps.parse.outputs.dry_run }}
     steps:
       - name: Parse and validate tag
         id: parse
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ github.event.inputs.tag }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+            DRY_RUN="false"
           fi
 
-          # Strict semver validation
+          # Strict semver validation (mirrors release.yml:50 in pre-Session-4)
           if ! echo "$TAG" | grep -qE '^[A-Za-z0-9._-]+/[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$'; then
             echo "::error::Invalid tag format: $TAG (expected <Library>/<semver>, e.g. Nuke/12.8.0)"
             exit 1
@@ -55,44 +55,25 @@ jobs:
           LIBRARY="${TAG%%/[0-9]*}"
           VERSION="${TAG#*/}"
 
+          # All three outputs MUST be emitted in this single step — the
+          # publish job's `if: needs.build.outputs.dry_run != 'true'` gate
+          # depends on dry_run being a real step output, not a literal.
           echo "library=$LIBRARY" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "## Release" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Library:** $LIBRARY" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Determine run mode
-        id: config
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            DRY_RUN="${{ github.event.inputs.dry_run }}"
-          else
-            DRY_RUN="false"
-          fi
           echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
-          echo "- **Dry run:** $DRY_RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Release"
+            echo "- **Library:** $LIBRARY"
+            echo "- **Version:** $VERSION"
+            echo "- **Dry run:** $DRY_RUN"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v4
 
       - name: Ensure local NuGet source exists
         run: mkdir -p local-packages
-
-      - name: Validate library
-        run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-
-          if [ ! -d "libraries/$LIBRARY" ]; then
-            echo "::error::Library directory not found: libraries/$LIBRARY"
-            echo "Available libraries:"
-            ls libraries/ | sed 's/^/  - /'
-            exit 1
-          fi
-
-          if [ ! -f "libraries/$LIBRARY/library.json" ]; then
-            echo "::error::library.json not found in libraries/$LIBRARY"
-            exit 1
-          fi
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -103,52 +84,31 @@ jobs:
       - name: Install workloads
         run: dotnet workload install ios
 
-      - name: Determine build flags
-        id: flags
+      - name: Build, pack, and write release manifest
         run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          CONFIG="libraries/$LIBRARY/library.json"
+          ./build.sh BuildAndPackRelease \
+            --library "${{ steps.parse.outputs.library }}" \
+            --version "${{ steps.parse.outputs.version }}" \
+            --output "${{ runner.temp }}/packages" \
+            ${{ steps.parse.outputs.dry_run == 'true' && '--dry-run' || '' }}
 
-          PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
-
-          if [ "$PRODUCT_COUNT" -gt 1 ]; then
-            echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_flags=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build library (xcframeworks + dependency injection + dotnet build)
-        run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          # --configuration Release is mandatory: dotnet pack --no-build below
-          # looks under bin/Release/net10.0-ios for the .dll/.pdb to package.
-          ./build.sh BuildLibrary --library "$LIBRARY" --configuration Release ${{ steps.flags.outputs.build_flags }}
-
-      - name: Resolve built products
-        id: resolve
-        run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          PRODUCTS=$(scripts/build-xcframework.sh "libraries/$LIBRARY" ${{ steps.flags.outputs.build_flags }} --resolve-products)
-          echo "products<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
+      # Note: RunCiSimTest below builds the test app at -c Debug, which
+      # transitively rebuilds the library .csproj files at Debug (the test
+      # app references them via <ProjectReference>). This is wasted work
+      # relative to the Release build BuildAndPackRelease just produced —
+      # but the test app has always validated Debug binaries (matches the
+      # pre-Session-4 release flow), and the .nupkg files are already on
+      # disk and will be uploaded as-is regardless of what RunCiSimTest
+      # rebuilds. Optimizing this is tracked as a follow-up; for now,
+      # the Release artifacts and the simulator validation are independent.
       - name: Build and validate on iOS Simulator
         timeout-minutes: 20
         run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          TEST_DIR="tests/$LIBRARY.SimTests"
-
-          if [ ! -d "$TEST_DIR" ]; then
-            echo "::warning::No sim test found at $TEST_DIR — skipping test validation"
-            exit 0
-          fi
-
-          python3 scripts/ci/ci_ios_test.py \
-            --test-dir "$TEST_DIR" \
+          ./build.sh RunCiSimTest \
+            --library "${{ steps.parse.outputs.library }}" \
             --timeout 60 \
             --step-timeout 1140 \
-            --reuse-device
+            --reuse-sim
 
       - name: Upload simulator diagnostics
         if: failure()
@@ -159,75 +119,16 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Pack NuGet packages
-        id: pack
+      - name: Summarize packed packages
         run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          VERSION="${{ steps.parse.outputs.version }}"
-          PRODUCTS="${{ steps.resolve.outputs.products }}"
-          PACKAGES=""
-
-          # Pack each product in library.json order (dependencies first)
-          while IFS='|' read -r dir csproj; do
-            [ -z "$csproj" ] && continue
-
-            BUILD_PATH="libraries/$LIBRARY"
-            [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-            echo "=== Packing $csproj ==="
-            dotnet pack "$BUILD_PATH/$csproj" \
-              --no-build \
-              -c Release \
-              /p:Version="$VERSION" \
-              -o "${{ runner.temp }}/packages"
-
-            PACKAGES="$PACKAGES $csproj"
-          done <<< "$PRODUCTS"
-
-          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Packages" >> "$GITHUB_STEP_SUMMARY"
-          ls "${{ runner.temp }}/packages"/*.nupkg | while read -r pkg; do
-            echo "- \`$(basename "$pkg")\`" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-      - name: Generate release manifest
-        run: |
-          LIBRARY="${{ steps.parse.outputs.library }}"
-          VERSION="${{ steps.parse.outputs.version }}"
-          DRY_RUN="${{ steps.config.outputs.dry_run }}"
-
-          python3 -c "
-          import json, os, glob, datetime
-
-          packages = []
-          for f in sorted(glob.glob('${{ runner.temp }}/packages/*.nupkg')):
-              name = os.path.basename(f)
-              # Extract package ID from filename: Swift.Nuke.12.8.0.nupkg -> Swift.Nuke
-              parts = name.rsplit('.', 1)[0]  # Remove .nupkg
-              # Version is the last 3+ dot-separated numeric segments
-              segments = parts.split('.')
-              pkg_parts = []
-              for i, seg in enumerate(segments):
-                  if seg[0:1].isdigit():
-                      pkg_parts = segments[:i]
-                      break
-              pkg_id = '.'.join(pkg_parts) if pkg_parts else parts
-              packages.append({'id': pkg_id, 'file': name})
-
-          manifest = {
-              'library': '$LIBRARY',
-              'version': '$VERSION',
-              'git_sha': '${{ github.sha }}',
-              'dry_run': '$DRY_RUN' == 'true',
-              'packages': packages,
-              'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
-          }
-          with open('${{ runner.temp }}/packages/release-manifest.json', 'w') as f:
-              json.dump(manifest, f, indent=2)
-          print(json.dumps(manifest, indent=2))
-          "
+          {
+            echo ""
+            echo "### Packages"
+            for pkg in "${{ runner.temp }}/packages"/*.nupkg; do
+              [ -f "$pkg" ] || continue
+              echo "- \`$(basename "$pkg")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
@@ -237,12 +138,17 @@ jobs:
           retention-days: 30
 
   # ── Job 2: Publish to NuGet ──────────────────────────────────────────────────
+  # Runs on ubuntu-latest in the `nuget-publish` environment so the
+  # NUGET_API_KEY secret is never exposed to the macOS build job and an
+  # approval gate can be enforced before publishing.
   publish:
     needs: build
     if: needs.build.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     environment: nuget-publish
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
@@ -256,27 +162,20 @@ jobs:
           dotnet-quality: preview
 
       - name: Publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          LIBRARY="${{ needs.build.outputs.library }}"
-          VERSION="${{ needs.build.outputs.version }}"
+          ./build.sh PublishRelease \
+            --packages-dir packages \
+            --nuget-api-key "$NUGET_API_KEY"
 
-          echo "=== Publishing $LIBRARY v$VERSION to NuGet ==="
-
-          # Push packages in filesystem order (library.json order preserved from pack step)
-          for pkg in packages/*.nupkg; do
-            [ -f "$pkg" ] || continue
-            echo "Pushing $(basename "$pkg")..."
-            dotnet nuget push "$pkg" \
-              --source https://api.nuget.org/v3/index.json \
-              --api-key "${{ secrets.NUGET_API_KEY }}" \
-              --skip-duplicate
-          done
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Published to NuGet" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Library:** $LIBRARY" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
-          for pkg in packages/*.nupkg; do
-            [ -f "$pkg" ] || continue
-            echo "- \`$(basename "$pkg")\`" >> "$GITHUB_STEP_SUMMARY"
-          done
+          {
+            echo ""
+            echo "### Published to NuGet"
+            echo "- **Library:** ${{ needs.build.outputs.library }}"
+            echo "- **Version:** ${{ needs.build.outputs.version }}"
+            for pkg in packages/*.nupkg; do
+              [ -f "$pkg" ] || continue
+              echo "- \`$(basename "$pkg")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -17,11 +17,8 @@ dotnet add package SwiftBindings.Stripe.CardScan
 ## Building from Source
 
 ```bash
-# 1. Build the xcframework from SPM
-./build-xcframework.sh
-
-# 2. Build the package (SDK generates bindings automatically)
-dotnet build
+# Build all Stripe products end-to-end (xcframeworks + bindings + dotnet build)
+./build.sh BuildLibrary --library Stripe --all-products
 ```
 
 ## License

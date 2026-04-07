@@ -17,11 +17,8 @@ dotnet add package SwiftBindings.BlinkIDUX
 ## Building from Source
 
 ```bash
-# 1. Build the xcframework from SPM
-./build-xcframework.sh
-
-# 2. Build the package (SDK generates bindings automatically)
-dotnet build
+# Build the package end-to-end (xcframework + bindings + dotnet build)
+./build.sh BuildLibrary --library BlinkIDUX
 ```
 
 ## License

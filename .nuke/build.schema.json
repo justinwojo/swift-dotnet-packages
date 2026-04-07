@@ -24,8 +24,10 @@
     "ExecutableTarget": {
       "type": "string",
       "enum": [
+        "BootSim",
         "BuildAllLibraries",
         "BuildAllXcframeworks",
+        "BuildAndPackRelease",
         "BuildLibrary",
         "BuildTestApp",
         "BuildXcframework",
@@ -34,9 +36,19 @@
         "Compile",
         "InjectFrameworkDeps",
         "InjectProjectRefs",
+        "ListChangedLibraries",
         "ListLibraries",
+        "ListSims",
+        "Pack",
+        "PackValidate",
+        "PublishRelease",
         "Restore",
-        "ValidateRewriter"
+        "RunCiSimTest",
+        "ShutdownSim",
+        "ValidateDevice",
+        "ValidateRewriter",
+        "ValidateSim",
+        "ValidateWatcherSelfTest"
       ]
     },
     "Verbosity": {
@@ -110,6 +122,10 @@
   "allOf": [
     {
       "properties": {
+        "All": {
+          "type": "boolean",
+          "description": "ListChangedLibraries: ignore the diff and return every library"
+        },
         "AllProducts": {
           "type": "boolean",
           "description": "Build all products in library.json"
@@ -117,6 +133,10 @@
         "Aot": {
           "type": "boolean",
           "description": "Use NativeAOT publish for the test app (requires --device + codesign env vars)"
+        },
+        "BaseSha": {
+          "type": "string",
+          "description": "Base SHA for ListChangedLibraries diff"
         },
         "CleanFirst": {
           "type": "boolean",
@@ -138,13 +158,47 @@
           "type": "string",
           "description": "Simulator UDID (default: booted)"
         },
+        "DiagDir": {
+          "type": "string",
+          "description": "Diagnostics dir for sim diagnostics (default: /tmp/sim-diagnostics)"
+        },
+        "DryRun": {
+          "type": "boolean",
+          "description": "Mark this release as a dry run (build + pack, skip publish)"
+        },
+        "HeadSha": {
+          "type": "string",
+          "description": "Head SHA for ListChangedLibraries diff"
+        },
+        "Json": {
+          "type": "boolean",
+          "description": "ListChangedLibraries: emit GHA matrix JSON instead of newline-delimited names"
+        },
         "Library": {
           "type": "string",
           "description": "Library name (matches libraries/<name>/)"
         },
+        "MaxInfraRetries": {
+          "type": "integer",
+          "description": "Max retries for infrastructure failures (RunCiSimTest)",
+          "format": "int32"
+        },
+        "MaxTestRetries": {
+          "type": "integer",
+          "description": "Max retries for test-timeout (RunCiSimTest)",
+          "format": "int32"
+        },
         "NuGetApiKey": {
           "type": "string",
           "default": "Secrets must be entered via 'nuke :secrets [profile]'"
+        },
+        "Output": {
+          "type": "string",
+          "description": "Output directory for Pack/PackValidate (default: artifacts/packages)"
+        },
+        "PackagesDir": {
+          "type": "string",
+          "description": "Directory containing .nupkg files for PublishRelease (artifact-staged)"
         },
         "Products": {
           "type": "array",
@@ -164,6 +218,11 @@
         "RuntimeIdentifier": {
           "type": "string",
           "description": "iOS RID — overrides default of iossimulator-arm64"
+        },
+        "StepTimeout": {
+          "type": "integer",
+          "description": "Outer wall-clock budget for RunCiSimTest in seconds (default: 1140)",
+          "format": "int32"
         },
         "Timeout": {
           "type": "integer",

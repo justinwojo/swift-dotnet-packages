@@ -21,8 +21,66 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE_DIR="$REPO_ROOT/templates/sim-test"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+#
+# These helpers were previously sourced from scripts/lib.sh. That file was
+# removed when the Nuke migration deleted the bash build orchestration, but
+# scaffolding still parses library.json so the relevant helpers are inlined
+# here. Keep them minimal — anything more elaborate belongs in the Nuke
+# harness, not in bash.
 
-source "$(dirname "$0")/lib.sh"
+die() { echo "Error: $*" >&2; exit 1; }
+
+json_array_len() {
+    python3 -c "import json; data=json.load(open('$1')); print(len(data.get('$2', [])))"
+}
+
+json_product_field() {
+    # json_product_field <file> <index> <field> [default]
+    python3 -c "
+import json
+data = json.load(open('$1'))
+product = data['products'][$2]
+print(product.get('$3', '${4:-}'))
+"
+}
+
+json_product_bool() {
+    local val
+    val=$(json_product_field "$1" "$2" "$3" "")
+    if [ "$val" = "True" ] || [ "$val" = "true" ]; then
+        echo "true"
+    fi
+}
+
+json_product_names() {
+    python3 -c "
+import json
+data = json.load(open('$1'))
+for p in data['products']:
+    print(p['framework'])
+"
+}
+
+# discover_single_csproj <dir>
+#
+# Find the single SwiftBindings.*.csproj file in <dir>. Fails loudly when
+# zero or multiple matches exist — vendor-prefixed names (e.g.
+# SwiftBindings.Stripe.Core.csproj for module StripeCore) mean the filename
+# can't be predicted from the module name alone, so discovery on disk is
+# the canonical resolution path.
+discover_single_csproj() {
+    local dir="$1"
+    [ -d "$dir" ] || die "discover_single_csproj: directory not found: $dir"
+    local matches=()
+    while IFS= read -r -d '' f; do
+        matches+=("$f")
+    done < <(find "$dir" -maxdepth 1 -name 'SwiftBindings.*.csproj' -print0 2>/dev/null)
+    case "${#matches[@]}" in
+        0) die "No SwiftBindings.*.csproj found in $dir" ;;
+        1) echo "${matches[0]}" ;;
+        *) die "Multiple SwiftBindings.*.csproj found in $dir: ${matches[*]}" ;;
+    esac
+}
 
 # Resolve a library's products to an array of "lib_dir|framework|module|subdir" entries.
 # Arguments: <library_name> <product_filter> (product_filter: "" for auto, "*" for all, "P1,P2" for specific)
@@ -391,9 +449,6 @@ with open('$TARGET_DIR/$filename', 'w') as f:
     fi
 done
 
-# Make shell scripts executable
-chmod +x "$TARGET_DIR"/*.sh
-
 echo "Created tests/${LIBRARY_NAME}.SimTests/"
 echo ""
 echo "Resolved products ($TOTAL_PRODUCTS):"
@@ -409,11 +464,10 @@ for entry in "${RESOLVED_PRODUCTS[@]}"; do
 done
 echo ""
 echo "Next steps:"
-echo "  1. Build xcframework: cd libraries/${LIBRARY_NAME} && ./build-xcframework.sh"
-echo "  2. Build test app:    cd tests/${LIBRARY_NAME}.SimTests && ./build-testapp.sh"
-echo "     For device:       ./build-testapp.sh --device"
+echo "  1. Build library:     ./build.sh BuildLibrary --library ${LIBRARY_NAME}"
+echo "  2. Build test app:    ./build.sh BuildTestApp --library ${LIBRARY_NAME}"
+echo "     For device:        ./build.sh BuildTestApp --library ${LIBRARY_NAME} --device"
 echo "     (The SDK csproj generates bindings automatically during build)"
-echo "  3. Boot simulator:    xcrun simctl boot <device-udid>"
-echo "  4. Validate (sim):    ./validate-sim.sh 15"
-echo "     Validate (device): ./validate-device.sh 30"
-echo "  5. Add library-specific tests to Program.cs"
+echo "  3. Validate (sim):    ./build.sh ValidateSim --library ${LIBRARY_NAME} --timeout 15"
+echo "     Validate (device): ./build.sh ValidateDevice --library ${LIBRARY_NAME} --timeout 30"
+echo "  4. Add library-specific tests to Program.cs"

@@ -58,7 +58,13 @@ partial class Build
     void BuildTestAppSimulator(string library, AbsolutePath testDir)
     {
         Log.Information("=== Building {Library} tests for simulator ===", library);
-        var exit = RunDotnet(new[] { "build", (string)testDir, "-c", "Debug" });
+        var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
+        // Only pass an explicit RID when the user overrode it. Leaving the
+        // default build command untouched preserves the SDK's automatic
+        // iossimulator-arm64 selection that Session 3 validated end-to-end.
+        if (!string.IsNullOrEmpty(RuntimeIdentifier))
+            args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
+        var exit = RunDotnet(args.ToArray());
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build (sim) failed with exit {exit}");
     }
@@ -66,9 +72,10 @@ partial class Build
     void BuildTestAppDevice(string library, AbsolutePath testDir)
     {
         Log.Information("=== Building {Library} tests for device ===", library);
+        var rid = ResolveRid("ios-arm64");
         var exit = RunDotnet(new[]
         {
-            "build", (string)testDir, "-c", "Debug", "-p:RuntimeIdentifier=ios-arm64",
+            "build", (string)testDir, "-c", "Debug", $"-p:RuntimeIdentifier={rid}",
         });
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build (device) failed with exit {exit}");
@@ -104,11 +111,12 @@ partial class Build
         }
 
         Log.Information("=== Building {Library} tests for device (NativeAOT) ===", library);
+        var rid = ResolveRid("ios-arm64");
         var exit = RunDotnet(new[]
         {
             "publish", (string)testDir,
             "-c", "Release",
-            "-r", "ios-arm64",
+            "-r", rid,
             "-p:PublishAot=true",
             "-p:PublishAotUsingRuntimePack=true",
             $"-p:CodesignKey={codesignIdentity}",

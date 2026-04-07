@@ -22,79 +22,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # required for diff-based ListChangedLibraries
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
 
       - name: Detect changed libraries
         id: detect
         run: |
+          # Nuke writes its banner, target table, and "Build succeeded" line
+          # to stdout, so `tail -n 1` would capture the success banner — not
+          # the JSON. Grep for the matrix line by its leading `{"include":`
+          # marker instead. ListChangedLibraries always emits exactly one
+          # matrix line; if the regex matches zero or more than one we want
+          # to fail loudly rather than silently set MATRIX to garbage.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual trigger — building all libraries"
-            LIBRARIES=""
-            for dir in libraries/*/; do
-              lib=$(basename "$dir")
-              [ -f "$dir/library.json" ] && LIBRARIES="$LIBRARIES $lib"
-            done
-            LIBRARIES=$(echo "$LIBRARIES" | xargs)
+            MATRIX=$(./build.sh ListChangedLibraries --all --json \
+              | grep -E '^\{"include":' | tail -n 1)
           else
-            CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }})
-            echo "Changed files:"
-            echo "$CHANGED"
-            echo ""
-
-            # Shared infra changes affect all libraries — build everything
-            if echo "$CHANGED" | grep -qE '^(scripts/|templates/|Directory\.Build\.props|global\.json|\.github/workflows/ci\.yml)'; then
-              echo "Shared infrastructure changed — building all libraries"
-              LIBRARIES=""
-              for dir in libraries/*/; do
-                lib=$(basename "$dir")
-                [ -f "$dir/library.json" ] && LIBRARIES="$LIBRARIES $lib"
-              done
-              LIBRARIES=$(echo "$LIBRARIES" | xargs)
-            else
-              # Extract library names from changed library or test paths
-              LIBRARIES=$(echo "$CHANGED" \
-                | grep -oE '^(libraries|tests)/[^/]+' \
-                | sed 's|^libraries/||; s|^tests/||; s|\.SimTests$||' \
-                | sort -u || true)
-
-              # Filter to libraries that actually exist
-              VALID=""
-              for lib in $LIBRARIES; do
-                if [ -d "libraries/$lib" ] && [ -f "libraries/$lib/library.json" ]; then
-                  VALID="$VALID $lib"
-                else
-                  echo "Skipping '$lib' — no matching library directory"
-                fi
-              done
-              LIBRARIES=$(echo "$VALID" | xargs)
-            fi
+            MATRIX=$(./build.sh ListChangedLibraries \
+              --base-sha "${{ github.event.pull_request.base.sha }}" \
+              --head-sha "${{ github.sha }}" \
+              --json \
+              | grep -E '^\{"include":' | tail -n 1)
           fi
 
-          if [ -z "$LIBRARIES" ]; then
-            echo "No library changes detected"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ -z "$MATRIX" ]; then
+            echo "::error::ListChangedLibraries did not emit a matrix line — see preceding output"
+            exit 1
           fi
 
-          echo "Libraries to build: $LIBRARIES"
-          echo "has_changes=true" >> "$GITHUB_OUTPUT"
-
-          # Build JSON matrix from library names
-          MATRIX='{"include":['
-          FIRST=true
-          for lib in $LIBRARIES; do
-            if [ "$FIRST" = true ]; then
-              FIRST=false
-            else
-              MATRIX="$MATRIX,"
-            fi
-            MATRIX="$MATRIX{\"library\":\"$lib\"}"
-          done
-          MATRIX="$MATRIX]}"
-
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+          # has_changes=false when the include[] array is empty
+          if echo "$MATRIX" | grep -q '"include":\[\]'; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
 
   # ── Build, test, and validate packaging ────────────────────────────────────
   build:
@@ -119,63 +88,20 @@ jobs:
       - name: Install workloads
         run: dotnet workload install ios
 
-      - name: Determine build flags
-        id: flags
-        run: |
-          CONFIG="libraries/${{ matrix.library }}/library.json"
-
-          PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG'))['products']))")
-
-          if [ "$PRODUCT_COUNT" -gt 1 ]; then
-            echo "build_flags=--all-products" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_flags=" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build library (xcframeworks + dependency injection + dotnet build)
-        run: |
-          ./build.sh BuildLibrary --library "${{ matrix.library }}" ${{ steps.flags.outputs.build_flags }}
-
-      - name: Resolve built products
-        id: resolve
-        run: |
-          PRODUCTS=$(scripts/build-xcframework.sh "libraries/${{ matrix.library }}" ${{ steps.flags.outputs.build_flags }} --resolve-products)
-          echo "products<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$PRODUCTS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+        run: ./build.sh BuildLibrary --library "${{ matrix.library }}" --all-products
 
       - name: Validate packaging
-        run: |
-          PRODUCTS="${{ steps.resolve.outputs.products }}"
-
-          while IFS='|' read -r dir csproj; do
-            [ -z "$csproj" ] && continue
-
-            BUILD_PATH="libraries/${{ matrix.library }}"
-            [ -n "$dir" ] && BUILD_PATH="$BUILD_PATH/$dir"
-
-            echo "=== Validating pack: $csproj ==="
-            dotnet pack "$BUILD_PATH/$csproj" --no-build /p:Version=0.0.0-ci -o "${{ runner.temp }}/ci-packages"
-          done <<< "$PRODUCTS"
-
-          echo "Packages produced:"
-          ls "${{ runner.temp }}/ci-packages"/*.nupkg 2>/dev/null || echo "::warning::No .nupkg files produced"
+        run: ./build.sh PackValidate --library "${{ matrix.library }}" --output "${{ runner.temp }}/ci-packages"
 
       - name: Build and validate on iOS Simulator
         timeout-minutes: 20
         run: |
-          TEST_DIR="tests/${{ matrix.library }}.SimTests"
-
-          if [ ! -d "$TEST_DIR" ]; then
-            echo "::warning::No sim test found at $TEST_DIR — skipping test validation"
-            exit 0
-          fi
-
-          python3 scripts/ci/ci_ios_test.py \
-            --test-dir "$TEST_DIR" \
+          ./build.sh RunCiSimTest \
+            --library "${{ matrix.library }}" \
             --timeout 60 \
             --step-timeout 1140 \
-            --reuse-device
+            --reuse-sim
 
       - name: Upload simulator diagnostics
         if: failure()

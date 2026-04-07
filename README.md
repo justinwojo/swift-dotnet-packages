@@ -36,18 +36,16 @@ Each library follows the same workflow:
 ## Quick Start
 
 ```bash
-# Build a library's xcframework
-cd libraries/Nuke && ./build-xcframework.sh
-
-# Generate bindings and compile (SDK handles generation automatically)
-dotnet build
+# Build a library end-to-end (xcframework + dotnet build)
+./build.sh BuildLibrary --library Nuke
 
 # Run simulator tests
-cd ../../tests/Nuke.SimTests
-./build-testapp.sh
-xcrun simctl boot <device-udid>
-./validate-sim.sh 15
+./build.sh BootSim
+./build.sh BuildTestApp --library Nuke
+./build.sh ValidateSim --library Nuke --timeout 15
 ```
+
+All build/test/release orchestration runs through the Nuke harness — see `build/Build.*.cs` for the target definitions.
 
 ## Adding Libraries
 
