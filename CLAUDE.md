@@ -198,7 +198,7 @@ CI auto-detects libraries from `libraries/*/library.json` — no manual matrix c
 
 ## Dependencies
 
-- **SwiftBindings.Sdk** NuGet package (currently `0.6.1`) — handles binding generation during `dotnet build`
+- **SwiftBindings.Sdk** NuGet package (currently `0.7.0`) — handles binding generation during `dotnet build`
 - **SwiftBindings.Runtime** NuGet package — resolved transitively via the SDK (do not pin explicitly in csproj)
 - **.NET SDK 10.0** — pinned in `global.json`
 
