@@ -30,7 +30,7 @@ Each library directory under `libraries/` contains:
 | `SwiftBindings.<Name>.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet) |
 
-Build orchestration lives in the Nuke harness (`./build.sh <Target>`) at the repo root, not in per-library shell wrappers — see `build/Build.*.cs`.
+Build orchestration lives in the Nuke harness (`dotnet nuke <Target>`) at the repo root, not in per-library shell wrappers — see `build/Build.*.cs`. The Nuke CLI is pinned in `.config/dotnet-tools.json`; run `dotnet tool restore` once after cloning to install it.
 
 ### Library Config (`library.json`)
 
@@ -60,7 +60,7 @@ Each library root has a `library.json` declaring its SPM source and products:
 
 ### Nuke Build Targets
 
-All build/test/release orchestration runs through the Nuke harness at the repo root: `./build.sh <Target> [--library Name] [...]`. Implementation lives under `build/Build.*.cs` (one partial class per concern). Key targets:
+All build/test/release orchestration runs through the Nuke harness at the repo root: `dotnet nuke <Target> [--library Name] [...]`. Implementation lives under `build/Build.*.cs` (one partial class per concern). Key targets:
 
 - `BuildXcframework --library X [--products P1,P2] [--all-products]` — builds Swift xcframeworks via spm-to-xcframework.
 - `BuildLibrary --library X [--all-products]` — full end-to-end: xcframework build → dependency injection (multi-product) → two-pass `dotnet build`.
@@ -156,19 +156,19 @@ Filename placeholder: `__LIBRARY_NAME__` in template filenames becomes the actua
 
 ```bash
 # 1. Build the library end-to-end (xcframework + dotnet build)
-./build.sh BuildLibrary --library Nuke
+dotnet nuke BuildLibrary --library Nuke
 
 # 2. Build the test app (SDK generates bindings automatically)
-./build.sh BuildTestApp --library Nuke           # simulator (default)
-./build.sh BuildTestApp --library Nuke --device  # physical device (Mono AOT)
-./build.sh BuildTestApp --library Nuke --device --aot  # physical device (NativeAOT)
+dotnet nuke BuildTestApp --library Nuke           # simulator (default)
+dotnet nuke BuildTestApp --library Nuke --device  # physical device (Mono AOT)
+dotnet nuke BuildTestApp --library Nuke --device --aot  # physical device (NativeAOT)
 
 # 3a. Simulator: boot from the fleet and validate
-./build.sh BootSim
-./build.sh ValidateSim --library Nuke --timeout 15
+dotnet nuke BootSim
+dotnet nuke ValidateSim --library Nuke --timeout 15
 
 # 3b. Device: validate on a connected device
-./build.sh ValidateDevice --library Nuke --timeout 30
+dotnet nuke ValidateDevice --library Nuke --timeout 30
 ```
 
 `ValidateSim` / `ValidateDevice` install the app, watch stdout for `TEST SUCCESS` or crash signals, and return exit 0/1. CI uses `RunCiSimTest` which wraps boot + build + validate + diagnostics upload in a single target.
@@ -185,10 +185,10 @@ After scaffolding, edit `tests/LibraryName.SimTests/Program.cs`:
 The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26`. It dynamically detects which libraries changed in the PR and builds only those (or all libraries on `workflow_dispatch`).
 
 **Steps per library:**
-1. **Detect changed libraries** — `./build.sh ListChangedLibraries --base-sha ... --head-sha ... --json` produces the GHA matrix.
-2. **Build library** — `./build.sh BuildLibrary --library $X --all-products` (orchestrates xcframework build, dependency injection, and the two-pass `dotnet build` internally).
-3. **Validate packaging** — `./build.sh PackValidate --library $X` (smoke pack with version `0.0.0-ci`).
-4. **Build + run sim tests** — `./build.sh RunCiSimTest --library $X --timeout 60 --reuse-sim` (boots a sim from the fleet, builds the test app, runs `ValidateSim`, uploads sim diagnostics on failure).
+1. **Detect changed libraries** — `dotnet nuke ListChangedLibraries --base-sha ... --head-sha ... --json` produces the GHA matrix.
+2. **Build library** — `dotnet nuke BuildLibrary --library $X --all-products` (orchestrates xcframework build, dependency injection, and the two-pass `dotnet build` internally).
+3. **Validate packaging** — `dotnet nuke PackValidate --library $X` (smoke pack with version `0.0.0-ci`).
+4. **Build + run sim tests** — `dotnet nuke RunCiSimTest --library $X --timeout 60 --reuse-sim` (boots a sim from the fleet, builds the test app, runs `ValidateSim`, uploads sim diagnostics on failure).
 
 CI auto-detects libraries from `libraries/*/library.json` — no manual matrix configuration needed. `ListChangedLibraries` treats changes under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `global.json`, and `.github/workflows/ci.yml` as shared infra and rebuilds every library.
 
@@ -242,7 +242,7 @@ Any failing check aborts the run atomically — no csprojs are modified until ev
 `BuildLibrary` chains the entire two-pass flow internally for multi-product libraries:
 
 ```bash
-./build.sh BuildLibrary --library Stripe --all-products
+dotnet nuke BuildLibrary --library Stripe --all-products
 ```
 
 Under the hood this runs:

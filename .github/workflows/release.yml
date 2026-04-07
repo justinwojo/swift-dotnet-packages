@@ -84,9 +84,23 @@ jobs:
       - name: Install workloads
         run: dotnet workload install ios
 
+      # Cache must come BEFORE `dotnet tool restore` so the restored
+      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
+      # runs — otherwise tool restore re-downloads the tool every time
+      # and only the post-restore steps benefit from the cache.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
       - name: Build, pack, and write release manifest
         run: |
-          ./build.sh BuildAndPackRelease \
+          dotnet nuke BuildAndPackRelease \
             --library "${{ steps.parse.outputs.library }}" \
             --version "${{ steps.parse.outputs.version }}" \
             --output "${{ runner.temp }}/packages" \
@@ -104,7 +118,7 @@ jobs:
       - name: Build and validate on iOS Simulator
         timeout-minutes: 20
         run: |
-          ./build.sh RunCiSimTest \
+          dotnet nuke RunCiSimTest \
             --library "${{ steps.parse.outputs.library }}" \
             --timeout 60 \
             --step-timeout 1140 \
@@ -161,11 +175,25 @@ jobs:
           dotnet-version: 10.0.x
           dotnet-quality: preview
 
+      # Cache must come BEFORE `dotnet tool restore` so the restored
+      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
+      # runs — otherwise tool restore re-downloads the tool every time
+      # and only the post-restore steps benefit from the cache.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
       - name: Publish to NuGet
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          ./build.sh PublishRelease \
+          dotnet nuke PublishRelease \
             --packages-dir packages \
             --nuget-api-key "$NUGET_API_KEY"
 

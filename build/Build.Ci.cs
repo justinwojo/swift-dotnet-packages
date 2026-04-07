@@ -30,9 +30,10 @@ partial class Build
     ///   <item><c>--base-sha &lt;X&gt; --head-sha &lt;Y&gt;</c> — diff-based path. If
     ///         any shared-infra path changed (<c>scripts/</c>, <c>templates/</c>,
     ///         <c>Directory.Build.props</c>, <c>global.json</c>,
-    ///         <c>.github/workflows/ci.yml</c>, plus the new
-    ///         <c>build/</c> + <c>build.sh</c> Nuke harness paths), return all
-    ///         libraries — same expansion semantics as <c>ci.yml:45–52</c>.
+    ///         <c>.github/workflows/ci.yml</c>, plus the Nuke harness paths
+    ///         (<c>build/</c>, <c>.nuke/</c>, <c>.config/dotnet-tools.json</c>,
+    ///         <c>build.sh</c>)), return all libraries — same expansion
+    ///         semantics as <c>ci.yml:45–52</c>.
     ///         Otherwise extract <c>^(libraries|tests)/&lt;name&gt;</c>, strip
     ///         <c>.SimTests</c>, dedupe, and filter to libraries that actually
     ///         exist on disk.</item>
@@ -80,17 +81,21 @@ partial class Build
 
         // Shared-infra paths from ci.yml:45 — files whose changes invalidate
         // every library and force a full rebuild. The Nuke harness sources
-        // (build/, build.sh, build.cmd, build.ps1, .nuke/) are added on top
-        // of the original list because a change to the build harness affects
-        // every library just as much as a change to scripts/ used to.
+        // (build/, .nuke/, .config/dotnet-tools.json, build.sh) are included
+        // because a change to the build harness, its pinned tool version, or
+        // its discovery-marker / convenience wrapper affects every library
+        // just as much as a change to scripts/ used to. build.sh is still
+        // part of the build surface even after the dotnet-nuke switch:
+        // Nuke's CLI uses it as a discovery marker to locate _build.csproj,
+        // and it's also the supported `./build.sh <Target>` entrypoint —
+        // so a PR that only modifies build.sh must still exercise CI.
         bool IsSharedInfra(string path) =>
             path.StartsWith("scripts/", StringComparison.Ordinal)
             || path.StartsWith("templates/", StringComparison.Ordinal)
             || path.StartsWith("build/", StringComparison.Ordinal)
             || path.StartsWith(".nuke/", StringComparison.Ordinal)
+            || path == ".config/dotnet-tools.json"
             || path == "build.sh"
-            || path == "build.cmd"
-            || path == "build.ps1"
             || path == "Directory.Build.props"
             || path == "global.json"
             || path == ".github/workflows/ci.yml";

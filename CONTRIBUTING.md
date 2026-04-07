@@ -154,7 +154,7 @@ If either check fails for any product, the run aborts without touching any cspro
 `BuildLibrary` chains everything internally — no manual two-pass dance:
 
 ```bash
-./build.sh BuildLibrary --library Stripe --all-products
+dotnet nuke BuildLibrary --library Stripe --all-products
 ```
 
 Under the hood:
@@ -170,7 +170,7 @@ Under the hood:
 
 1. Run `./scripts/new-library.sh --discover <repo-url>` to list products and identify ObjC-only frameworks
 2. Scaffold with `--vendor`, `--products`, and `--internal` flags
-3. Build the library end-to-end: `./build.sh BuildLibrary --library Vendor --all-products`
+3. Build the library end-to-end: `dotnet nuke BuildLibrary --library Vendor --all-products`
 4. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
 5. Push the branch — CI auto-detects the new library from `library.json`
 
@@ -226,7 +226,7 @@ Each library directory should contain:
 | `SwiftBindings.{Name}.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet package) |
 
-Build orchestration lives in the Nuke harness at the repo root (`./build.sh <Target>`); no per-library shell wrappers are written.
+Build orchestration lives in the Nuke harness at the repo root (`dotnet nuke <Target>`); no per-library shell wrappers are written. The Nuke CLI is pinned in `.config/dotnet-tools.json`; run `dotnet tool restore` once after cloning to install it.
 
 ## Build Targets
 
@@ -234,21 +234,21 @@ The Nuke harness exposes one target per concern. The most common entry points:
 
 ```bash
 # Build the xcframework(s) for a library
-./build.sh BuildXcframework --library Nuke
-./build.sh BuildXcframework --library Stripe --products StripeCore,StripePayments
-./build.sh BuildXcframework --library Stripe --all-products
+dotnet nuke BuildXcframework --library Nuke
+dotnet nuke BuildXcframework --library Stripe --products StripeCore,StripePayments
+dotnet nuke BuildXcframework --library Stripe --all-products
 
 # End-to-end build (xcframeworks + dependency injection + dotnet build)
-./build.sh BuildLibrary --library Stripe --all-products
+dotnet nuke BuildLibrary --library Stripe --all-products
 
 # Pack
-./build.sh Pack --library Nuke --version 12.8.0 --output /tmp/packages
+dotnet nuke Pack --library Nuke --version 12.8.0 --output /tmp/packages
 
 # Release flow (build + pack at -c Release + manifest)
-./build.sh BuildAndPackRelease --library Nuke --version 12.8.0 --output /tmp/packages --dry-run
+dotnet nuke BuildAndPackRelease --library Nuke --version 12.8.0 --output /tmp/packages --dry-run
 
 # CI matrix detection
-./build.sh ListChangedLibraries --base-sha origin/main --head-sha HEAD --json
+dotnet nuke ListChangedLibraries --base-sha origin/main --head-sha HEAD --json
 ```
 
 ## CI
@@ -292,20 +292,20 @@ The Nuke harness derives `APP_NAME` and `BUNDLE_ID` from the test directory base
 
 ```bash
 # Simulator build + validate (default)
-./build.sh BuildTestApp --library LibraryName
-./build.sh BootSim
-./build.sh ValidateSim --library LibraryName --timeout 15
+dotnet nuke BuildTestApp --library LibraryName
+dotnet nuke BootSim
+dotnet nuke ValidateSim --library LibraryName --timeout 15
 
 # Physical device (Mono AOT — Debug)
-./build.sh BuildTestApp --library LibraryName --device
-./build.sh ValidateDevice --library LibraryName --timeout 30
+dotnet nuke BuildTestApp --library LibraryName --device
+dotnet nuke ValidateDevice --library LibraryName --timeout 30
 
 # Physical device (NativeAOT — Release; used for release validation)
 export CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
 export PROVISIONING_PROFILE="Wildcard Dev"
 export TEAM_ID="TL2K6QUQEH"
-./build.sh BuildTestApp --library LibraryName --device --aot
-./build.sh ValidateDevice --library LibraryName --aot --timeout 30
+dotnet nuke BuildTestApp --library LibraryName --device --aot
+dotnet nuke ValidateDevice --library LibraryName --aot --timeout 30
 ```
 
 **AOT device test prerequisites** (manual QA only — not run in CI):
@@ -338,7 +338,7 @@ To bump the pinned `spm-to-xcframework` version:
    - `SpmToXcfSha256` — the computed digest
    - `SpmToXcfUrl` — derived from `SpmToXcfRef` (only changes if the URL scheme changes)
 4. Remove any stale `.tools/spm-to-xcframework-*` files (the filename embeds the short SHA, so older copies become orphans once the pin moves).
-5. Re-run `./build.sh BuildXcframework --library Nuke` to confirm the harness downloads and verifies cleanly.
+5. Re-run `dotnet nuke BuildXcframework --library Nuke` to confirm the harness downloads and verifies cleanly.
 
 The harness refuses to use a cached copy whose SHA-256 doesn't match the pin — there is no silent fallback to stale contents.
 

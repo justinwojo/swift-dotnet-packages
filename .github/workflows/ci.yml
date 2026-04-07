@@ -30,6 +30,20 @@ jobs:
           dotnet-version: 10.0.x
           dotnet-quality: preview
 
+      # Cache must come BEFORE `dotnet tool restore` so the restored
+      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
+      # runs — otherwise tool restore re-downloads the tool every time
+      # and only the post-restore steps benefit from the cache.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
       - name: Detect changed libraries
         id: detect
         run: |
@@ -40,10 +54,10 @@ jobs:
           # matrix line; if the regex matches zero or more than one we want
           # to fail loudly rather than silently set MATRIX to garbage.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            MATRIX=$(./build.sh ListChangedLibraries --all --json \
+            MATRIX=$(dotnet nuke ListChangedLibraries --all --json \
               | grep -E '^\{"include":' | tail -n 1)
           else
-            MATRIX=$(./build.sh ListChangedLibraries \
+            MATRIX=$(dotnet nuke ListChangedLibraries \
               --base-sha "${{ github.event.pull_request.base.sha }}" \
               --head-sha "${{ github.sha }}" \
               --json \
@@ -88,16 +102,30 @@ jobs:
       - name: Install workloads
         run: dotnet workload install ios
 
+      # Cache must come BEFORE `dotnet tool restore` so the restored
+      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
+      # runs — otherwise tool restore re-downloads the tool every time
+      # and only the post-restore steps benefit from the cache.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
       - name: Build library (xcframeworks + dependency injection + dotnet build)
-        run: ./build.sh BuildLibrary --library "${{ matrix.library }}" --all-products
+        run: dotnet nuke BuildLibrary --library "${{ matrix.library }}" --all-products
 
       - name: Validate packaging
-        run: ./build.sh PackValidate --library "${{ matrix.library }}" --output "${{ runner.temp }}/ci-packages"
+        run: dotnet nuke PackValidate --library "${{ matrix.library }}" --output "${{ runner.temp }}/ci-packages"
 
       - name: Build and validate on iOS Simulator
         timeout-minutes: 20
         run: |
-          ./build.sh RunCiSimTest \
+          dotnet nuke RunCiSimTest \
             --library "${{ matrix.library }}" \
             --timeout 60 \
             --step-timeout 1140 \

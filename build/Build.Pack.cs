@@ -147,7 +147,7 @@ partial class Build
                 // -c Configuration must match the prior `dotnet build` pass —
                 // dotnet pack --no-build resolves bin/$(Configuration)/.../*.dll,
                 // and CI's BuildLibrary step uses the global default (Debug). If
-                // anyone runs `./build.sh PackValidate --library X --configuration Release`
+                // anyone runs `dotnet nuke PackValidate --library X --configuration Release`
                 // without first re-running BuildLibrary at Release, pack will
                 // fail loudly rather than silently picking up Debug artifacts.
                 var exit = RunDotnet(new[]

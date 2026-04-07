@@ -17,8 +17,11 @@ dotnet add package SwiftBindings.BlinkIDUX
 ## Building from Source
 
 ```bash
+# One-time: install the pinned Nuke CLI from .config/dotnet-tools.json
+dotnet tool restore
+
 # Build the package end-to-end (xcframework + bindings + dotnet build)
-./build.sh BuildLibrary --library BlinkIDUX
+dotnet nuke BuildLibrary --library BlinkIDUX
 ```
 
 ## License

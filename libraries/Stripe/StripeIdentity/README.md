@@ -17,8 +17,11 @@ dotnet add package SwiftBindings.Stripe.Identity
 ## Building from Source
 
 ```bash
+# One-time: install the pinned Nuke CLI from .config/dotnet-tools.json
+dotnet tool restore
+
 # Build all Stripe products end-to-end (xcframeworks + bindings + dotnet build)
-./build.sh BuildLibrary --library Stripe --all-products
+dotnet nuke BuildLibrary --library Stripe --all-products
 ```
 
 ## License

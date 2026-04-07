@@ -395,7 +395,7 @@ echo "Created libraries/$LIBRARY_NAME/library.json"
 # ── Generate Files From Templates ────────────────────────────────────────────
 
 # No per-library build-xcframework.sh wrapper is written. The Nuke harness
-# at repo root (./build.sh BuildXcframework --library <Name>) invokes
+# at repo root (dotnet nuke BuildXcframework --library <Name>) invokes
 # spm-to-xcframework directly — see build/Build.BuildLibrary.cs.
 
 # Build set of internal product names for skipping file generation
@@ -514,26 +514,26 @@ if [ "$MODE" = "manual" ]; then
     if [ "$IS_MULTI" = true ]; then
         cat << EOF
   2. Verify all xcframeworks are in place:
-       ./build.sh BuildXcframework --library $LIBRARY_NAME --all-products
+       dotnet nuke BuildXcframework --library $LIBRARY_NAME --all-products
 
   3. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
 
   4. Build + validate:
-       ./build.sh BuildTestApp --library $LIBRARY_NAME
-       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 30
+       dotnet nuke BuildTestApp --library $LIBRARY_NAME
+       dotnet nuke ValidateSim --library $LIBRARY_NAME --timeout 30
 EOF
     else
         cat << EOF
   2. Verify the xcframework is in place:
-       ./build.sh BuildXcframework --library $LIBRARY_NAME
+       dotnet nuke BuildXcframework --library $LIBRARY_NAME
 
   3. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME
 
   4. Build + validate:
-       ./build.sh BuildTestApp --library $LIBRARY_NAME
-       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 15
+       dotnet nuke BuildTestApp --library $LIBRARY_NAME
+       dotnet nuke ValidateSim --library $LIBRARY_NAME --timeout 15
 EOF
     fi
 elif [ "$IS_MULTI" = true ]; then
@@ -543,21 +543,21 @@ elif [ "$IS_MULTI" = true ]; then
     # dotnet build) so the user no longer has to chain targets by hand.
     cat << EOF
   1. Build library end-to-end (xcframeworks + two-pass build):
-       ./build.sh BuildLibrary --library $LIBRARY_NAME --all-products
+       dotnet nuke BuildLibrary --library $LIBRARY_NAME --all-products
 
   2. Scaffold tests:
        ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
 
   3. Build test app and validate:
-       ./build.sh BuildTestApp --library $LIBRARY_NAME
-       ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 30
+       dotnet nuke BuildTestApp --library $LIBRARY_NAME
+       dotnet nuke ValidateSim --library $LIBRARY_NAME --timeout 30
 EOF
 else
     cat << EOF
-  1. Build library: ./build.sh BuildLibrary --library $LIBRARY_NAME
+  1. Build library: dotnet nuke BuildLibrary --library $LIBRARY_NAME
   2. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME
-  3. Build test app: ./build.sh BuildTestApp --library $LIBRARY_NAME
+  3. Build test app: dotnet nuke BuildTestApp --library $LIBRARY_NAME
      (The SDK csproj generates bindings automatically during build)
-  4. Validate (sim): ./build.sh ValidateSim --library $LIBRARY_NAME --timeout 15
+  4. Validate (sim): dotnet nuke ValidateSim --library $LIBRARY_NAME --timeout 15
 EOF
 fi

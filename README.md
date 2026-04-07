@@ -36,13 +36,16 @@ Each library follows the same workflow:
 ## Quick Start
 
 ```bash
+# One-time: install the pinned Nuke CLI from .config/dotnet-tools.json
+dotnet tool restore
+
 # Build a library end-to-end (xcframework + dotnet build)
-./build.sh BuildLibrary --library Nuke
+dotnet nuke BuildLibrary --library Nuke
 
 # Run simulator tests
-./build.sh BootSim
-./build.sh BuildTestApp --library Nuke
-./build.sh ValidateSim --library Nuke --timeout 15
+dotnet nuke BootSim
+dotnet nuke BuildTestApp --library Nuke
+dotnet nuke ValidateSim --library Nuke --timeout 15
 ```
 
 All build/test/release orchestration runs through the Nuke harness — see `build/Build.*.cs` for the target definitions.
