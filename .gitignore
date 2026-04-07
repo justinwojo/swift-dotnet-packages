@@ -8,6 +8,9 @@ obj/
 tests/*/bin/
 tests/*/obj/
 
+# Local codesigning override (developer-specific cert/team values)
+tests/Directory.Build.props.local
+
 # Nuke build harness output
 build/bin/
 build/obj/

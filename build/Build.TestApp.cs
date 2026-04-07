@@ -83,46 +83,35 @@ partial class Build
 
     void BuildTestAppNativeAot(string library, AbsolutePath testDir)
     {
-        // Codesign env vars are required ONLY for the NativeAOT publish path —
-        // the bash gates this at build-testapp.sh:65–73. Same diagnostic
-        // template (variable names + example block) so the developer-facing
-        // error message is grep-stable.
+        // Codesign properties (CodesignKey / CodesignProvision / TeamIdentifierPrefix)
+        // come from tests/Directory.Build.props.local — a gitignored, per-developer
+        // file imported by tests/Directory.Build.props. See the example block in
+        // that committed template for the schema. The env vars below act as
+        // command-line overrides: when set, they're forwarded as -p: properties;
+        // when unset, the .local file (or per-csproj values) takes over and the
+        // publish "just works" without any per-invocation environment plumbing.
         var codesignIdentity = Environment.GetEnvironmentVariable("CODESIGN_IDENTITY");
         var provisioningProfile = Environment.GetEnvironmentVariable("PROVISIONING_PROFILE");
         var teamId = Environment.GetEnvironmentVariable("TEAM_ID");
 
-        var missing = new List<string>();
-        if (string.IsNullOrEmpty(codesignIdentity)) missing.Add("CODESIGN_IDENTITY");
-        if (string.IsNullOrEmpty(provisioningProfile)) missing.Add("PROVISIONING_PROFILE");
-        if (string.IsNullOrEmpty(teamId)) missing.Add("TEAM_ID");
-
-        if (missing.Count > 0)
-        {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("Error: --aot --device requires the following environment variables:");
-            foreach (var v in missing)
-                sb.AppendLine($"  {v}");
-            sb.AppendLine();
-            sb.AppendLine("Example:");
-            sb.AppendLine("  export CODESIGN_IDENTITY=\"Apple Development: Name (TEAMID)\"");
-            sb.AppendLine("  export PROVISIONING_PROFILE=\"Wildcard Dev\"");
-            sb.AppendLine("  export TEAM_ID=\"TL2K6QUQEH\"");
-            throw new InvalidOperationException(sb.ToString());
-        }
-
         Log.Information("=== Building {Library} tests for device (NativeAOT) ===", library);
         var rid = ResolveRid("ios-arm64");
-        var exit = RunDotnet(new[]
+        var args = new List<string>
         {
             "publish", (string)testDir,
             "-c", "Release",
             "-r", rid,
             "-p:PublishAot=true",
             "-p:PublishAotUsingRuntimePack=true",
-            $"-p:CodesignKey={codesignIdentity}",
-            $"-p:CodesignProvision={provisioningProfile}",
-            $"-p:TeamIdentifierPrefix={teamId}",
-        });
+        };
+        if (!string.IsNullOrEmpty(codesignIdentity))
+            args.Add($"-p:CodesignKey={codesignIdentity}");
+        if (!string.IsNullOrEmpty(provisioningProfile))
+            args.Add($"-p:CodesignProvision={provisioningProfile}");
+        if (!string.IsNullOrEmpty(teamId))
+            args.Add($"-p:TeamIdentifierPrefix={teamId}");
+
+        var exit = RunDotnet(args.ToArray());
         if (exit != 0)
             throw new InvalidOperationException($"dotnet publish (NativeAOT) failed with exit {exit}");
     }
