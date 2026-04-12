@@ -5,8 +5,8 @@ using Serilog;
 partial class Build
 {
     /// <summary>
-    /// Build a simulator/device test app under <c>tests/&lt;Name&gt;.SimTests/</c>.
-    /// Direct port of <c>scripts/build-testapp.sh</c>.
+    /// Build a simulator/device test app co-located under
+    /// <c>libraries/&lt;Name&gt;/tests/</c> or <c>apple-frameworks/&lt;Name&gt;/tests/</c>.
     ///
     /// <para>Three modes (mirrors <c>build-testapp.sh:50–87</c>):</para>
     /// <list type="bullet">
@@ -96,8 +96,8 @@ partial class Build
     void BuildTestAppNativeAot(string library, AbsolutePath testDir)
     {
         // Codesign properties (CodesignKey / CodesignProvision / TeamIdentifierPrefix)
-        // come from tests/Directory.Build.props.local — a gitignored, per-developer
-        // file imported by tests/Directory.Build.props. See the example block in
+        // come from Directory.Build.tests.props.local — a gitignored, per-developer
+        // file imported by Directory.Build.tests.props. See the example block in
         // that committed template for the schema. The env vars below act as
         // command-line overrides: when set, they're forwarded as -p: properties;
         // when unset, the .local file (or per-csproj values) takes over and the

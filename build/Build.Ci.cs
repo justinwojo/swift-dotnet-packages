@@ -34,9 +34,8 @@ partial class Build
     ///         (<c>build/</c>, <c>.nuke/</c>, <c>.config/dotnet-tools.json</c>,
     ///         <c>build.sh</c>)), return all libraries — same expansion
     ///         semantics as <c>ci.yml:45–52</c>.
-    ///         Otherwise extract <c>^(libraries|tests)/&lt;name&gt;</c>, strip
-    ///         <c>.SimTests</c>, dedupe, and filter to libraries that actually
-    ///         exist on disk.</item>
+    ///         Otherwise extract <c>^(libraries|apple-frameworks)/&lt;name&gt;</c>,
+    ///         dedupe, and filter to entries that actually exist on disk.</item>
     /// </list>
     ///
     /// <para>Output: with <c>--json</c>, prints the GHA matrix JSON
@@ -101,6 +100,8 @@ partial class Build
             || path == "build.sh"
             || path == "Directory.Build.props"
             || path == "Directory.Build.tests.props"
+            || path == "libraries/Directory.Build.props"
+            || path == "apple-frameworks/Directory.Build.props"
             || path == "global.json"
             || path == ".github/workflows/ci.yml";
 
@@ -110,8 +111,8 @@ partial class Build
             return allEntries;
         }
 
-        // Match paths under libraries/, tests/, and apple-frameworks/.
-        var pathRegex = new Regex(@"^(libraries|tests|apple-frameworks)/([^/]+)", RegexOptions.Compiled);
+        // Match paths under libraries/ and apple-frameworks/ (tests are co-located).
+        var pathRegex = new Regex(@"^(libraries|apple-frameworks)/([^/]+)", RegexOptions.Compiled);
         var entryMap = allEntries.ToDictionary(e => e.Library, e => e, StringComparer.Ordinal);
         var hits = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var path in changed)
@@ -120,11 +121,6 @@ partial class Build
             if (!m.Success)
                 continue;
             var name = m.Groups[2].Value;
-            // Strip legacy .SimTests / .MacTests suffixes
-            if (name.EndsWith(".SimTests", StringComparison.Ordinal))
-                name = name[..^".SimTests".Length];
-            else if (name.EndsWith(".MacTests", StringComparison.Ordinal))
-                name = name[..^".MacTests".Length];
             if (!entryMap.ContainsKey(name))
             {
                 Log.Information("Skipping '{Lib}' — no matching library or framework", name);

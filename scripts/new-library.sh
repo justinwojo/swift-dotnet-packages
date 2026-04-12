@@ -517,7 +517,7 @@ if [ "$MODE" = "manual" ]; then
        dotnet nuke BuildXcframework --library $LIBRARY_NAME --all-products
 
   3. Scaffold tests:
-       ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
+       ./scripts/new-test.sh $LIBRARY_NAME --all-products
 
   4. Build + validate:
        dotnet nuke BuildTestApp --library $LIBRARY_NAME
@@ -529,7 +529,7 @@ EOF
        dotnet nuke BuildXcframework --library $LIBRARY_NAME
 
   3. Scaffold tests:
-       ./scripts/new-sim-test.sh $LIBRARY_NAME
+       ./scripts/new-test.sh $LIBRARY_NAME
 
   4. Build + validate:
        dotnet nuke BuildTestApp --library $LIBRARY_NAME
@@ -546,7 +546,7 @@ elif [ "$IS_MULTI" = true ]; then
        dotnet nuke BuildLibrary --library $LIBRARY_NAME --all-products
 
   2. Scaffold tests:
-       ./scripts/new-sim-test.sh $LIBRARY_NAME --all-products
+       ./scripts/new-test.sh $LIBRARY_NAME --all-products
 
   3. Build test app and validate:
        dotnet nuke BuildTestApp --library $LIBRARY_NAME
@@ -555,7 +555,7 @@ EOF
 else
     cat << EOF
   1. Build library: dotnet nuke BuildLibrary --library $LIBRARY_NAME
-  2. Scaffold tests: ./scripts/new-sim-test.sh $LIBRARY_NAME
+  2. Scaffold tests: ./scripts/new-test.sh $LIBRARY_NAME
   3. Build test app: dotnet nuke BuildTestApp --library $LIBRARY_NAME
      (The SDK csproj generates bindings automatically during build)
   4. Validate (sim): dotnet nuke ValidateSim --library $LIBRARY_NAME --timeout 15

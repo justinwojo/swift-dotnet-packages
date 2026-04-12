@@ -202,10 +202,8 @@ jobs:
         if: matrix.kind == 'apple-framework'
         id: has_tests
         run: |
-          # Only check the new co-located path (apple-frameworks/<Name>/tests/).
-          # Legacy tests/<Name>.SimTests/ use PackageReference and wouldn't
-          # validate the local framework change — skip them until Session 2
-          # migrates them to ProjectReference.
+          # All tests are co-located: apple-frameworks/<Name>/tests/ for Apple
+          # frameworks, libraries/<Name>/tests/ for third-party libraries.
           if [ -d "apple-frameworks/${{ matrix.library }}/tests" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else

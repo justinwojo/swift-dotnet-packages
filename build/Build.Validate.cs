@@ -115,34 +115,20 @@ partial class Build
 
     /// <summary>
     /// Compute <c>(testDir, appName, bundleId)</c> from a library name.
-    /// New convention: <c>SwiftBindings.{Name}.Tests</c> /
-    /// <c>com.swiftbindings.{name}.tests</c>. Falls back to the legacy
-    /// <c>{Name}SimTests</c> convention if the new <c>tests/</c> dir doesn't
-    /// exist but the old <c>tests/{Name}.SimTests/</c> does.
+    /// Convention: <c>SwiftBindings.{Name}.Tests</c> /
+    /// <c>com.swiftbindings.{name}.tests</c>, co-located under the
+    /// library or apple-framework directory.
     /// </summary>
     (AbsolutePath TestDir, string AppName, string BundleId) ResolveTestNames(string library)
     {
-        // New convention: co-located under the library/framework dir
-        var newTestDir = LibraryDir(library) / "tests";
-        if (Directory.Exists(newTestDir))
-        {
-            var appName = $"SwiftBindings.{library}.Tests";
-            var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}.tests";
-            return (newTestDir, appName, bundleId);
-        }
+        var testDir = LibraryDir(library) / "tests";
+        if (!Directory.Exists(testDir))
+            throw new InvalidOperationException(
+                $"Test directory not found for '{library}'. Expected: {testDir}");
 
-        // Legacy convention: flat tests/<Name>.SimTests/
-        var legacyTestDir = TestsDir / $"{library}.SimTests";
-        if (Directory.Exists(legacyTestDir))
-        {
-            var appName = $"{library}SimTests";
-            var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}simtests";
-            return (legacyTestDir, appName, bundleId);
-        }
-
-        throw new InvalidOperationException(
-            $"Test directory not found for '{library}'. " +
-            $"Checked: {newTestDir} and {legacyTestDir}");
+        var appName = $"SwiftBindings.{library}.Tests";
+        var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}.tests";
+        return (testDir, appName, bundleId);
     }
 
     static int CountCrashLogs(string crashDir, string appName)

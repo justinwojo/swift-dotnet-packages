@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationId>com.swiftbindings.blinkidux.tests</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+  <!-- Reference both BlinkID and BlinkIDUX library projects -->
+  <ItemGroup>
+    <ProjectReference Include="../SwiftBindings.BlinkIDUX.csproj" />
+    <ProjectReference Include="../../BlinkID/SwiftBindings.BlinkID.csproj" />
+  </ItemGroup>
+
+  <!-- Native frameworks must be referenced directly (NativeReference doesn't propagate through ProjectReference) -->
+  <ItemGroup>
+    <NativeReference Include="../../BlinkID/BlinkID.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
+    <NativeReference Include="../BlinkIDUX.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
+  </ItemGroup>
+
+  <!-- Wrapper xcframework: must be in a Target (not static ItemGroup) so the Exists() check
+       runs AFTER the library project builds. Static ItemGroups evaluate before any build targets,
+       so on a clean build the wrapper doesn't exist yet and gets silently omitted. -->
+  <Target Name="_AddSwiftWrapperReference"
+          BeforeTargets="ResolveNativeReferences"
+          DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <NativeReference Include="../../BlinkID/obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework"
+                       Condition="Exists('../../BlinkID/obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDSwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+      <NativeReference Include="../obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDUXSwiftBindings.xcframework"
+                       Condition="Exists('../obj/$(Configuration)/net10.0-ios/swift-binding/BlinkIDUXSwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+    </ItemGroup>
+  </Target>
+
+  <!-- Copy SPM resource bundle stubs into the app so resource_bundle_accessor.swift can find them at runtime -->
+  <Target Name="_CopySwiftResourceBundleStubs"
+          AfterTargets="_CreateAppBundle"
+          DependsOnTargets="ResolveProjectReferences"
+          Condition="Exists('../obj/$(Configuration)/net10.0-ios/swift-binding/_resource-bundles.txt')">
+    <ReadLinesFromFile File="../obj/$(Configuration)/net10.0-ios/swift-binding/_resource-bundles.txt">
+      <Output TaskParameter="Lines" ItemName="_BlinkIDUXResourceBundleName" />
+    </ReadLinesFromFile>
+    <MakeDir Directories="$(AppBundleDir)/%(_BlinkIDUXResourceBundleName.Identity).bundle"
+             Condition="'%(_BlinkIDUXResourceBundleName.Identity)' != ''" />
+  </Target>
+
+</Project>

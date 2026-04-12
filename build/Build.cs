@@ -72,7 +72,6 @@ partial class Build : NukeBuild
 
     AbsolutePath LibrariesDir => RootDirectory / "libraries";
     AbsolutePath AppleFrameworksDir => RootDirectory / "apple-frameworks";
-    AbsolutePath TestsDir => RootDirectory / "tests";
     AbsolutePath ScriptsDir => RootDirectory / "scripts";
     AbsolutePath ToolsCacheDir => RootDirectory / ".tools";
     AbsolutePath LocalPackagesDir => RootDirectory / "local-packages";
