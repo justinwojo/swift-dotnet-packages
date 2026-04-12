@@ -79,7 +79,7 @@ jobs:
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── Build, test, and validate packaging ────────────────────────────────────
+  # ── Third-party library: build, test, and validate packaging ────────────────
   build:
     needs: detect
     if: needs.detect.outputs.has_changes == 'true'
@@ -88,25 +88,29 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
+      - if: matrix.kind != 'third-party'
+        run: echo "Skipping — not a third-party library" && exit 0
+
       - uses: actions/checkout@v4
+        if: matrix.kind == 'third-party'
 
       - name: Ensure local NuGet source exists
+        if: matrix.kind == 'third-party'
         run: mkdir -p local-packages
 
       - name: Setup .NET
+        if: matrix.kind == 'third-party'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
           dotnet-quality: preview
 
       - name: Install workloads
-        run: dotnet workload install ios
+        if: matrix.kind == 'third-party'
+        run: dotnet workload install ios macos maccatalyst tvos
 
-      # Cache must come BEFORE `dotnet tool restore` so the restored
-      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
-      # runs — otherwise tool restore re-downloads the tool every time
-      # and only the post-restore steps benefit from the cache.
       - name: Cache NuGet packages
+        if: matrix.kind == 'third-party'
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -114,15 +118,19 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Restore Nuke tool
+        if: matrix.kind == 'third-party'
         run: dotnet tool restore
 
       - name: Build library (xcframeworks + dependency injection + dotnet build)
+        if: matrix.kind == 'third-party'
         run: dotnet nuke BuildLibrary --library "${{ matrix.library }}" --all-products
 
       - name: Validate packaging
+        if: matrix.kind == 'third-party'
         run: dotnet nuke PackValidate --library "${{ matrix.library }}" --output "${{ runner.temp }}/ci-packages"
 
       - name: Build and validate on iOS Simulator
+        if: matrix.kind == 'third-party'
         timeout-minutes: 20
         run: |
           dotnet nuke RunCiSimTest \
@@ -132,7 +140,91 @@ jobs:
             --reuse-sim
 
       - name: Upload simulator diagnostics
-        if: failure()
+        if: failure() && matrix.kind == 'third-party'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-diagnostics-${{ matrix.library }}
+          path: /tmp/sim-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Apple framework: build, pack-validate, and sim test ───��────────────────
+  apple-framework:
+    needs: detect
+    if: needs.detect.outputs.has_changes == 'true'
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    steps:
+      - if: matrix.kind != 'apple-framework'
+        run: echo "Skipping — not an Apple framework" && exit 0
+
+      - uses: actions/checkout@v4
+        if: matrix.kind == 'apple-framework'
+
+      - name: Ensure local NuGet source exists
+        if: matrix.kind == 'apple-framework'
+        run: mkdir -p local-packages
+
+      - name: Setup .NET
+        if: matrix.kind == 'apple-framework'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+
+      - name: Install workloads
+        if: matrix.kind == 'apple-framework'
+        run: dotnet workload install ios macos maccatalyst tvos
+
+      - name: Cache NuGet packages
+        if: matrix.kind == 'apple-framework'
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore Nuke tool
+        if: matrix.kind == 'apple-framework'
+        run: dotnet tool restore
+
+      - name: Build Apple framework
+        if: matrix.kind == 'apple-framework'
+        run: dotnet nuke BuildAppleFramework --library "${{ matrix.library }}"
+
+      - name: Validate packaging
+        if: matrix.kind == 'apple-framework'
+        run: dotnet nuke PackValidateAppleFramework --library "${{ matrix.library }}" --output "${{ runner.temp }}/ci-packages"
+
+      - name: Check for co-located test project
+        if: matrix.kind == 'apple-framework'
+        id: has_tests
+        run: |
+          # Only check the new co-located path (apple-frameworks/<Name>/tests/).
+          # Legacy tests/<Name>.SimTests/ use PackageReference and wouldn't
+          # validate the local framework change — skip them until Session 2
+          # migrates them to ProjectReference.
+          if [ -d "apple-frameworks/${{ matrix.library }}/tests" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No co-located test project for ${{ matrix.library }} — skipping sim validation"
+          fi
+
+      - name: Build and validate on iOS Simulator
+        if: matrix.kind == 'apple-framework' && steps.has_tests.outputs.exists == 'true'
+        timeout-minutes: 20
+        run: |
+          dotnet nuke RunCiSimTest \
+            --library "${{ matrix.library }}" \
+            --timeout 60 \
+            --step-timeout 1140 \
+            --reuse-sim
+
+      - name: Upload simulator diagnostics
+        if: failure() && matrix.kind == 'apple-framework' && steps.has_tests.outputs.exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sim-diagnostics-${{ matrix.library }}

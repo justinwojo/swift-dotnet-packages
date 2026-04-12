@@ -1,0 +1,17 @@
+<Project>
+  <!-- Chain to the repo-root Directory.Build.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Exclude co-located test project sources from library compilation.
+       Each apple-framework may have a tests/ subdirectory; without this
+       exclusion the SDK's **/*.cs globbing compiles test sources into
+       the library assembly, causing ObjC type registration collisions.
+
+       Must use DefaultItemExcludes (not Compile Remove) because the
+       default **/*.cs glob is evaluated in Sdk.targets — after props
+       are loaded. A Remove in Directory.Build.props fires before the
+       items exist and has no effect. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

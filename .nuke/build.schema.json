@@ -28,6 +28,7 @@
         "BuildAllLibraries",
         "BuildAllXcframeworks",
         "BuildAndPackRelease",
+        "BuildAppleFramework",
         "BuildLibrary",
         "BuildTestApp",
         "BuildXcframework",
@@ -41,11 +42,13 @@
         "ListSims",
         "Pack",
         "PackValidate",
+        "PackValidateAppleFramework",
         "PublishRelease",
         "Restore",
         "RunCiSimTest",
         "ShutdownSim",
         "ValidateDevice",
+        "ValidateMac",
         "ValidateRewriter",
         "ValidateSim",
         "ValidateWatcherSelfTest"
@@ -199,6 +202,10 @@
         "PackagesDir": {
           "type": "string",
           "description": "Directory containing .nupkg files for PublishRelease (artifact-staged)"
+        },
+        "Platform": {
+          "type": "string",
+          "description": "Target platform for test app build/validate: ios (default), macos, maccatalyst, tvos"
         },
         "Products": {
           "type": "array",

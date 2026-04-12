@@ -23,18 +23,20 @@ partial class Build
     /// </para>
     /// </summary>
     Target BuildTestApp => _ => _
-        .Description("Build a tests/<Name>.SimTests app (--library Foo [--device [--aot]])")
+        .Description("Build a test app (--library Foo [--device [--aot]] [--platform ios|macos|maccatalyst|tvos])")
         .Requires(() => Library)
         .Executes(() =>
         {
             var library = Library!;
-            var testDir = TestDir(library);
-            if (!Directory.Exists(testDir))
-                throw new InvalidOperationException($"Test directory not found: {testDir}");
+            var (testDir, _, _) = ResolveTestNames(library);
 
+            var platform = EffectivePlatform;
             var device = !string.IsNullOrEmpty(RuntimeIdentifier) && RuntimeIdentifier == "ios-arm64"
                 || Device;
             var aot = Aot;
+
+            if (platform != "ios" && device)
+                throw new InvalidOperationException("--device is only supported for --platform ios");
 
             if (aot && !device)
                 throw new InvalidOperationException("--aot requires --device");
@@ -49,16 +51,23 @@ partial class Build
             }
             else
             {
-                BuildTestAppSimulator(library, testDir);
+                BuildTestAppSimulator(library, testDir, platform);
             }
 
             Log.Information("=== Build complete ===");
         });
 
-    void BuildTestAppSimulator(string library, AbsolutePath testDir)
+    void BuildTestAppSimulator(string library, AbsolutePath testDir, string platform = "ios")
     {
-        Log.Information("=== Building {Library} tests for simulator ===", library);
+        Log.Information("=== Building {Library} tests for {Platform} ===", library, platform);
         var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
+        // Pass -f only when necessary: non-default platform always needs it
+        // (e.g. --platform macos), and multi-TFM projects need it to select
+        // the right TFM. Single-TFM legacy projects (which may use versioned
+        // TFMs like net10.0-ios26.2) must NOT receive -f net10.0-ios — that
+        // would fail to match.
+        if (platform != "ios" || IsMultiTfmTestProject(testDir))
+            args.AddRange(new[] { "-f", ResolveTfm(platform) });
         // Only pass an explicit RID when the user overrode it. Leaving the
         // default build command untouched preserves the SDK's automatic
         // iossimulator-arm64 selection that Session 3 validated end-to-end.
@@ -66,17 +75,20 @@ partial class Build
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
         var exit = RunDotnet(args.ToArray());
         if (exit != 0)
-            throw new InvalidOperationException($"dotnet build (sim) failed with exit {exit}");
+            throw new InvalidOperationException($"dotnet build ({platform}) failed with exit {exit}");
     }
 
     void BuildTestAppDevice(string library, AbsolutePath testDir)
     {
         Log.Information("=== Building {Library} tests for device ===", library);
         var rid = ResolveRid("ios-arm64");
-        var exit = RunDotnet(new[]
+        var args = new List<string>
         {
             "build", (string)testDir, "-c", "Debug", $"-p:RuntimeIdentifier={rid}",
-        });
+        };
+        if (IsMultiTfmTestProject(testDir))
+            args.AddRange(new[] { "-f", ResolveTfm("ios") });
+        var exit = RunDotnet(args.ToArray());
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build (device) failed with exit {exit}");
     }
@@ -104,6 +116,8 @@ partial class Build
             "-p:PublishAot=true",
             "-p:PublishAotUsingRuntimePack=true",
         };
+        if (IsMultiTfmTestProject(testDir))
+            args.AddRange(new[] { "-f", ResolveTfm("ios") });
         if (!string.IsNullOrEmpty(codesignIdentity))
             args.Add($"-p:CodesignKey={codesignIdentity}");
         if (!string.IsNullOrEmpty(provisioningProfile))

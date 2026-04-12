@@ -29,7 +29,7 @@ partial class Build
             var library = Library!;
             var (testDir, appName, bundleId) = ResolveTestNames(library);
             var rid = ResolveRid("iossimulator-arm64");
-            var appPath = testDir / "bin" / "Debug" / "net10.0-ios" / rid / $"{appName}.app";
+            var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
             if (!Directory.Exists(appPath))
                 throw new InvalidOperationException(
                     $"Error: App not found at {appPath}\nRun BuildTestApp --library {library} first.");
@@ -80,7 +80,7 @@ partial class Build
 
             var config = Aot ? "Release" : "Debug";
             var rid = ResolveRid("ios-arm64");
-            var appPath = testDir / "bin" / config / "net10.0-ios" / rid / $"{appName}.app";
+            var appPath = ResolveAppPath(testDir, config, "ios", rid, appName);
             if (!Directory.Exists(appPath))
             {
                 var aotFlag = Aot ? " --aot" : "";
@@ -114,18 +114,35 @@ partial class Build
         });
 
     /// <summary>
-    /// Compute <c>(testDir, appName, bundleId)</c> from a library name. Mirrors
-    /// the basename derivation in both validate scripts:
-    /// <c>tests/Foo.SimTests</c> → <c>FooSimTests</c> / <c>com.swiftbindings.foosimtests</c>.
+    /// Compute <c>(testDir, appName, bundleId)</c> from a library name.
+    /// New convention: <c>SwiftBindings.{Name}.Tests</c> /
+    /// <c>com.swiftbindings.{name}.tests</c>. Falls back to the legacy
+    /// <c>{Name}SimTests</c> convention if the new <c>tests/</c> dir doesn't
+    /// exist but the old <c>tests/{Name}.SimTests/</c> does.
     /// </summary>
     (AbsolutePath TestDir, string AppName, string BundleId) ResolveTestNames(string library)
     {
-        var testDir = TestDir(library);
-        if (!Directory.Exists(testDir))
-            throw new InvalidOperationException($"Test directory not found: {testDir}");
-        var appName = $"{library}SimTests";
-        var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}simtests";
-        return (testDir, appName, bundleId);
+        // New convention: co-located under the library/framework dir
+        var newTestDir = LibraryDir(library) / "tests";
+        if (Directory.Exists(newTestDir))
+        {
+            var appName = $"SwiftBindings.{library}.Tests";
+            var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}.tests";
+            return (newTestDir, appName, bundleId);
+        }
+
+        // Legacy convention: flat tests/<Name>.SimTests/
+        var legacyTestDir = TestsDir / $"{library}.SimTests";
+        if (Directory.Exists(legacyTestDir))
+        {
+            var appName = $"{library}SimTests";
+            var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}simtests";
+            return (legacyTestDir, appName, bundleId);
+        }
+
+        throw new InvalidOperationException(
+            $"Test directory not found for '{library}'. " +
+            $"Checked: {newTestDir} and {legacyTestDir}");
     }
 
     static int CountCrashLogs(string crashDir, string appName)
@@ -167,6 +184,55 @@ partial class Build
         }
         catch (Exception ex) { return $"(failed to read crash log: {ex.Message})"; }
     }
+
+    /// <summary>
+    /// Validate a Mac test app by running the built binary and watching
+    /// stdout for <c>TEST SUCCESS</c> / <c>TEST FAILED</c>. Much simpler than
+    /// the iOS sim path — no install step, no simulator management.
+    /// </summary>
+    Target ValidateMac => _ => _
+        .Description("Validate a Mac test app (--library X [--timeout N])")
+        .Requires(() => Library)
+        .Executes(() =>
+        {
+            var library = Library!;
+            var (testDir, appName, _) = ResolveTestNames(library);
+
+            // Mac console apps land at bin/<config>/net10.0-macos/<appName>
+            // (no .app bundle for console executables).
+            var config = "Debug";
+            var binBase = testDir / "bin" / config / "net10.0-macos";
+
+            // Try the console binary path first, then the .app bundle path
+            string? binaryPath = null;
+            var consolePath = binBase / appName;
+            var appBundlePath = binBase / $"{appName}.app" / "Contents" / "MacOS" / appName;
+
+            if (File.Exists(consolePath))
+                binaryPath = consolePath;
+            else if (File.Exists(appBundlePath))
+                binaryPath = appBundlePath;
+            else
+                throw new InvalidOperationException(
+                    $"Mac binary not found. Checked:\n  {consolePath}\n  {appBundlePath}\n" +
+                    $"Run BuildTestApp --library {library} --platform macos first.");
+
+            Log.Information("Launching Mac test: {Binary} (timeout: {Timeout}s)", binaryPath, Timeout);
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = binaryPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            var result = StdoutWatcher
+                .RunAsync(psi, TimeSpan.FromSeconds(Timeout), onLine: line => Log.Information("{Line}", line))
+                .GetAwaiter().GetResult();
+
+            Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+            ReportTerminalStatus(result, library);
+        });
 
     static void ReportTerminalStatus(TestRunResult result, string library)
     {

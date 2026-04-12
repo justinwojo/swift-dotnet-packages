@@ -54,20 +54,31 @@ partial class Build
         });
 
     /// <summary>
+    /// A library entry with its resolved kind for the CI matrix.
+    /// </summary>
+    record MatrixEntry(string Library, LibraryKind Kind)
+    {
+        public string KindLabel => Kind switch
+        {
+            LibraryKind.ThirdParty => "third-party",
+            LibraryKind.AppleFramework => "apple-framework",
+            _ => "unknown",
+        };
+    }
+
+    /// <summary>
     /// Pure resolver for <see cref="ListChangedLibraries"/>. Split out so the
     /// logic is unit-testable and so dependent targets can call it directly
     /// without re-parsing parameters.
     /// </summary>
-    IReadOnlyList<string> ResolveChangedLibraries()
+    IReadOnlyList<MatrixEntry> ResolveChangedLibraries()
     {
-        var allLibs = DiscoverLibraries().ToList();
+        var allEntries = DiscoverAllEntries();
 
         if (All || (string.IsNullOrEmpty(BaseSha) && string.IsNullOrEmpty(HeadSha)))
         {
-            // Manual dispatch path or local invocation with no SHAs — match
-            // ci.yml:30–37 which returns every library with a library.json.
-            Log.Information("ListChangedLibraries: returning all {Count} libraries (--all or no SHAs)", allLibs.Count);
-            return allLibs;
+            Log.Information("ListChangedLibraries: returning all {Count} entries (--all or no SHAs)", allEntries.Count);
+            return allEntries;
         }
 
         if (string.IsNullOrEmpty(BaseSha) || string.IsNullOrEmpty(HeadSha))
@@ -79,16 +90,8 @@ partial class Build
         foreach (var f in changed)
             Log.Information("  - {File}", f);
 
-        // Shared-infra paths from ci.yml:45 — files whose changes invalidate
-        // every library and force a full rebuild. The Nuke harness sources
-        // (build/, .nuke/, .config/dotnet-tools.json, build.sh) are included
-        // because a change to the build harness, its pinned tool version, or
-        // its discovery-marker / convenience wrapper affects every library
-        // just as much as a change to scripts/ used to. build.sh is still
-        // part of the build surface even after the dotnet-nuke switch:
-        // Nuke's CLI uses it as a discovery marker to locate _build.csproj,
-        // and it's also the supported `./build.sh <Target>` entrypoint —
-        // so a PR that only modifies build.sh must still exercise CI.
+        // Shared-infra paths — files whose changes invalidate every entry
+        // and force a full rebuild.
         bool IsSharedInfra(string path) =>
             path.StartsWith("scripts/", StringComparison.Ordinal)
             || path.StartsWith("templates/", StringComparison.Ordinal)
@@ -97,41 +100,78 @@ partial class Build
             || path == ".config/dotnet-tools.json"
             || path == "build.sh"
             || path == "Directory.Build.props"
+            || path == "Directory.Build.tests.props"
             || path == "global.json"
             || path == ".github/workflows/ci.yml";
 
         if (changed.Any(IsSharedInfra))
         {
-            Log.Information("Shared infrastructure changed — building all {Count} libraries", allLibs.Count);
-            return allLibs;
+            Log.Information("Shared infrastructure changed — building all {Count} entries", allEntries.Count);
+            return allEntries;
         }
 
-        // Extract `^(libraries|tests)/<name>` matches, strip `.SimTests`,
-        // dedupe, filter to libraries that actually exist on disk. Direct
-        // port of ci.yml:55–69.
-        var libRegex = new Regex(@"^(libraries|tests)/([^/]+)", RegexOptions.Compiled);
-        var allLibsSet = new HashSet<string>(allLibs, StringComparer.Ordinal);
+        // Match paths under libraries/, tests/, and apple-frameworks/.
+        var pathRegex = new Regex(@"^(libraries|tests|apple-frameworks)/([^/]+)", RegexOptions.Compiled);
+        var entryMap = allEntries.ToDictionary(e => e.Library, e => e, StringComparer.Ordinal);
         var hits = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var path in changed)
         {
-            var m = libRegex.Match(path);
+            var m = pathRegex.Match(path);
             if (!m.Success)
                 continue;
             var name = m.Groups[2].Value;
+            // Strip legacy .SimTests / .MacTests suffixes
             if (name.EndsWith(".SimTests", StringComparison.Ordinal))
                 name = name[..^".SimTests".Length];
-            if (!allLibsSet.Contains(name))
+            else if (name.EndsWith(".MacTests", StringComparison.Ordinal))
+                name = name[..^".MacTests".Length];
+            if (!entryMap.ContainsKey(name))
             {
-                Log.Information("Skipping '{Lib}' — no matching library directory", name);
+                Log.Information("Skipping '{Lib}' — no matching library or framework", name);
                 continue;
             }
             hits.Add(name);
         }
 
-        var result = hits.ToList();
-        Log.Information("ListChangedLibraries: {Count} library/libraries to build: {Libs}",
-            result.Count, string.Join(", ", result));
+        var result = hits.Select(n => entryMap[n]).ToList();
+        Log.Information("ListChangedLibraries: {Count} entry/entries to build: {Libs}",
+            result.Count, string.Join(", ", result.Select(e => $"{e.Library} ({e.KindLabel})")));
         return result;
+    }
+
+    /// <summary>
+    /// Discover all libraries (third-party) and Apple frameworks, returning
+    /// them as <see cref="MatrixEntry"/> items sorted by name.
+    /// </summary>
+    IReadOnlyList<MatrixEntry> DiscoverAllEntries()
+    {
+        var entries = new List<MatrixEntry>();
+
+        // Third-party libraries: directories with library.json
+        foreach (var lib in DiscoverLibraries())
+            entries.Add(new MatrixEntry(lib, LibraryKind.ThirdParty));
+
+        // Apple frameworks: directories with SwiftBindings.*.csproj
+        foreach (var fw in DiscoverAppleFrameworks())
+            entries.Add(new MatrixEntry(fw, LibraryKind.AppleFramework));
+
+        return entries.OrderBy(e => e.Library, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Discover Apple framework names by globbing
+    /// <c>apple-frameworks/*/SwiftBindings.*.csproj</c>.
+    /// </summary>
+    IEnumerable<string> DiscoverAppleFrameworks()
+    {
+        if (!Directory.Exists(AppleFrameworksDir))
+            return Enumerable.Empty<string>();
+
+        return Directory.EnumerateDirectories(AppleFrameworksDir)
+            .Where(d => Directory.EnumerateFiles(d, "SwiftBindings.*.csproj").Any())
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .OrderBy(n => n, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -166,28 +206,27 @@ partial class Build
     }
 
     /// <summary>
-    /// Print the resolved library list in the requested form. With
+    /// Print the resolved entry list in the requested form. With
     /// <c>--json</c>, the GHA matrix shape is emitted on stdout so the
     /// workflow can pipe it directly into <c>$GITHUB_OUTPUT</c>; without it,
-    /// one library per line for human / shell consumption.
+    /// one entry per line for human / shell consumption.
     /// </summary>
-    void EmitMatrix(IReadOnlyList<string> libs)
+    void EmitMatrix(IReadOnlyList<MatrixEntry> entries)
     {
         if (Json)
         {
-            // GHA matrix shape: {"include":[{"library":"Nuke"}, ...]}
-            // matches ci.yml:84–94 of the post-Session-3 file.
+            // GHA matrix shape: {"include":[{"library":"Nuke","kind":"third-party"}, ...]}
             var matrix = new
             {
-                include = libs.Select(l => new { library = l }).ToList(),
+                include = entries.Select(e => new { library = e.Library, kind = e.KindLabel }).ToList(),
             };
             var json = JsonSerializer.Serialize(matrix);
             Console.WriteLine(json);
         }
         else
         {
-            foreach (var l in libs)
-                Console.WriteLine(l);
+            foreach (var e in entries)
+                Console.WriteLine($"{e.Library}\t{e.KindLabel}");
         }
     }
 
@@ -531,7 +570,7 @@ partial class Build
         DateTime deadline)
     {
         var rid = ResolveRid("iossimulator-arm64");
-        var appPath = testDir / "bin" / "Debug" / "net10.0-ios" / rid / $"{appName}.app";
+        var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
         if (!Directory.Exists(appPath))
             throw new InvalidOperationException($"App not found at {appPath}");
 
@@ -661,16 +700,17 @@ partial class Build
 
     void BuildTestAppForRunCi(string library, AbsolutePath testDir)
     {
-        // RunCiSimTest only ever wants the simulator path (matches
-        // ci_ios_test.py which shells out to build-testapp.sh with no args).
-        // We intentionally don't call into BuildTestApp's target body to keep
-        // the CI logging banner ("BUILD:" prefix) stable and independent.
+        // RunCiSimTest only ever wants the iOS simulator path. Pass -f to
+        // select the iOS TFM only for multi-TFM projects (e.g. Apple
+        // framework tests declare net10.0-ios;net10.0-macos;...).
+        // Single-TFM legacy projects may use versioned TFMs like
+        // net10.0-ios26.2, so passing -f net10.0-ios would fail to match.
         Log.Information("=== BUILD: Building {Library} test app for simulator ===", library);
         var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
+        if (IsMultiTfmTestProject(testDir))
+            args.AddRange(new[] { "-f", ResolveTfm("ios") });
         // Honor --runtime-identifier so the path used by RunInnerTestWithRetry
         // to locate the built .app agrees with the one dotnet build produces.
-        // Only pass the RID explicitly when the user overrode it to preserve
-        // the default SDK selection that's already validated end-to-end.
         if (!string.IsNullOrEmpty(RuntimeIdentifier))
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
         var exit = RunDotnet(args.ToArray());

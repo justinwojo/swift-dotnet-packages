@@ -1,0 +1,28 @@
+<Project>
+  <!--
+    Shared codesign configuration for test apps (libraries/*/tests/ and
+    apple-frameworks/*/tests/). Imported by Directory.Build.props when the
+    project name matches *.Tests.
+
+    NativeAOT publish requires codesigning properties. Three ways to provide
+    them, in order of precedence:
+
+      1. Env vars at invoke time: CODESIGN_IDENTITY, PROVISIONING_PROFILE, TEAM_ID
+         (build/Build.TestApp.cs forwards these as -p: overrides when set)
+      2. Local override file: Directory.Build.tests.props.local
+         (gitignored — copy the example below and fill in your values)
+      3. Per-csproj <CodesignKey> / <CodesignProvision> / <TeamIdentifierPrefix>
+
+    Example Directory.Build.tests.props.local:
+
+      <Project>
+        <PropertyGroup>
+          <CodesignKey>Apple Development: Your Name (TEAMID)</CodesignKey>
+          <CodesignProvision>Wildcard Dev</CodesignProvision>
+          <TeamIdentifierPrefix>TEAMID</TeamIdentifierPrefix>
+        </PropertyGroup>
+      </Project>
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.tests.props.local"
+          Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.tests.props.local')" />
+</Project>
