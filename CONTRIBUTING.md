@@ -33,17 +33,17 @@ For vendors that ship multiple modules from one SPM repo, pass `--vendor <Name>`
 
 **Invariant:** `--vendor` affects csproj filename and PackageId ONLY. It never modifies `products[].module`, `products[].framework`, or any path that feeds binding generation or namespace-based dependency detection. Every listed product must start with the vendor prefix — `new-library.sh` fails loudly if you try `--vendor Stripe --products Foo`.
 
-### Scaffold simulator tests
+### Scaffold tests
 
 ```bash
 # Single-product
-./scripts/new-sim-test.sh Nuke
+./scripts/new-test.sh Nuke
 
 # Multi-product vendor
-./scripts/new-sim-test.sh Stripe --all-products
+./scripts/new-test.sh Stripe --all-products
 
 # Cross-repo dependency
-./scripts/new-sim-test.sh BlinkIDUX --with BlinkID
+./scripts/new-test.sh BlinkIDUX --with BlinkID
 ```
 
 ## Directory Structure
@@ -171,7 +171,7 @@ Under the hood:
 1. Run `./scripts/new-library.sh --discover <repo-url>` to list products and identify ObjC-only frameworks
 2. Scaffold with `--vendor`, `--products`, and `--internal` flags
 3. Build the library end-to-end: `dotnet nuke BuildLibrary --library Vendor --all-products`
-4. Scaffold sim tests: `./scripts/new-sim-test.sh Vendor --all-products`
+4. Scaffold sim tests: `./scripts/new-test.sh Vendor --all-products`
 5. Push the branch — CI auto-detects the new library from `library.json`
 
 ## Library Config (`library.json`)
@@ -202,7 +202,7 @@ Each library root has a `library.json` that declares its SPM source and products
 | `products[].module` | no | Swift module name (defaults to `framework`) |
 | `products[].subdirectory` | no | Subdirectory for multi-product vendors |
 | `products[].useTarget` | no | `true` → pass `--target` to `spm-to-xcframework` instead of `--product`. Required for SPM `.target(...)` entries not exposed as `.library(...)` — e.g. 11 of Stripe's 14 modules. |
-| `products[].internal` | no | `true` to mark as internal-only (no bindings, excluded from `--resolve-products` and sim-test scaffolding) |
+| `products[].internal` | no | `true` to mark as internal-only (no bindings, excluded from `--resolve-products` and test scaffolding) |
 
 ### Build Modes
 
@@ -267,22 +267,22 @@ Each library can have a simulator test app that validates bindings on iOS Simula
 
 ```bash
 # Simple single-product
-./scripts/new-sim-test.sh Nuke
+./scripts/new-test.sh Nuke
 
 # Stripe subset
-./scripts/new-sim-test.sh Stripe --products StripeCore,StripePayments
+./scripts/new-test.sh Stripe --products StripeCore,StripePayments
 
 # Full Stripe
-./scripts/new-sim-test.sh Stripe --all-products
+./scripts/new-test.sh Stripe --all-products
 
 # Cross-repo dependency
-./scripts/new-sim-test.sh BlinkIDUX --with BlinkID
+./scripts/new-test.sh BlinkIDUX --with BlinkID
 
 # Complex cross-vendor
-./scripts/new-sim-test.sh Checkout --with Stripe:StripeCore,StripePaymentSheet
+./scripts/new-test.sh Checkout --with Stripe:StripeCore,StripePaymentSheet
 ```
 
-This scaffolds `tests/LibraryName.SimTests/` from the template in `templates/sim-test/`.
+This scaffolds `libraries/LibraryName/tests/` from the template in `templates/library-test/`.
 Use `--module` when the Swift module name differs from the library name (single-product only).
 Use `--force` to overwrite an existing test directory.
 
@@ -315,7 +315,7 @@ dotnet nuke ValidateDevice --library LibraryName --aot --timeout 30
 
 ### Adding library-specific tests
 
-Edit `tests/LibraryName.SimTests/Program.cs` — add test methods in `RunLibraryTests()` and call them from there. Each test should:
+Edit `libraries/LibraryName/tests/Program.cs` — add test methods in `RunLibraryTests()` and call them from there. Each test should:
 1. Call an API in a try/catch block
 2. Log pass/fail via the `TestLogger`
 3. Record result via `TestResults.Pass()` / `.Fail()`

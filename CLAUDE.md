@@ -9,15 +9,18 @@ Monorepo for NuGet packages providing .NET bindings for Swift libraries. Binding
 ```
 swift-dotnet-packages/
 ├── libraries/<Name>/         # One directory per bound Swift library
-├── tests/<Name>.SimTests/    # Simulator test apps per library
+│   └── tests/                # Co-located test app (SwiftBindings.<Name>.Tests.csproj)
+├── apple-frameworks/<Name>/  # Apple framework binding projects
+│   └── tests/                # Co-located multi-TFM test app
 ├── samples/                  # Sample apps demonstrating binding usage
-├── templates/sim-test/       # Simulator test app template files
+├── templates/library-test/   # Library test app template files
 ├── templates/library/        # Library scaffolding template files
 ├── scripts/                  # Scaffolding and utility scripts
 ├── .tools/                   # Gitignored cache — pinned `spm-to-xcframework` tool
 ├── Directory.Build.props     # Shared NuGet metadata
+├── Directory.Build.tests.props # Shared codesign config for test apps
 ├── global.json               # .NET SDK version pin (10.0.103)
-└── .github/workflows/ci.yml  # CI pipeline (build + sim test per library)
+└── .github/workflows/ci.yml  # CI pipeline (build + test per library)
 ```
 
 ## Per-Library Layout
@@ -29,6 +32,7 @@ Each library directory under `libraries/` contains:
 | `library.json` | SPM source, version, build mode, products |
 | `SwiftBindings.<Name>.csproj` | SDK csproj — generates bindings + compiles during `dotnet build` |
 | `README.md` | Package description (included in NuGet) |
+| `tests/` | Co-located test app (optional) |
 
 Build orchestration lives in the Nuke harness (`dotnet nuke <Target>`) at the repo root, not in per-library shell wrappers — see `build/Build.*.cs`. The Nuke CLI is pinned in `.config/dotnet-tools.json`; run `dotnet tool restore` once after cloning to install it.
 
@@ -64,7 +68,7 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 
 - `BuildXcframework --library X [--products P1,P2] [--all-products]` — builds Swift xcframeworks via spm-to-xcframework.
 - `BuildLibrary --library X [--all-products]` — full end-to-end: xcframework build → dependency injection (multi-product) → two-pass `dotnet build`.
-- `BuildTestApp --library X [--device] [--aot]` — builds the simulator (default) or device test app under `tests/X.SimTests/`.
+- `BuildTestApp --library X [--device] [--aot] [--platform ios|macos|maccatalyst|tvos]` — builds the test app co-located under `libraries/X/tests/` or `apple-frameworks/X/tests/`.
 - `ValidateSim --library X [--timeout 30]` — install + launch on a booted simulator, watch stdout for `TEST SUCCESS` / crash.
 - `ValidateDevice --library X [--timeout 30]` — same for a connected physical device (`xcrun devicectl`).
 - `RunCiSimTest --library X [--reuse-sim] [--timeout N] [--step-timeout N]` — CI-only entry point that boots a simulator from the fleet, runs `BuildTestApp` + `ValidateSim`, and uploads diagnostics to `/tmp/sim-diagnostics/`.
@@ -75,7 +79,7 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 - `ListChangedLibraries [--base-sha S --head-sha S | --all] [--json]` — emit the CI matrix (newline-delimited or GHA `{"include":[...]}` JSON).
 - `ListSims` / `BootSim` / `ShutdownSim` — simulator fleet management.
 
-`APP_NAME` and `BUNDLE_ID` for test apps are derived from the test directory basename (`tests/Foo.SimTests` → `FooSimTests` / `com.swiftbindings.foosimtests`). Don't reintroduce per-library divergence — codesigning identity for `--aot --device` is taken from `CODESIGN_IDENTITY` / `PROVISIONING_PROFILE` / `TEAM_ID` env vars.
+`APP_NAME` and `BUNDLE_ID` for test apps follow the convention `SwiftBindings.{Name}.Tests` / `com.swiftbindings.{name}.tests`. Codesigning identity for `--aot --device` is taken from `CODESIGN_IDENTITY` / `PROVISIONING_PROFILE` / `TEAM_ID` env vars or from `Directory.Build.tests.props.local`.
 
 ### `.tools/` cache and `spm-to-xcframework` pinning
 
@@ -114,13 +118,13 @@ Generates: `library.json`, `SwiftBindings.{PackageIdSuffix}.csproj`, `README.md`
 
 **`--vendor` semantics:** affects csproj filename and `PackageId` only. For `--vendor Stripe` + product `StripeCore`, the generated csproj is `SwiftBindings.Stripe.Core.csproj` with `PackageId=SwiftBindings.Stripe.Core`. The Swift module name (`StripeCore`), xcframework filename (`StripeCore.xcframework`), and anything feeding binding generation are left untouched. Every listed product must start with the vendor prefix — `new-library.sh` fails with a clear error otherwise.
 
-### New Simulator Test
+### New Test
 
 ```bash
-./scripts/new-sim-test.sh <LibraryName> [--products P1,P2] [--all-products] [--with <root>[:P1,P2]] [--module M] [--force]
+./scripts/new-test.sh <LibraryName> [--products P1,P2] [--all-products] [--with <root>[:P1,P2]] [--module M] [--force]
 ```
 
-- Instantiates `templates/sim-test/` into `tests/LibraryName.SimTests/`
+- Instantiates `templates/library-test/` into `libraries/LibraryName/tests/`
 - Requires `libraries/LibraryName/` to exist
 - Reads `library.json` to resolve product list, framework names, module names
 - `--module` overrides Swift module name (single-product only)
@@ -132,7 +136,7 @@ Generates: `library.json`, `SwiftBindings.{PackageIdSuffix}.csproj`, `README.md`
 
 ## Binding Tests
 
-Each library can have a test app (`tests/<Name>.SimTests/`) that validates bindings run correctly on both iOS Simulator and physical devices. Tests use a standard structure:
+Each library can have a co-located test app (`libraries/<Name>/tests/` or `apple-frameworks/<Name>/tests/`) that validates bindings run correctly on both iOS Simulator and physical devices. Apple framework tests use multi-TFM projects (Tests.cs + Program.UIKit.cs + Program.MacConsole.cs); third-party library tests are single-TFM (net10.0-ios). Tests use a standard structure:
 
 - **Framework loading** — resolved automatically by the library assembly's `[ModuleInitializer]`
 - **Smoke tests** — type metadata access to validate Swift runtime interop
@@ -175,7 +179,7 @@ dotnet nuke ValidateDevice --library Nuke --timeout 30
 
 ### Adding Library-Specific Tests
 
-After scaffolding, edit `tests/LibraryName.SimTests/Program.cs`:
+After scaffolding, edit `libraries/LibraryName/tests/Program.cs`:
 1. Add test methods following the try/catch + logger + results pattern
 2. Call them from `RunLibraryTests()`
 3. Each test should `results.Pass(name)` or `results.Fail(name, reason)`
@@ -190,7 +194,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26`. It 
 3. **Validate packaging** — `dotnet nuke PackValidate --library $X` (smoke pack with version `0.0.0-ci`).
 4. **Build + run sim tests** — `dotnet nuke RunCiSimTest --library $X --timeout 60 --reuse-sim` (boots a sim from the fleet, builds the test app, runs `ValidateSim`, uploads sim diagnostics on failure).
 
-CI auto-detects libraries from `libraries/*/library.json` — no manual matrix configuration needed. `ListChangedLibraries` treats changes under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `global.json`, and `.github/workflows/ci.yml` as shared infra and rebuilds every library.
+CI auto-detects libraries from `libraries/*/library.json` and Apple frameworks from `apple-frameworks/*/SwiftBindings.*.csproj`. `ListChangedLibraries` emits entries tagged with `kind` (`third-party` or `apple-framework`) for the GHA matrix. Changes under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `global.json`, and `.github/workflows/ci.yml` are treated as shared infra and rebuild every library.
 
 ## Dependencies
 
@@ -207,7 +211,7 @@ Multi-product libraries with cross-module dependencies require additional config
 Some vendors have internal frameworks (not public SPM products) that other products depend on. These must be:
 1. Added to `library.json` with `"internal": true` so they're built as xcframeworks
 2. Built alongside public products, but they don't need binding generation or csproj files
-3. Referenced as `NativeReference` in sim test csproj (needed at runtime)
+3. Referenced as `NativeReference` in test csproj (needed at runtime)
 
 Example: Stripe has 2 internal dependencies: `Stripe3DS2`, `StripeCameraCore`.
 
