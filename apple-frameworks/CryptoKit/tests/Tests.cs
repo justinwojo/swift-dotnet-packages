@@ -241,10 +241,21 @@ internal static class Tests
             Fail("SymmetricKeySize.Bits256 reachable", ex.Message);
         }
 
-        // Test 21: P256 key metadata loads.
+        // Test 21: P256/P384/P521 key metadata loads — representative coverage across all curves.
         MetadataTest<P256.Signing.PublicKey>("P256.Signing.PublicKey");
+        MetadataTest<P384.Signing.PublicKey>("P384.Signing.PublicKey");
+        MetadataTest<P521.Signing.PublicKey>("P521.Signing.PublicKey");
+        MetadataTest<P384.KeyAgreement.PublicKey>("P384.KeyAgreement.PublicKey");
+        MetadataTest<P521.KeyAgreement.PublicKey>("P521.KeyAgreement.PublicKey");
 
-        // Test 22: AES.GCM.Nonce metadata loads.
+        // Test 26: P384/P521 private key and signature metadata.
+        MetadataTest<P384.Signing.PrivateKey>("P384.Signing.PrivateKey");
+        MetadataTest<P521.Signing.PrivateKey>("P521.Signing.PrivateKey");
+        MetadataTest<P256.Signing.ECDSASignature>("P256.Signing.ECDSASignature");
+        MetadataTest<P384.Signing.ECDSASignature>("P384.Signing.ECDSASignature");
+        MetadataTest<P521.Signing.ECDSASignature>("P521.Signing.ECDSASignature");
+
+        // Test 31: AES.GCM.Nonce metadata loads.
         MetadataTest<AES.GCM.Nonce>("AES.GCM.Nonce");
 
         // Test 23: ChaChaPoly.Nonce metadata loads.

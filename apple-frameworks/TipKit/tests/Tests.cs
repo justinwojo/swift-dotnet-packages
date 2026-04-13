@@ -44,10 +44,19 @@ internal static class Tests
 
         // Test 1: Tips.Configure() no-arg overload — may throw SwiftError (datastore already configured
         // or not supported in this context) but must not crash the process.
+        // Binding-load failures are real bugs and must fail.
         try
         {
             Tips.Configure();
             Pass("Tips.Configure()");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Fail("Tips.Configure()", ex.Message);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Fail("Tips.Configure()", ex.Message);
         }
         catch (Exception ex)
         {
@@ -247,9 +256,10 @@ internal static class Tests
         }
 
         // Test 17: Tips.DonationLimit constructor round-trip (maximumCount only).
+        // Note: DonationLimit is ISwiftObject — do NOT Dispose.
         try
         {
-            using var limit = new Tips.DonationLimit(3);
+            var limit = new Tips.DonationLimit(3);
             var count = limit.MaximumCount;
             if (count != 3)
                 throw new InvalidOperationException($"MaximumCount = {count}, expected 3");
@@ -261,9 +271,10 @@ internal static class Tests
         }
 
         // Test 18: Tips.IgnoresDisplayFrequency constructor round-trip.
+        // Note: IgnoresDisplayFrequency is ISwiftObject — do NOT Dispose.
         try
         {
-            using var opt = new Tips.IgnoresDisplayFrequency(true);
+            var opt = new Tips.IgnoresDisplayFrequency(true);
             if (opt is null)
                 throw new InvalidOperationException("IgnoresDisplayFrequency was null");
             Pass("Tips.IgnoresDisplayFrequency ctor (true)");
@@ -274,9 +285,10 @@ internal static class Tests
         }
 
         // Test 19: Tips.MaxDisplayCount constructor.
+        // Note: MaxDisplayCount is ISwiftObject — do NOT Dispose.
         try
         {
-            using var opt = new Tips.MaxDisplayCount(5);
+            var opt = new Tips.MaxDisplayCount(5);
             if (opt is null)
                 throw new InvalidOperationException("MaxDisplayCount was null");
             Pass("Tips.MaxDisplayCount ctor (5)");

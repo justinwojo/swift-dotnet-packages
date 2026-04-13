@@ -68,11 +68,11 @@ internal static class Tests
         }
 
         // Test 3: Transaction.All async sequence creation (no enumeration)
+        // Note: Transactions is ISwiftObject — do NOT Dispose (crashes on device).
         try
         {
             var allTransactions = Transaction.All;
             Log($"Transaction.All type = {allTransactions.GetType().Name}");
-            allTransactions.Dispose();
             Pass("Transaction.All");
         }
         catch (Exception ex)
@@ -85,7 +85,6 @@ internal static class Tests
         {
             var entitlements = Transaction.CurrentEntitlements;
             Log($"Transaction.CurrentEntitlements type = {entitlements.GetType().Name}");
-            entitlements.Dispose();
             Pass("Transaction.CurrentEntitlements");
         }
         catch (Exception ex)
@@ -93,13 +92,13 @@ internal static class Tests
             Fail("Transaction.CurrentEntitlements", ex.Message);
         }
 
-        // Test 5: VerificationResult enum tag values
+        // Test 5: VerificationResult enum tag values — assert actual uint values
         try
         {
-            var unverified = VerificationResult<Transaction>.CaseTag.Unverified;
-            var verified = VerificationResult<Transaction>.CaseTag.Verified;
-            Log($"VerificationResult.CaseTag.Unverified = {(uint)unverified}");
-            Log($"VerificationResult.CaseTag.Verified = {(uint)verified}");
+            if ((uint)VerificationResult<Transaction>.CaseTag.Unverified != 0)
+                throw new InvalidOperationException($"Unverified expected 0, got {(uint)VerificationResult<Transaction>.CaseTag.Unverified}");
+            if ((uint)VerificationResult<Transaction>.CaseTag.Verified != 1)
+                throw new InvalidOperationException($"Verified expected 1, got {(uint)VerificationResult<Transaction>.CaseTag.Verified}");
             Pass("VerificationResult.CaseTag");
         }
         catch (Exception ex)
@@ -108,11 +107,11 @@ internal static class Tests
         }
 
         // Test 6: Transaction.Unfinished async sequence creation (no enumeration)
+        // Note: Transactions is ISwiftObject — do NOT Dispose.
         try
         {
             var seq = Transaction.Unfinished;
             Log($"Transaction.Unfinished type = {seq.GetType().Name}");
-            seq.Dispose();
             Pass("Transaction.Unfinished");
         }
         catch (Exception ex)
@@ -125,7 +124,6 @@ internal static class Tests
         {
             var seq = Transaction.Updates;
             Log($"Transaction.Updates type = {seq.GetType().Name}");
-            seq.Dispose();
             Pass("Transaction.Updates");
         }
         catch (Exception ex)
@@ -134,11 +132,11 @@ internal static class Tests
         }
 
         // Test 8: PurchaseIntent.Intents async sequence creation (no enumeration)
+        // Note: PurchaseIntents is ISwiftObject — do NOT Dispose.
         try
         {
             var seq = PurchaseIntent.Intents;
             Log($"PurchaseIntent.Intents type = {seq.GetType().Name}");
-            seq.Dispose();
             Pass("PurchaseIntent.Intents");
         }
         catch (Exception ex)
@@ -146,25 +144,27 @@ internal static class Tests
             Fail("PurchaseIntent.Intents", ex.Message);
         }
 
+#if IOS || MACCATALYST
         // Test 9: Message.Messages async sequence creation (no enumeration)
+        // Note: MessagesType is ISwiftObject — do NOT Dispose.
         try
         {
             var seq = Message.Messages;
             Log($"Message.Messages type = {seq.GetType().Name}");
-            seq.Dispose();
             Pass("Message.Messages");
         }
         catch (Exception ex)
         {
             Fail("Message.Messages", ex.Message);
         }
+#endif
 
         // Test 10: Storefront.Updates async sequence creation (no enumeration)
+        // Note: Storefronts is ISwiftObject — do NOT Dispose.
         try
         {
             var seq = Storefront.Updates;
             Log($"Storefront.Updates type = {seq.GetType().Name}");
-            seq.Dispose();
             Pass("Storefront.Updates");
         }
         catch (Exception ex)
@@ -367,7 +367,9 @@ internal static class Tests
         MetadataTest<Product>("Product");
         MetadataTest<Transaction>("Transaction");
         MetadataTest<Storefront>("Storefront");
+#if IOS || MACCATALYST
         MetadataTest<Message>("Message");
+#endif
         MetadataTest<PurchaseIntent>("PurchaseIntent");
         MetadataTest<Product.SubscriptionInfo>("Product.SubscriptionInfo");
 
@@ -399,6 +401,7 @@ internal static class Tests
             Fail("ProductPurchaseError extension methods", ex.Message);
         }
 
+#if IOS || MACCATALYST
         // Test 25: PaymentMethodBindingError extension method (GetErrorDescription)
         try
         {
@@ -410,6 +413,7 @@ internal static class Tests
         {
             Fail("PaymentMethodBindingError.GetErrorDescription", ex.Message);
         }
+#endif
 
         // Test 26: Storefront.GetCurrentAsync dispatch (expect framework response = pass)
         try
@@ -437,6 +441,36 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail("AppTransaction.GetSharedAsync dispatch", ex.Message);
+        }
+
+        // Test 28: Transaction.RevocationReasonType singletons (raw-value type, not CaseTag)
+        try
+        {
+            var devIssue = Transaction.RevocationReasonType.DeveloperIssue;
+            var other = Transaction.RevocationReasonType.Other;
+            if (devIssue is null || other is null)
+                throw new InvalidOperationException("a RevocationReasonType singleton was null");
+            Log($"RevocationReasonType: DeveloperIssue.RawValue={devIssue.RawValue}, Other.RawValue={other.RawValue}");
+            Pass("Transaction.RevocationReasonType singletons");
+        }
+        catch (Exception ex)
+        {
+            Fail("Transaction.RevocationReasonType singletons", ex.Message);
+        }
+
+        // Test 29: Product.SubscriptionOffer.OfferType singletons (raw-value type, not CaseTag)
+        try
+        {
+            var intro = Product.SubscriptionOffer.OfferType.Introductory;
+            var promo = Product.SubscriptionOffer.OfferType.Promotional;
+            var winBack = Product.SubscriptionOffer.OfferType.WinBack;
+            if (intro is null || promo is null || winBack is null)
+                throw new InvalidOperationException("a SubscriptionOffer.OfferType singleton was null");
+            Pass("Product.SubscriptionOffer.OfferType singletons");
+        }
+        catch (Exception ex)
+        {
+            Fail("Product.SubscriptionOffer.OfferType singletons", ex.Message);
         }
 
         // Summary

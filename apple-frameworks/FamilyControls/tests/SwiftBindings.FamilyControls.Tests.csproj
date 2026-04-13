@@ -6,10 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.roomplan.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.familycontrols.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
@@ -17,10 +17,8 @@
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
-       must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.RoomPlan.csproj" />
+    <ProjectReference Include="../SwiftBindings.FamilyControls.csproj" />
   </ItemGroup>
 
 </Project>

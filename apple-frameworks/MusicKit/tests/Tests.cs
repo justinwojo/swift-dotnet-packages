@@ -31,9 +31,10 @@ internal static class Tests
         }
 
         // Test 1: MusicAuthorization.CurrentStatus reaches Swift and returns a Status object.
+        // Note: MusicAuthorization.Status is ISwiftObject — do NOT Dispose.
         try
         {
-            using var status = MusicAuthorization.CurrentStatus;
+            var status = MusicAuthorization.CurrentStatus;
             if (status is null)
                 throw new InvalidOperationException("status was null");
             Pass("MusicAuthorization.CurrentStatus");
@@ -103,23 +104,28 @@ internal static class Tests
             Fail("AudioVariant.DolbyAtmos.GetDescription", ex.Message);
         }
 
-        // Test 6: AudioVariant.SpatialAudio.GetDescription — this is the case that requires
-        // iOS 17.2+. The generated wrapper must have #available guards for this case;
-        // on simulators running iOS < 17.2 the wrapper should trap, on 17.2+ it should return a string.
-        // Either outcome means the wrapper compiled correctly with availability emission.
+        // Test 6: AudioVariant.SpatialAudio.GetDescription — requires iOS 17.2+.
+        // On 17.2+ the wrapper returns a string; on older OS the Swift runtime may trap.
+        // Binding-load failures (DllNotFoundException, EntryPointNotFoundException) are real bugs.
         try
         {
             var desc = AudioVariant.SpatialAudio.GetDescription();
             Log($"SpatialAudio description = {desc}");
             Pass("AudioVariant.SpatialAudio.GetDescription");
         }
+        catch (DllNotFoundException ex)
+        {
+            Fail("AudioVariant.SpatialAudio.GetDescription", ex.Message);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Fail("AudioVariant.SpatialAudio.GetDescription", ex.Message);
+        }
         catch (Exception ex)
         {
-            // Accept any failure here — the important assertion is that the SYMBOL exists
-            // and the wrapper compiled with the #available guard. If the binary didn't link,
-            // we'd get a DllNotFoundException / EntryPointNotFoundException much earlier.
-            Log($"SpatialAudio trapped as expected on older OS: {ex.Message}");
-            Pass("AudioVariant.SpatialAudio.GetDescription (trapped or returned)");
+            // Swift availability trap on older OS — wrapper linked and dispatched correctly.
+            Log($"SpatialAudio trapped on older OS (availability guard): {ex.Message}");
+            Pass("AudioVariant.SpatialAudio.GetDescription (availability trap)");
         }
 
         // Test 7: ContentRating plain enum is reachable.
@@ -202,6 +208,8 @@ internal static class Tests
         }
 
         // Test 12: SystemMusicPlayer.Shared singleton is non-null and reachable.
+        // SystemMusicPlayer is iOS-only — not available in macOS MusicKit bindings.
+#if IOS
         try
         {
             var player = SystemMusicPlayer.Shared;
@@ -213,6 +221,9 @@ internal static class Tests
         {
             Fail("SystemMusicPlayer.Shared", ex.Message);
         }
+#else
+        Skip("SystemMusicPlayer.Shared", "SystemMusicPlayer is iOS-only");
+#endif
 
         // Test 13: MusicPropertySource plain enum — verify Catalog=0 and Library=1.
         try
@@ -391,7 +402,58 @@ internal static class Tests
         MetadataTest<MusicCatalogSearchRequest>("MusicCatalogSearchRequest");
         MetadataTest<MusicLibrarySearchRequest>("MusicLibrarySearchRequest");
 
-        // Test 33: MusicSubscription.GetCurrentAsync — dispatch the call; framework error counts as pass.
+        // Test 34: MusicAuthorization.Status.CaseTag uint values
+        try
+        {
+            if ((uint)MusicAuthorization.Status.CaseTag.NotDetermined != 0)
+                throw new InvalidOperationException($"NotDetermined expected 0, got {(uint)MusicAuthorization.Status.CaseTag.NotDetermined}");
+            if ((uint)MusicAuthorization.Status.CaseTag.Denied != 1)
+                throw new InvalidOperationException($"Denied expected 1, got {(uint)MusicAuthorization.Status.CaseTag.Denied}");
+            if ((uint)MusicAuthorization.Status.CaseTag.Restricted != 2)
+                throw new InvalidOperationException($"Restricted expected 2, got {(uint)MusicAuthorization.Status.CaseTag.Restricted}");
+            if ((uint)MusicAuthorization.Status.CaseTag.Authorized != 3)
+                throw new InvalidOperationException($"Authorized expected 3, got {(uint)MusicAuthorization.Status.CaseTag.Authorized}");
+            Pass("MusicAuthorization.Status.CaseTag values");
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicAuthorization.Status.CaseTag values", ex.Message);
+        }
+
+        // Test 35: MusicSubscription.Error.CaseTag uint values
+        try
+        {
+            if ((uint)MusicSubscription.Error.CaseTag.Unknown != 0)
+                throw new InvalidOperationException($"Unknown expected 0, got {(uint)MusicSubscription.Error.CaseTag.Unknown}");
+            if ((uint)MusicSubscription.Error.CaseTag.PermissionDenied != 1)
+                throw new InvalidOperationException($"PermissionDenied expected 1, got {(uint)MusicSubscription.Error.CaseTag.PermissionDenied}");
+            if ((uint)MusicSubscription.Error.CaseTag.PrivacyAcknowledgementRequired != 2)
+                throw new InvalidOperationException($"PrivacyAcknowledgementRequired expected 2, got {(uint)MusicSubscription.Error.CaseTag.PrivacyAcknowledgementRequired}");
+            Pass("MusicSubscription.Error.CaseTag values");
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicSubscription.Error.CaseTag values", ex.Message);
+        }
+
+        // Test 36: RecentlyPlayedMusicItem.CaseTag uint values
+        try
+        {
+            if ((uint)RecentlyPlayedMusicItem.CaseTag.Album != 0)
+                throw new InvalidOperationException($"Album expected 0, got {(uint)RecentlyPlayedMusicItem.CaseTag.Album}");
+            if ((uint)RecentlyPlayedMusicItem.CaseTag.Playlist != 1)
+                throw new InvalidOperationException($"Playlist expected 1, got {(uint)RecentlyPlayedMusicItem.CaseTag.Playlist}");
+            if ((uint)RecentlyPlayedMusicItem.CaseTag.Station != 2)
+                throw new InvalidOperationException($"Station expected 2, got {(uint)RecentlyPlayedMusicItem.CaseTag.Station}");
+            Pass("RecentlyPlayedMusicItem.CaseTag values");
+        }
+        catch (Exception ex)
+        {
+            Fail("RecentlyPlayedMusicItem.CaseTag values", ex.Message);
+        }
+
+        // Test 37: MusicSubscription.GetCurrentAsync — dispatch the call; framework error counts as pass.
+        // Binding-load failures are real bugs and must fail.
         try
         {
             var sub = MusicSubscription.GetCurrentAsync().GetAwaiter().GetResult();
@@ -400,6 +462,14 @@ internal static class Tests
             bool hasCloud = sub.HasCloudLibraryEnabled;
             Log($"CanPlayCatalogContent={canPlay}, CanBecomeSubscriber={canBecome}, HasCloudLibraryEnabled={hasCloud}");
             Pass("MusicSubscription property reads");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Fail("MusicSubscription property reads", ex.Message);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Fail("MusicSubscription property reads", ex.Message);
         }
         catch (Exception ex)
         {

@@ -45,6 +45,7 @@ internal static class Tests
             }
         }
 
+#if IOS
         // Conversation is the core class — ARC-managed Swift class wrapper.
         // Loading its metadata exercises the class protocol fallback path.
         MetadataTest<Conversation>("Conversation metadata");
@@ -81,6 +82,7 @@ internal static class Tests
         {
             Fail("SetTranslatingAction.TranslationEngine values", ex.Message);
         }
+#endif
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

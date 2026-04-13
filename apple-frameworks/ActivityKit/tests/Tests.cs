@@ -184,17 +184,17 @@ internal static class Tests
         }
 
         // Test 11: ActivityAuthorizationInfo.ActivityEnablementUpdates — retrieve async sequence
-        // and dispose immediately without enumerating (non-ISwiftObject struct — safe to Dispose).
+        // without enumerating. ActivityEnablementUpdatesType is ISwiftObject — do NOT Dispose.
         try
         {
             var info = new ActivityAuthorizationInfo();
             var updates = info.ActivityEnablementUpdates;
-            updates.Dispose();
-            Pass("ActivityAuthorizationInfo.ActivityEnablementUpdates (create + dispose)");
+            Log($"ActivityEnablementUpdates type = {updates.GetType().Name}");
+            Pass("ActivityAuthorizationInfo.ActivityEnablementUpdates");
         }
         catch (Exception ex)
         {
-            Fail("ActivityAuthorizationInfo.ActivityEnablementUpdates (create + dispose)", ex.Message);
+            Fail("ActivityAuthorizationInfo.ActivityEnablementUpdates", ex.Message);
         }
 
         // Test 12: ActivityUIDismissalPolicy.Default singleton — non-null.
