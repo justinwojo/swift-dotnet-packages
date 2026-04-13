@@ -143,7 +143,7 @@ Each library can have a co-located test app (`libraries/<Name>/tests/` or `apple
 - **Library-specific tests** — API-level tests (constructors, singletons, properties, enums)
 - **Constructor tests** — run last (may crash on device if `@_cdecl` wrappers not deployed)
 - **Success marker** — prints `TEST SUCCESS` to stdout on pass; validation scripts watch for this
-- **No explicit Dispose** — avoid `using`/`.Dispose()` on ISwiftObject types (use GC instead)
+- **Deterministic cleanup** — `using var` is the recommended pattern for all ISwiftObject types (standard C# deterministic cleanup). Dispose is safe on all generated types; double-Dispose is a no-op.
 
 ### Template Placeholders
 

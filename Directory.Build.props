@@ -14,9 +14,9 @@
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
-  <!-- Package the icon from repo root -->
+  <!-- Package the icon from build/ -->
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)build/icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Import shared test codesign props for *.Tests projects -->
