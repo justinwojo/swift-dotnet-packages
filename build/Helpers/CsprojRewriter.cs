@@ -54,12 +54,17 @@ public static class CsprojRewriter
     /// <param name="csprojPath">Absolute path to the csproj.</param>
     /// <param name="depIncludes">
     /// Canonical sibling include paths to inject (e.g.
-    /// <c>"../StripeCore/StripeCore.xcframework"</c>). The block re-emits these
-    /// in ordinal-sorted order to match the bash output.
+    /// <c>"../StripeCore/StripeCore.xcframework"</c>). New items are appended
+    /// to the auto-block in ordinal sort order; pre-existing in-block items
+    /// keep their original order across re-runs (no churn).
     /// </param>
     /// <param name="knownSiblings">
-    /// Full set of canonical sibling include paths for the library (used to
-    /// distinguish sibling vs non-sibling SFD items during first-run migration).
+    /// Canonical sibling include set for the library (every other product's
+    /// xcframework path under the same library root). Used to prune entries
+    /// inside the auto-block that no longer correspond to a current product
+    /// — otherwise a sibling removed from <c>library.json</c> would stay
+    /// pinned in the managed block forever. Items <i>outside</i> the
+    /// auto-block are still preserved verbatim regardless of this set.
     /// </param>
     public static bool RewriteFrameworkDeps(
         AbsolutePath csprojPath,
@@ -75,6 +80,25 @@ public static class CsprojRewriter
     }
 
     /// <summary>Pure-function variant of <see cref="RewriteFrameworkDeps"/> for unit tests.</summary>
+    /// <remarks>
+    /// <para><b>Contract.</b></para>
+    /// <list type="bullet">
+    ///   <item><c>SwiftFrameworkDependency</c> items inside the
+    ///         <c>BEGIN/END auto-detected SwiftFrameworkDependency</c> block
+    ///         are managed: rewrites add, drop, and re-emit them based on
+    ///         the union of <paramref name="depIncludes"/> and existing
+    ///         in-block entries that are still in <paramref name="knownSiblings"/>.
+    ///         Existing in-block ordering is preserved on rerun (new items
+    ///         append sorted); entries that fall out of <paramref name="knownSiblings"/>
+    ///         are dropped so a removed product cannot pin itself forever.</item>
+    ///   <item><c>SwiftFrameworkDependency</c> items <i>outside</i> the
+    ///         auto-block are user-authored and preserved verbatim on every
+    ///         rerun — the in-place regex replacement only touches the
+    ///         marked block, regardless of <paramref name="knownSiblings"/>.</item>
+    ///   <item><c>&lt;PropertyGroup&gt;</c> content is never touched. Only
+    ///         the marked <c>&lt;ItemGroup&gt;</c> block is edited.</item>
+    /// </list>
+    /// </remarks>
     public static string ApplyFrameworkDeps(
         string original,
         IReadOnlyCollection<string> depIncludes,
@@ -105,9 +129,6 @@ public static class CsprojRewriter
                 preservedAttrs[include] = extras;
         }
 
-        // ── Step 2: build the new auto-block ──
-        var depsBlock = BuildSfdBlock(depIncludes, preservedAttrs);
-
         var content = original;
         var hasBegin = content.Contains(SfdBeginMarker);
         var hasEnd = content.Contains(SfdEndMarker);
@@ -125,10 +146,45 @@ public static class CsprojRewriter
         }
         var hasMarkers = hasBegin && hasEnd;
 
+        // Collect every SFD Include path already in the file — both inside
+        // and outside the auto-block. Used below to dedupe heuristic hits
+        // against user-authored entries: items outside the auto-block are
+        // user-authored and preserved verbatim.
+        var allExistingIncludes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in sfdElementRegex.Matches(original))
+        {
+            foreach (Match a in attrRegex.Matches(m.Groups[1].Value))
+            {
+                if (a.Groups[1].Value == "Include")
+                {
+                    allExistingIncludes.Add(a.Groups[2].Value);
+                    break;
+                }
+            }
+        }
+
         if (hasMarkers)
         {
-            // Subsequent run: replace the in-block content. Surrounding
-            // whitespace is preserved on purpose so re-runs are no-ops.
+            // Subsequent run: keep the existing in-block ordering of entries,
+            // and append new heuristic hits (those not already anywhere in
+            // the file) in ordinal sort order. Surrounding whitespace is
+            // left alone so unchanged content is a true no-op.
+            //
+            // Why union (not overwrite): the heuristic in
+            // Build.Dependencies.cs walks the public .swiftinterface, but
+            // SDK-generated wrappers sometimes transitively import a sibling
+            // not listed there (e.g. StripePaymentSheet's wrapper imports
+            // Stripe3DS2 through StripePayments). Dropping in-block entries
+            // the heuristic doesn't reproduce would silently delete those
+            // and break wrapper compile.
+            //
+            // Why preserve order: hand-curated csprojs (e.g. StripePayments
+            // ships [StripeCore, Stripe3DS2], not the ordinal-sorted
+            // [Stripe3DS2, StripeCore]) would otherwise churn on every rerun
+            // even when the *content* is identical.
+            var orderedIncludes = OrderInBlockIncludes(content, depIncludes, knownSiblings);
+            var depsBlock = BuildSfdBlock(orderedIncludes, preservedAttrs);
+
             var inPlacePattern = new Regex(
                 Regex.Escape(SfdBeginMarker) + ".*?" + Regex.Escape(SfdEndMarker),
                 RegexOptions.Singleline);
@@ -147,13 +203,24 @@ public static class CsprojRewriter
         }
         else
         {
-            // First run: migrate hand-authored sibling SFD entries OUT of
-            // their original ItemGroups (so they don't double-up with the
-            // new auto-block).
-            content = MigrateSfdSiblings(content, knownSiblings);
-
-            if (depsBlock.Length > 0)
+            // First run (no markers): user-authored SFD items in unmarked
+            // ItemGroups stay where they are. Only NEW heuristic hits —
+            // Includes the user hasn't already declared anywhere — get
+            // emitted into a fresh auto-block. This avoids both:
+            //   1. Silent loss of user-authored items (the regression seen
+            //      on the Stripe umbrella csproj, where the umbrella's
+            //      hand-authored unmarked ItemGroup was being stripped), and
+            //   2. Duplicate <SwiftFrameworkDependency> items between the
+            //      existing user block and the new auto-block.
+            // If every heuristic hit is already user-authored, no auto-block
+            // is emitted at all.
+            var newItems = depIncludes
+                .Where(d => !allExistingIncludes.Contains(d))
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .ToList();
+            if (newItems.Count > 0)
             {
+                var depsBlock = BuildSfdBlock(newItems, preservedAttrs);
                 // str.replace() in Python without count replaces ALL — but
                 // </Project> is unique in a csproj, so a single-shot replace
                 // is equivalent.
@@ -164,11 +231,104 @@ public static class CsprojRewriter
         return content;
     }
 
-    private static string BuildSfdBlock(
+    /// <summary>
+    /// Compute the order in which the SFD auto-block should be re-emitted
+    /// on a subsequent run: union of <paramref name="depIncludes"/> and any
+    /// in-block items still present in <paramref name="knownSiblings"/>, with
+    /// existing items kept in their original order and new heuristic hits
+    /// appended in ordinal sort order. Pure function — operates only on the
+    /// slice between <see cref="SfdBeginMarker"/> and <see cref="SfdEndMarker"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Union (not overwrite) semantics is intentional.</b> The heuristic
+    /// in <c>Build.Dependencies.cs</c> walks the public <c>.swiftinterface</c>
+    /// of each product, but the SDK-generated Swift wrapper sometimes
+    /// transitively imports a sibling not listed there (e.g.
+    /// <c>StripePaymentSheet</c>'s wrapper imports <c>Stripe3DS2</c> through
+    /// <c>StripePayments</c>). Dropping in-block entries that the heuristic
+    /// doesn't reproduce would silently delete those transitively-required
+    /// SFDs and break wrapper compile. The union keeps them.
+    /// </para>
+    /// <para>
+    /// <b>Pruning against <paramref name="knownSiblings"/>.</b> The union
+    /// is bounded by the canonical sibling set for the library: an in-block
+    /// entry whose include path no longer corresponds to a current product
+    /// (e.g. the product was removed from <c>library.json</c>) is dropped.
+    /// This prevents stale managed entries from pinning forever once a
+    /// product is removed or renamed.
+    /// </para>
+    /// <para>
+    /// Attribute parsing uses the order-agnostic
+    /// <c>&lt;SwiftFrameworkDependency ... /&gt;</c> matcher rather than
+    /// requiring <c>Include</c> to be the first attribute — robust against
+    /// hand-edited orderings such as <c>PackageId="..." Include="..."</c>.
+    /// </para>
+    /// </remarks>
+    private static List<string> OrderInBlockIncludes(
+        string content,
         IReadOnlyCollection<string> depIncludes,
+        IReadOnlyCollection<string> knownSiblings)
+    {
+        var blockMatch = new Regex(
+            Regex.Escape(SfdBeginMarker) + "(.*?)" + Regex.Escape(SfdEndMarker),
+            RegexOptions.Singleline).Match(content);
+
+        // Order-agnostic: scan the block slice for any
+        // <SwiftFrameworkDependency .../> element and pull the Include attr
+        // regardless of attribute order.
+        var sfdElementRegex = new Regex(@"<SwiftFrameworkDependency\b([^>]*?)/>", RegexOptions.Singleline);
+        var attrRegex = new Regex(@"(\w+)\s*=\s*""([^""]*)""");
+
+        var existingOrder = new List<string>();
+        if (blockMatch.Success)
+        {
+            foreach (Match m in sfdElementRegex.Matches(blockMatch.Groups[1].Value))
+            {
+                foreach (Match a in attrRegex.Matches(m.Groups[1].Value))
+                {
+                    if (a.Groups[1].Value == "Include")
+                    {
+                        existingOrder.Add(a.Groups[2].Value);
+                        break;
+                    }
+                }
+            }
+        }
+
+        var siblingSet = knownSiblings as HashSet<string>
+            ?? new HashSet<string>(knownSiblings, StringComparer.Ordinal);
+
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var inc in existingOrder)
+        {
+            // Prune entries no longer in the canonical sibling set so a
+            // removed/renamed product cannot stay pinned in the managed block.
+            if (!siblingSet.Contains(inc))
+                continue;
+            if (emitted.Add(inc))
+                result.Add(inc);
+        }
+        foreach (var inc in depIncludes.OrderBy(s => s, StringComparer.Ordinal))
+        {
+            if (emitted.Add(inc))
+                result.Add(inc);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Emit the SFD auto-block. Caller is responsible for the order of
+    /// <paramref name="orderedIncludes"/>: first-run uses ordinal sort
+    /// (matching Python's <c>sorted()</c> default); subsequent runs preserve
+    /// the existing in-block order via <see cref="OrderInBlockIncludes"/>.
+    /// </summary>
+    private static string BuildSfdBlock(
+        IReadOnlyList<string> orderedIncludes,
         Dictionary<string, List<KeyValuePair<string, string>>> preservedAttrs)
     {
-        if (depIncludes.Count == 0)
+        if (orderedIncludes.Count == 0)
             return "";
 
         var lines = new List<string>
@@ -176,8 +336,7 @@ public static class CsprojRewriter
             SfdBeginMarker,
             "  <ItemGroup>",
         };
-        // Ordinal sort matches Python's sorted() default.
-        foreach (var inc in depIncludes.OrderBy(s => s, StringComparer.Ordinal))
+        foreach (var inc in orderedIncludes)
         {
             if (preservedAttrs.TryGetValue(inc, out var extras))
             {
@@ -192,144 +351,6 @@ public static class CsprojRewriter
         lines.Add("  </ItemGroup>");
         lines.Add("  " + SfdEndMarker);
         return string.Join("\n", lines);
-    }
-
-    /// <summary>
-    /// Direct line-by-line port of the SFD migration state machine at
-    /// <c>scripts/detect-dependencies.sh:909–984</c>. Walks the csproj line by
-    /// line and:
-    /// <list type="bullet">
-    ///   <item>Identifies <c>&lt;ItemGroup&gt;</c> blocks containing any
-    ///         <c>SwiftFrameworkDependency</c> entry.</item>
-    ///   <item>Drops sibling SFD lines from those blocks.</item>
-    ///   <item>If the resulting block is empty, drops the whole
-    ///         <c>&lt;ItemGroup&gt;</c> AND any preceding comment + blank line.</item>
-    ///   <item>Keeps non-sibling entries (e.g. <c>Stripe3DS2.xcframework</c>
-    ///         which is internal but not in the canonical sibling set).</item>
-    /// </list>
-    /// </summary>
-    private static string MigrateSfdSiblings(string content, IReadOnlyCollection<string> knownSiblings)
-    {
-        var manualPattern = new Regex(@"<SwiftFrameworkDependency\s+Include=""([^""]+)""");
-        if (!manualPattern.IsMatch(content))
-            return content;
-
-        var sibSet = knownSiblings as HashSet<string>
-            ?? new HashSet<string>(knownSiblings, StringComparer.Ordinal);
-
-        var lines = content.Split('\n');
-        var output = new List<string>(lines.Length);
-
-        var inSfdItemGroup = false;
-        var itemGroupStart = -1;
-        var itemGroupEmptyAfterRemoval = true;
-
-        var sfdLineRegex = new Regex(@"<SwiftFrameworkDependency\s+Include=""([^""]+)""");
-
-        var i = 0;
-        while (i < lines.Length)
-        {
-            var line = lines[i];
-            var stripped = line.Trim();
-
-            // Bash: `if '<ItemGroup>' in stripped and i + 1 < len(lines):`
-            // Python `in` is substring; the literal `<ItemGroup>` substring
-            // implicitly excludes attributed groups like `<ItemGroup Condition="...">`
-            // because the closing `>` would shift to after the attribute list.
-            if (!inSfdItemGroup && stripped.Contains("<ItemGroup>", StringComparison.Ordinal) && i + 1 < lines.Length)
-            {
-                // Look ahead to detect whether this group contains an SFD
-                // entry. We stop at </ItemGroup> so we don't bleed into the
-                // next group.
-                var hasSfd = false;
-                for (var p = i + 1; p < lines.Length; p++)
-                {
-                    if (lines[p].Contains("SwiftFrameworkDependency", StringComparison.Ordinal))
-                    {
-                        hasSfd = true;
-                        break;
-                    }
-                    if (lines[p].Contains("</ItemGroup>", StringComparison.Ordinal))
-                        break;
-                }
-
-                if (hasSfd)
-                {
-                    inSfdItemGroup = true;
-                    itemGroupStart = output.Count;
-                    itemGroupEmptyAfterRemoval = true;
-                    output.Add(line);
-                    i++;
-                    continue;
-                }
-            }
-
-            if (inSfdItemGroup)
-            {
-                if (stripped.Contains("</ItemGroup>", StringComparison.Ordinal))
-                {
-                    inSfdItemGroup = false;
-                    if (itemGroupEmptyAfterRemoval)
-                    {
-                        // Roll back the entire group plus any preceding
-                        // SFD-related comment AND any preceding blank line.
-                        output.RemoveRange(itemGroupStart, output.Count - itemGroupStart);
-                        while (output.Count > 0 && output[^1].Trim().StartsWith("<!--", StringComparison.Ordinal))
-                            output.RemoveAt(output.Count - 1);
-                        while (output.Count > 0 && output[^1].Trim().Length == 0)
-                            output.RemoveAt(output.Count - 1);
-                    }
-                    else
-                    {
-                        output.Add(line);
-                    }
-                    i++;
-                    continue;
-                }
-
-                var sfdMatch = sfdLineRegex.Match(stripped);
-                if (sfdMatch.Success)
-                {
-                    var includePath = sfdMatch.Groups[1].Value;
-                    if (sibSet.Contains(includePath))
-                    {
-                        // Sibling — drop. The new auto-block will re-emit it.
-                        i++;
-                        continue;
-                    }
-                    // Non-sibling: keep it (not part of cross-module deps).
-                    itemGroupEmptyAfterRemoval = false;
-                    output.Add(line);
-                    i++;
-                    continue;
-                }
-
-                if (stripped.StartsWith("<!--", StringComparison.Ordinal))
-                {
-                    // Drop SFD-related comments; keep unrelated ones.
-                    if (stripped.Contains("SwiftFrameworkDependency", StringComparison.Ordinal)
-                        || stripped.Contains("ObjC-only", StringComparison.Ordinal))
-                    {
-                        i++;
-                        continue;
-                    }
-                    output.Add(line);
-                    i++;
-                    continue;
-                }
-
-                if (stripped.Length > 0)
-                    itemGroupEmptyAfterRemoval = false;
-                output.Add(line);
-                i++;
-                continue;
-            }
-
-            output.Add(line);
-            i++;
-        }
-
-        return string.Join("\n", output);
     }
 
     // ────────────────────────────────────────────────────────────────────────

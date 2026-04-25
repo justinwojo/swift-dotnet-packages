@@ -47,6 +47,7 @@
         "Restore",
         "RunCiSimTest",
         "ShutdownSim",
+        "TestCsprojRewriter",
         "ValidateDevice",
         "ValidateMac",
         "ValidateRewriter",

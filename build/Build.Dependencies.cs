@@ -75,22 +75,20 @@ partial class Build
         var config = LibraryConfigLoader.Load(LibraryConfigPath(library));
         var selected = config.ResolveProducts(requestedProducts, allProducts);
 
-        // Detect Swift modules across ALL products. A sibling is only a valid
-        // SFD candidate if its xcframework actually has a .swiftmodule
-        // (ObjC-only frameworks must NOT be listed as SwiftFrameworkDependency
-        // — that causes the SDK generator to silently produce no output).
-        var swiftModules = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var p in config.Products)
-        {
-            var xcfwDir = p.XcframeworkPath(libraryDir);
-            if (!Directory.Exists(xcfwDir))
-                continue;
-            var hasSwiftModule = Directory
-                .EnumerateDirectories(xcfwDir, "*.swiftmodule", SearchOption.AllDirectories)
-                .Any();
-            if (hasSwiftModule)
-                swiftModules.Add(p.Module ?? p.Framework);
-        }
+        // Map every library.json product module → manifest entry. The
+        // wrapper-compile path needs SwiftFrameworkDependency entries for
+        // every framework the public .swiftinterface imports, INCLUDING
+        // ObjC-only mixed/umbrella modules like Stripe3DS2 that ship without
+        // a .swiftmodule. Those still need to be on the framework search
+        // path so that `import X` in the generated Swift wrapper resolves;
+        // filtering by .swiftmodule presence (the previous behavior here)
+        // silently dropped them and broke wrapper compile for StripePayments.
+        // The companion ProjectReference / NativeReference plumbing handles
+        // the consuming side for ObjC-only deps; SFD here is strictly about
+        // the wrapper-compile framework search path.
+        var productModules = new HashSet<string>(
+            config.Products.Select(p => p.Module ?? p.Framework),
+            StringComparer.Ordinal);
 
         // Canonical sibling include set — same path scheme the bash uses to
         // build SIBLINGS in `--inject` mode. Includes internal products too,
@@ -133,8 +131,8 @@ partial class Build
             {
                 if (imp == module)
                     continue;
-                if (!swiftModules.Contains(imp))
-                    continue; // ObjC-only sibling — silently skip per bash semantics
+                if (!productModules.Contains(imp))
+                    continue; // System framework or unrelated module — not a sibling.
 
                 var sibling = config.Products.FirstOrDefault(p => (p.Module ?? p.Framework) == imp);
                 if (sibling is null)
