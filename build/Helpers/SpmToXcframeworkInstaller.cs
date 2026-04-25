@@ -21,8 +21,8 @@ public static class SpmToXcframeworkInstaller
     // ── Pinning (bump these three constants together) ───────────────────────
     // Mirror of scripts/ensure-spm-to-xcframework.sh:29-31. If you change one,
     // change the other to keep the bash + Nuke paths in lockstep.
-    public const string Ref = "cafa869b74c84e578eb7ed5710139b29fb3f611c";
-    public const string Sha256 = "9069d3b2bf4f4e599578ee2658e86a76c1cb5d4c32bcf6a23e282e720f923c3e";
+    public const string Ref = "e9e46f25b58ba91e3a2fbb70b8ea648c20b3e623";
+    public const string Sha256 = "4f493c9d80288b9bc04cc031d5a3f0e5cb219775325c485b5acdaaf0fa07cfff";
     public static readonly string Url =
         $"https://raw.githubusercontent.com/justinwojo/spm-to-xcframework/{Ref}/spm-to-xcframework";
 
