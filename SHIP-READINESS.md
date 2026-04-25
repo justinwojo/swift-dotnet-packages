@@ -2,7 +2,7 @@
 
 **Authoritative audit:** Round 7 — 2026-04-25 (post SDK rebuild + closing revalidation against fresh Stripe xcframeworks)
 **SDK tested:** `SwiftBindings.Sdk 0.8.0` + `SwiftBindings.Runtime 0.8.0` + `SwiftBindings.Templates 0.8.0` + `SwiftBindings.Apple 26.2.0` (local-packages drop 2026-04-25 04:25 — rebuilt fresh against `swift-bindings@f936e30d` to pick up Session 3's F3 fix).
-**Generator-side blocker doc (current round):** `/Users/wojo/Dev/swift-bindings/src/docs/ship-blockers-round7.md` — F4 (`YamlLikeTbdFormatParser` does not consume multi-line `objc-eh-types` continuation lines, blocks 5 of 12 Stripe products on fresh-build pipeline).
+**Generator-side blocker doc (current round):** `/Users/wojo/Dev/swift-bindings/src/docs/ship-blockers-round7.md` — F4 RESOLVED (Session 5; parser now consumes multi-line `objc-eh-types`). All 12 Stripe products generate, build, and the test app links cleanly. A new Stripe sim-runtime crash on `STPPaymentHandler.SharedHandler` (CallConvCdecl thunk) surfaced post-F4 unblock — documented as a Round 8 candidate in `ship-blockers-round7.md` §F4.
 **Generator-side prior round:** `/Users/wojo/Dev/swift-bindings/src/docs/ship-blockers-round6.md` (Round 6 enumerated F1, F2, F3 — all RESOLVED in Round 7; see verification table in `ship-blockers-round7.md`).
 **Previous round docs (history):** `ship-blockers-round6.md`, `ship-blockers-round5.md`, `ship-blockers-2026-04-22.md`, `ship-blockers-round4.md`, `ship-blockers-round3.md`, `ship-blockers-round2.md`, `ship-blockers.md` — all under `/Users/wojo/Dev/swift-bindings/src/docs/`.
 
@@ -10,9 +10,11 @@
 
 | ID | Area | Impact | Where it manifests |
 |---|---|---|---|
-| **F4** | `YamlLikeTbdFormatParser` multi-line `objc-eh-types` handling | Generator parses TBD's `objc-eh-types: [ A, B,` first line as warning, then throws `Invalid key-value pair format` on continuation line | Stripe fresh-build pipeline (`dotnet nuke RunCiSimTest --library Stripe`) — 5 of 12 products fail at generator step (StripePayments, StripePaymentsUI, StripePaymentSheet, StripeIssuing, Stripe umbrella). Suggested fix in `ship-blockers-round7.md` §F4. |
+| *(none open)* | — | F4 resolved Session 5; no open generator-side blockers gating Stripe at the build level. | — |
 
-**Resolved in Round 7 (no longer blockers):** F1 ✅ (InjectFrameworkDeps preserves user-authored deps), F2 ✅ (spm-to-xcframework mixed-framework Headers/+Modules now emitted by pin `5909bd5`+`e9e46f2`), F3 ✅ (CryptoKit AEAD primary flow runtime-verified on both runtimes; commit `swift-bindings@f936e30d`).
+**Resolved in Round 7 + Session 5:** F1 ✅ (InjectFrameworkDeps preserves user-authored deps), F2 ✅ (spm-to-xcframework mixed-framework Headers/+Modules now emitted by pin `5909bd5`+`e9e46f2`), F3 ✅ (CryptoKit AEAD primary flow runtime-verified on both runtimes; commit `swift-bindings@f936e30d`), **F4 ✅** (`YamlLikeTbdFormatParser` now consumes multi-line `objc-eh-types` continuation lines; Session 5 fix in `swift-bindings`). All 12 Stripe products generate, build, and the test app links.
+
+**Open Stripe runtime blocker (Round 8 candidate, post-F4 finding):** Sim test runner crashes on the first `STPPaymentHandler.SharedHandler` access — Mono assertion `!ji->async` at `jit-info.c:918`. The P/Invoke is `CallConvCdecl` against `@_cdecl` thunk `thunk_StripePayments_6d7d9617`, so per `feedback_mono_jit_blame.md` rule 3 ("CallConvCdecl is NEVER upstream") this is OUR bug, not Mono Issue 1. Likely root area: `@_cdecl` wrapper for static class properties on ObjC-derived (NSObject-subclass) types. Stripe stays HOLD until this is resolved. Full diagnosis in `ship-blockers-round7.md` §F4 "Round 8 candidate" subsection.
 
 **Repo state caveat:** Stripe csprojs are now F1-clean (worked through `RunCiSimTest --library Stripe` cleanly when it ran on the 7 unblocked products). The 5 F4-blocked products keep their existing csprojs untouched — F4 fails at the generator binding step before csproj rewrite. Two unpushed local commits in `swift-dotnet-packages` (`c73f7d3` F1 verification, `5523e23` spm-to-xcframework pin bump) remain pending NuGet publish.
 
@@ -20,7 +22,7 @@
 
 ## TL;DR
 
-**16 shippable NuGet packages today** = 9 Apple frameworks clean + 2 Apple frameworks with README caveat + 6 third-party libraries (StripeUICore is internal-only; GRDB will be removed). **Stripe (12 products) is on HOLD pending F4** — the fresh-build generator pipeline aborts on 5 of 12 Stripe products. Once F4 lands, Stripe's 12 products plus the existing 11 ship for a **27-package** publish set.
+**16 shippable NuGet packages today** = 9 Apple frameworks clean + 2 Apple frameworks with README caveat + 6 third-party libraries (StripeUICore is internal-only; GRDB will be removed). **Stripe (12 products) is on HOLD pending Round 8 runtime fix** — F4 resolved in Session 5 (all 12 products now generate + build + link cleanly), but the sim test runner now crashes on `STPPaymentHandler.SharedHandler` (CallConvCdecl thunk crash, our bug per the blame-list rule). Once the runtime crash is resolved, Stripe's 12 products plus the existing 11 ship for a **27-package** publish set.
 
 Round 7 confirmed that Round 6's three blockers (F1, F2, F3) are all resolved at the gate level. CryptoKit's primary AEAD round-trip (`AES.GCM.Seal/Open` + `ChaChaPoly.Seal/Open`) is now reachable from C# on both Mono JIT sim and NativeAOT device — the **CryptoKit "primary AEAD ships" framing is accurate**. Round 7's net-new finding **F4** surfaced when Session 2's regenerated Stripe xcframeworks exposed a TBD-parser gap that Round 6's cached pre-Session-2 xcframeworks did not exercise. Details: `ship-blockers-round7.md` §F4.
 
@@ -28,7 +30,7 @@ Round 7 confirmed that Round 6's three blockers (F1, F2, F3) are all resolved at
 |---|---|---|
 | **Clean SHIP** | 9 Apple + 6 third-party = **15** | **Apple (9):** **CryptoKit** (promoted Round 7 — F3 cleared; AEAD primary flow verified), LiveCommunicationKit, ProximityReader, RoomPlan, FamilyControls, Translation, StoreKit2, WeatherKit, MusicKit. **Third-party (6):** Nuke, Lottie, Kingfisher, BlinkID, BlinkIDUX, Mappedin. |
 | **SHIP with README caveat** | 2 Apple | TipKit (permanent — `@_alwaysEmitIntoClient` DSL, 12 SB0001 unchanged), WorkoutKit (HealthKit writes deferred). |
-| **HOLD pending F4** | 12 Stripe products | **Stripe umbrella + 11 sub-products** (StripeCore, StripePayments, StripePaymentsUI, StripeApplePay, StripeConnect, StripeIdentity, StripeIssuing, StripeCardScan, StripeFinancialConnections, StripePaymentSheet, StripeUICore-internal). Fresh-build generator step aborts on 5 of 12 products via F4 (multi-line `objc-eh-types` parser bug). Cached pre-Session-2 xcframeworks would still build; shipping demands a fresh-build path. |
+| **HOLD pending Stripe runtime fix** | 12 Stripe products | **Stripe umbrella + 11 sub-products** (StripeCore, StripePayments, StripePaymentsUI, StripeApplePay, StripeConnect, StripeIdentity, StripeIssuing, StripeCardScan, StripeFinancialConnections, StripePaymentSheet, StripeUICore-internal). F4 resolved in Session 5 — generator now succeeds on all 12 products and the umbrella test app links. Sim runtime crashes on first `STPPaymentHandler.SharedHandler` access (CallConvCdecl thunk crash, Mono `!ji->async`); a Round 8 candidate documented in `ship-blockers-round7.md` §F4. |
 | **Shelved (not shipping for 1.0)** | 1 | ActivityKit — user-facing value doesn't justify a C#-source-generator-emits-Swift-companion subsystem (Round 5 decision 2026-04-23). |
 
 ---
