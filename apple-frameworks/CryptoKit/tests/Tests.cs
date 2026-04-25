@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Justin Wojciechowski.
 // Licensed under the MIT License.
 
+using System.Text;
 using CryptoKit;
 using Swift.Runtime;
 
@@ -251,9 +252,9 @@ internal static class Tests
         // Test 26: P384/P521 private key and signature metadata.
         MetadataTest<P384.Signing.PrivateKey>("P384.Signing.PrivateKey");
         MetadataTest<P521.Signing.PrivateKey>("P521.Signing.PrivateKey");
-        MetadataTest<P256.Signing.ECDSASignature>("P256.Signing.ECDSASignature");
-        MetadataTest<P384.Signing.ECDSASignature>("P384.Signing.ECDSASignature");
-        MetadataTest<P521.Signing.ECDSASignature>("P521.Signing.ECDSASignature");
+        MetadataTest<Swift.CryptoKit.P256.Signing.ECDSASignature>("P256.Signing.ECDSASignature");
+        MetadataTest<Swift.CryptoKit.P384.Signing.ECDSASignature>("P384.Signing.ECDSASignature");
+        MetadataTest<Swift.CryptoKit.P521.Signing.ECDSASignature>("P521.Signing.ECDSASignature");
 
         // Test 31: AES.GCM.Nonce metadata loads.
         MetadataTest<AES.GCM.Nonce>("AES.GCM.Nonce");
@@ -263,6 +264,168 @@ internal static class Tests
 
         // Test 24: Insecure.SHA1 metadata loads.
         MetadataTest<Insecure.SHA1>("Insecure.SHA1");
+
+        // Test 25a: SymmetricKeySize.Bits256.BitCount round-trips correctly.
+        // Diagnostic baseline for the AEAD round-trip tests — if BitCount is not 256, AES.GCM
+        // will reject the resulting key with `incorrectKeySize`.
+        try
+        {
+            var size = SymmetricKeySize.Bits256;
+            int bits = size.BitCount;
+            Log($"SymmetricKeySize.Bits256.BitCount = {bits}");
+            if (bits != 256)
+                throw new InvalidOperationException($"expected 256, got {bits}");
+            Pass("SymmetricKeySize.Bits256.BitCount round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("SymmetricKeySize.Bits256.BitCount round-trip", ex.Message);
+        }
+
+        // Test 25b: Construct SymmetricKeySize via explicit nint bitCount, verify BitCount round-trips.
+        try
+        {
+            var size = new SymmetricKeySize((nint)256);
+            int bits = size.BitCount;
+            Log($"new SymmetricKeySize(256).BitCount = {bits}");
+            if (bits != 256)
+                throw new InvalidOperationException($"expected 256, got {bits}");
+            Pass("new SymmetricKeySize(256).BitCount round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("new SymmetricKeySize(256).BitCount round-trip", ex.Message);
+        }
+
+        // Test 25c: SymmetricKey constructed from a 256-bit size has BitCount == 256.
+        try
+        {
+            var key = new SymmetricKey(new SymmetricKeySize((nint)256));
+            int bits = key.BitCount;
+            Log($"SymmetricKey(SymmetricKeySize(256)).BitCount = {bits}");
+            if (bits != 256)
+                throw new InvalidOperationException($"expected 256, got {bits}");
+            Pass("SymmetricKey size round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("SymmetricKey size round-trip", ex.Message);
+        }
+
+        // Tests 26–29: AEAD round-trip from C#. End-to-end authenticated encryption.
+        //
+        // The CSM-emitted Seal/Open overloads pass SymmetricKey through the
+        // ConcreteProtocolSpecializationEmitter PayloadHandle path. Non-frozen-struct
+        // params on that path require .assumingMemoryBound(...).pointee reconstruction
+        // (a value-witness-table-aware load of the heap buffer); a class-style
+        // unsafeBitCast(OpaquePointer) reconstruction would mis-read the pointer's
+        // bits as the struct payload, surfacing as AES.GCM seeing an incorrectKeySize
+        // even though SymmetricKey.BitCount == 256.
+
+        // Test 26: AES.GCM Seal/Open round-trip via the non-generic byte[] CSM overload.
+        // Exercises SBW_CSM_CryptoKit_GCM_Swift_Array_Swift_UInt8_seal_3E6CC09E — the
+        // SymmetricKey CSM-marshalling code path.
+        try
+        {
+            var key = new SymmetricKey(SymmetricKeySize.Bits256);
+            var plaintext = Encoding.UTF8.GetBytes("hello AES.GCM");
+            var sealedBox = AES.GCM.Seal(plaintext, key);
+            var recovered = AES.GCM.Open(sealedBox, key);
+            if (recovered is null)
+                throw new InvalidOperationException("Open returned null");
+            if (recovered.Length != plaintext.Length)
+                throw new InvalidOperationException($"length mismatch: {recovered.Length} vs {plaintext.Length}");
+            for (int i = 0; i < plaintext.Length; i++)
+            {
+                if (recovered[i] != plaintext[i])
+                    throw new InvalidOperationException($"byte mismatch at {i}: {recovered[i]} vs {plaintext[i]}");
+            }
+            Pass("AES.GCM round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("AES.GCM round-trip", ex.Message);
+        }
+
+        // Test 27: ChaChaPoly Seal/Open round-trip via the non-generic byte[] CSM overload.
+        try
+        {
+            var key = new SymmetricKey(SymmetricKeySize.Bits256);
+            var plaintext = Encoding.UTF8.GetBytes("hello ChaChaPoly");
+            var sealedBox = ChaChaPoly.Seal(plaintext, key);
+            var recovered = ChaChaPoly.Open(sealedBox, key);
+            if (recovered is null)
+                throw new InvalidOperationException("Open returned null");
+            if (recovered.Length != plaintext.Length)
+                throw new InvalidOperationException($"length mismatch: {recovered.Length} vs {plaintext.Length}");
+            for (int i = 0; i < plaintext.Length; i++)
+            {
+                if (recovered[i] != plaintext[i])
+                    throw new InvalidOperationException($"byte mismatch at {i}: {recovered[i]} vs {plaintext[i]}");
+            }
+            Pass("ChaChaPoly round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("ChaChaPoly round-trip", ex.Message);
+        }
+
+        // Test 28: AES.GCM authentication — Open with the wrong key must throw.
+        // (SealedBox(nonce:, ciphertext:, tag:) ctor is unavailable — Swift generic init
+        // not emittable in C# — so we exercise the auth path by attempting to Open with
+        // a different key, which produces an `authenticationFailure` from Swift.)
+        try
+        {
+            var key1 = new SymmetricKey(SymmetricKeySize.Bits256);
+            var key2 = new SymmetricKey(SymmetricKeySize.Bits256);
+            var plaintext = Encoding.UTF8.GetBytes("auth-test plaintext");
+            var sealedBox = AES.GCM.Seal(plaintext, key1);
+            bool threw = false;
+            try
+            {
+                AES.GCM.Open(sealedBox, key2);
+            }
+            catch
+            {
+                threw = true;
+            }
+            if (!threw)
+                throw new InvalidOperationException("expected Open with wrong key to throw, but it returned");
+            Pass("AES.GCM tamper detection");
+        }
+        catch (Exception ex)
+        {
+            Fail("AES.GCM tamper detection", ex.Message);
+        }
+
+        // Test 29: AES.GCM Seal-with-AD dispatch — exercises the 4-arg CSM Seal overload
+        // (SBW_CSM_CryptoKit_GCM_Swift_Array_Swift_UInt8_Swift_Array_Swift_UInt8_seal_C2C5F492),
+        // a *different* CSM specialization than the 3-arg overload Tests 26/27 use (a
+        // `where AD: DataProtocol` constraint adds a second metadata-routed parameter).
+        // Validates the SymmetricKey CSM marshalling on the multi-conformer CSM path.
+        //
+        // This test stops at Seal — verifying the SealedBox surfaces non-empty ciphertext
+        // and tag — rather than calling Open<TAD>(SealedBox, SymmetricKey, AD), because the
+        // generic Open<TAD> overload uses CallConvSwift directly and hits an unrelated
+        // upstream Mono JIT async assertion on the simulator.
+        try
+        {
+            var key = new SymmetricKey(SymmetricKeySize.Bits256);
+            var plaintext = Encoding.UTF8.GetBytes("plaintext with AD");
+            var aad = Encoding.UTF8.GetBytes("authenticated-header");
+            var sealedBox = AES.GCM.Seal(plaintext, key, aad);
+            var ciphertext = sealedBox.Ciphertext;
+            var tag = sealedBox.Tag;
+            if (ciphertext is null || ciphertext.Length != plaintext.Length)
+                throw new InvalidOperationException($"ciphertext length unexpected: {ciphertext?.Length ?? -1}");
+            if (tag is null || tag.Length != 16) // AES-GCM tag is 128 bits
+                throw new InvalidOperationException($"tag length unexpected: {tag?.Length ?? -1}");
+            Pass("AES.GCM.Seal with AD dispatch");
+        }
+        catch (Exception ex)
+        {
+            Fail("AES.GCM.Seal with AD dispatch", ex.Message);
+        }
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
