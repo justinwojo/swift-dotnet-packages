@@ -42,20 +42,20 @@ Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stri
 
 | Package | Description | Version |
 |---|---|---|
-| [`SwiftBindings.Stripe`](libraries/Stripe/Stripe/README.md) | Umbrella module re-exporting the common payment APIs | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe) |
-| [`SwiftBindings.Stripe.Core`](libraries/Stripe/StripeCore/README.md) | `STPAPIClient`, networking, shared types | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Core.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Core) |
-| [`SwiftBindings.Stripe.Payments`](libraries/Stripe/StripePayments/README.md) | `PaymentIntent`, `SetupIntent`, `PaymentMethod` flows | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Payments.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Payments) |
-| [`SwiftBindings.Stripe.PaymentsUI`](libraries/Stripe/StripePaymentsUI/README.md) | UI controls (`STPCardFormView`, `STPPaymentCardTextField`) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.PaymentsUI.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentsUI) |
-| [`SwiftBindings.Stripe.PaymentSheet`](libraries/Stripe/StripePaymentSheet/README.md) | Drop-in payment UI with 3DS and Apple Pay | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.PaymentSheet.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentSheet) |
-| [`SwiftBindings.Stripe.ApplePay`](libraries/Stripe/StripeApplePay/README.md) | Lightweight Apple Pay integration | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.ApplePay.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.ApplePay) |
-| [`SwiftBindings.Stripe.Connect`](libraries/Stripe/StripeConnect/README.md) | Stripe Connect embedded components | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Connect.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Connect) |
-| [`SwiftBindings.Stripe.Identity`](libraries/Stripe/StripeIdentity/README.md) | Stripe Identity verification sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Identity.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Identity) |
-| [`SwiftBindings.Stripe.Issuing`](libraries/Stripe/StripeIssuing/README.md) | Push-provisioning to Apple Wallet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Issuing.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Issuing) |
-| [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CardScan.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CardScan) |
-| [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.FinancialConnections.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.FinancialConnections) |
-| [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) | Shared UI primitives consumed by sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.UICore.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.UICore) |
+| [`SwiftBindings.Stripe`](libraries/Stripe/Stripe/README.md) | Umbrella module re-exporting the common payment APIs | _Coming soon_ |
+| [`SwiftBindings.Stripe.Core`](libraries/Stripe/StripeCore/README.md) | `STPAPIClient`, networking, shared types | _Coming soon_ |
+| [`SwiftBindings.Stripe.Payments`](libraries/Stripe/StripePayments/README.md) | `PaymentIntent`, `SetupIntent`, `PaymentMethod` flows | _Coming soon_ |
+| [`SwiftBindings.Stripe.PaymentsUI`](libraries/Stripe/StripePaymentsUI/README.md) | UI controls (`STPCardFormView`, `STPPaymentCardTextField`) | _Coming soon_ |
+| [`SwiftBindings.Stripe.PaymentSheet`](libraries/Stripe/StripePaymentSheet/README.md) | Drop-in payment UI with 3DS and Apple Pay | _Coming soon_ |
+| [`SwiftBindings.Stripe.ApplePay`](libraries/Stripe/StripeApplePay/README.md) | Lightweight Apple Pay integration | _Coming soon_ |
+| [`SwiftBindings.Stripe.Connect`](libraries/Stripe/StripeConnect/README.md) | Stripe Connect embedded components | _Coming soon_ |
+| [`SwiftBindings.Stripe.Identity`](libraries/Stripe/StripeIdentity/README.md) | Stripe Identity verification sheet | _Coming soon_ |
+| [`SwiftBindings.Stripe.Issuing`](libraries/Stripe/StripeIssuing/README.md) | Push-provisioning to Apple Wallet | _Coming soon_ |
+| [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | _Coming soon_ |
+| [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | _Coming soon_ |
+| [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) | Shared UI primitives consumed by sibling Stripe packages (do not use directly) | _Coming soon_ |
 
-> `SwiftBindings.Stripe.UICore` is `@_spi`/private API in the upstream Stripe SDK. It is published only because six sibling Stripe packages declare it as a NuGet dependency. Do not consume it directly — see its README.
+> Stripe publish is paused on a SwiftBindings SDK gap: the upstream `Stripe.xcframework.zip` includes two internal frameworks (`Stripe3DS2`, `StripeCameraCore`) that several public sub-packages link against but that we don't want to surface as standalone NuGets. The SDK has no way today to declare a build/runtime framework dependency without also emitting a NuGet `<PackageReference>`. See [`PRIVATE-FRAMEWORK-DEPENDENCIES.md`](PRIVATE-FRAMEWORK-DEPENDENCIES.md) for the full write-up and proposed `SwiftFrameworkPrivateDependency` design.
 
 ## Apple framework support
 
