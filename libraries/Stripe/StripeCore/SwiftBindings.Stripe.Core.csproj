@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.Core</PackageId>
-    <Version>25.6.2</Version>
+    <Version>25.11.0</Version>
     <Description>.NET bindings for the StripeCore Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripecore;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -1,7 +1,8 @@
 {
   "repository": "https://github.com/stripe/stripe-ios.git",
-  "version": "25.6.2",
-  "mode": "source",
+  "version": "25.11.0",
+  "mode": "zip",
+  "zipUrl": "https://github.com/stripe/stripe-ios/releases/download/{version}/Stripe.xcframework.zip",
   "minIOS": "15.0",
   "products": [
     {
@@ -18,59 +19,48 @@
     },
     {
       "framework": "StripeCore",
-      "subdirectory": "StripeCore",
-      "useTarget": true
+      "subdirectory": "StripeCore"
     },
     {
       "framework": "StripeUICore",
-      "subdirectory": "StripeUICore",
-      "useTarget": true
+      "subdirectory": "StripeUICore"
     },
     {
       "framework": "StripePaymentsUI",
-      "subdirectory": "StripePaymentsUI",
-      "useTarget": true
+      "subdirectory": "StripePaymentsUI"
     },
     {
       "framework": "StripeApplePay",
-      "subdirectory": "StripeApplePay",
-      "useTarget": true
+      "subdirectory": "StripeApplePay"
     },
     {
       "framework": "StripeIdentity",
-      "subdirectory": "StripeIdentity",
-      "useTarget": true
+      "subdirectory": "StripeIdentity"
     },
     {
       "framework": "StripeIssuing",
-      "subdirectory": "StripeIssuing",
-      "useTarget": true
+      "subdirectory": "StripeIssuing"
     },
     {
       "framework": "StripeCardScan",
-      "subdirectory": "StripeCardScan",
-      "useTarget": true
+      "subdirectory": "StripeCardScan"
     },
     {
       "framework": "StripeFinancialConnections",
-      "subdirectory": "StripeFinancialConnections",
-      "useTarget": true
+      "subdirectory": "StripeFinancialConnections"
     },
     {
       "framework": "StripeConnect",
-      "subdirectory": "StripeConnect",
-      "useTarget": true
+      "subdirectory": "StripeConnect"
     },
     {
       "framework": "Stripe3DS2",
       "subdirectory": "Stripe3DS2",
-      "useTarget": true,
       "internal": true
     },
     {
       "framework": "StripeCameraCore",
       "subdirectory": "StripeCameraCore",
-      "useTarget": true,
       "internal": true
     }
   ]

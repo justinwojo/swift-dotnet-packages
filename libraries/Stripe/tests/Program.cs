@@ -1107,11 +1107,10 @@ public class MainViewController : UIViewController
                 results.Fail("Payments_STPPaymentMethodParams_Ctor", "Returned null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("STPPaymentMethodParams: wrapper xcframework not available");
-            results.Skip("Payments_STPPaymentMethodParams_Ctor", "Wrapper not available");
-            // If basic construction fails, skip the rest of StripePayments
+            logger.Fail($"STPPaymentMethodParams: native entry point missing: {ex.Message}");
+            results.Fail("Payments_STPPaymentMethodParams_Ctor", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -1670,10 +1669,10 @@ public class MainViewController : UIViewController
                 results.Fail("PaymentSheet_Appearance_Default", "Returned null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("PaymentSheet.Appearance: wrapper xcframework not available");
-            results.Skip("PaymentSheet_Appearance_Default", "Wrapper not available");
+            logger.Fail($"PaymentSheet.Appearance: native entry point missing: {ex.Message}");
+            results.Fail("PaymentSheet_Appearance_Default", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -2131,10 +2130,10 @@ public class MainViewController : UIViewController
                 results.Fail("PaymentSheet_CustomerSheetResult_Canceled", "Unexpected tag");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("CustomerSheetResult.Canceled: StripePaymentSheet wrapper not available");
-            results.Skip("PaymentSheet_CustomerSheetResult_Canceled", "Wrapper not available");
+            logger.Fail($"CustomerSheetResult.Canceled: native entry point missing: {ex.Message}");
+            results.Fail("PaymentSheet_CustomerSheetResult_Canceled", $"Native entry point missing: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -2157,10 +2156,10 @@ public class MainViewController : UIViewController
                 results.Fail("PaymentSheet_CustomerSheetResult_Selected", "Unexpected tag");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("CustomerSheetResult.Selected: StripePaymentSheet wrapper not available");
-            results.Skip("PaymentSheet_CustomerSheetResult_Selected", "Wrapper not available");
+            logger.Fail($"CustomerSheetResult.Selected: native entry point missing: {ex.Message}");
+            results.Fail("PaymentSheet_CustomerSheetResult_Selected", $"Native entry point missing: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -2187,10 +2186,10 @@ public class MainViewController : UIViewController
                 results.Fail("PaymentSheet_AddressDetails_Ctor", "Null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("AddressDetails: StripePaymentSheet wrapper not available");
-            results.Skip("PaymentSheet_AddressDetails_Ctor", "Wrapper not available");
+            logger.Fail($"AddressDetails: native entry point missing: {ex.Message}");
+            results.Fail("PaymentSheet_AddressDetails_Ctor", $"Native entry point missing: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -2416,10 +2415,10 @@ public class MainViewController : UIViewController
                 results.Fail("Connect_Appearance_Default", "Null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripeConnect: wrapper xcframework not available");
-            results.Skip("Connect_Appearance_Default", "Wrapper not available");
+            logger.Fail($"StripeConnect: native entry point missing: {ex.Message}");
+            results.Fail("Connect_Appearance_Default", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -2547,10 +2546,10 @@ public class MainViewController : UIViewController
             logger.Pass($"STPFakeAddPaymentPassViewController.CanAddPaymentPass(): {canAdd}");
             results.Pass("Issuing_CanAddPaymentPass");
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripeIssuing: wrapper xcframework not available");
-            results.Skip("Issuing_CanAddPaymentPass", "Wrapper not available");
+            logger.Fail($"StripeIssuing: native entry point missing: {ex.Message}");
+            results.Fail("Issuing_CanAddPaymentPass", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -2633,10 +2632,10 @@ public class MainViewController : UIViewController
                 results.Fail("CardScan_Result_Canceled", "Wrong tag");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripeCardScan: wrapper xcframework not available");
-            results.Skip("CardScan_Result_Canceled", "Wrapper not available");
+            logger.Fail($"StripeCardScan: native entry point missing: {ex.Message}");
+            results.Fail("CardScan_Result_Canceled", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -2671,10 +2670,10 @@ public class MainViewController : UIViewController
                     results.Fail($"CardScan_CancellationReason_{name}", "Empty RawValue");
                 }
             }
-            catch (DllNotFoundException)
+            catch (DllNotFoundException ex)
             {
-                logger.Skip($"CancellationReason.{name}: StripeCardScan wrapper not available");
-                results.Skip($"CardScan_CancellationReason_{name}", "Wrapper not available");
+                logger.Fail($"CancellationReason.{name}: native entry point missing: {ex.Message}");
+                results.Fail($"CardScan_CancellationReason_{name}", $"Native entry point missing: {ex.Message}");
             }
             catch (Exception ex)
             {
@@ -2700,10 +2699,10 @@ public class MainViewController : UIViewController
                 results.Fail("CardScan_CancellationReason_FromRawValue", "Roundtrip failed");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("CancellationReason.FromRawValue: StripeCardScan wrapper not available");
-            results.Skip("CardScan_CancellationReason_FromRawValue", "Wrapper not available");
+            logger.Fail($"CancellationReason.FromRawValue: native entry point missing: {ex.Message}");
+            results.Fail("CardScan_CancellationReason_FromRawValue", $"Native entry point missing: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -2748,10 +2747,10 @@ public class MainViewController : UIViewController
                 results.Fail("CardScan_Sheet_Ctor", "Null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("CardScanSheet(): StripeCardScan wrapper not available");
-            results.Skip("CardScan_Sheet_Ctor", "Wrapper not available");
+            logger.Fail($"CardScanSheet(): native entry point missing: {ex.Message}");
+            results.Fail("CardScan_Sheet_Ctor", $"Native entry point missing: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -2783,10 +2782,10 @@ public class MainViewController : UIViewController
                 results.Fail("FinConn_Sheet_Ctor", "Null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripeFinancialConnections: wrapper xcframework not available");
-            results.Skip("FinConn_Sheet_Ctor", "Wrapper not available");
+            logger.Fail($"StripeFinancialConnections: native entry point missing: {ex.Message}");
+            results.Fail("FinConn_Sheet_Ctor", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -2883,10 +2882,10 @@ public class MainViewController : UIViewController
                 results.Fail("PaymentsUI_CardFormView_Ctor", "Null");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripePaymentsUI: wrapper xcframework not available");
-            results.Skip("PaymentsUI_CardFormView_Ctor", "Wrapper not available");
+            logger.Fail($"StripePaymentsUI: native entry point missing: {ex.Message}");
+            results.Fail("PaymentsUI_CardFormView_Ctor", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -4609,10 +4608,10 @@ public class MainViewController : UIViewController
                 results.Fail("Connect_Options_Fields", "Wrong tag");
             }
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            logger.Skip("StripeConnect: wrapper xcframework not available");
-            results.Skip("Connect_Options_Fields", "Wrapper not available");
+            logger.Fail($"StripeConnect Options.Fields: native entry point missing: {ex.Message}");
+            results.Fail("Connect_Options_Fields", $"Native entry point missing: {ex.Message}");
             return;
         }
         catch (Exception ex)
@@ -5824,8 +5823,6 @@ public class MainViewController : UIViewController
                 StripePaymentSheet.PaymentSheetError.CaseTag.UnexpectedResponseFromStripeAPI, "UnexpectedResponse"),
             (() => StripePaymentSheet.PaymentSheetError.AccountLinkFailure,
                 StripePaymentSheet.PaymentSheetError.CaseTag.AccountLinkFailure, "AccountLinkFailure"),
-            (() => StripePaymentSheet.PaymentSheetError.FetchPaymentMethodsFailure,
-                StripePaymentSheet.PaymentSheetError.CaseTag.FetchPaymentMethodsFailure, "FetchPaymentMethodsFailure"),
             (() => StripePaymentSheet.PaymentSheetError.LinkNotAuthorized,
                 StripePaymentSheet.PaymentSheetError.CaseTag.LinkNotAuthorized, "LinkNotAuthorized"),
         };

@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.Connect</PackageId>
-    <Version>25.6.2</Version>
+    <Version>25.11.0</Version>
     <Description>.NET bindings for the StripeConnect Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripeconnect;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,14 +19,10 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.6.2" />
-    <SwiftFrameworkDependency Include="../StripeFinancialConnections/StripeFinancialConnections.xcframework" PackageId="SwiftBindings.Stripe.FinancialConnections" PackageVersion="25.6.2" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.6.2" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeFinancialConnections/StripeFinancialConnections.xcframework" PackageId="SwiftBindings.Stripe.FinancialConnections" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.11.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
-
-  <ItemGroup>
-    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
-  </ItemGroup>
 
 </Project>

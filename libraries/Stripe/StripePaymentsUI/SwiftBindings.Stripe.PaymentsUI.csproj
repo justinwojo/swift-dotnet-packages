@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.PaymentsUI</PackageId>
-    <Version>25.6.2</Version>
+    <Version>25.11.0</Version>
     <Description>.NET bindings for the StripePaymentsUI Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripepaymentsui;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,17 +19,17 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.6.2" />
-    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="25.6.2" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.6.2" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.11.0" />
     <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
+<!-- BEGIN auto-detected ProjectReference -->
   <ItemGroup>
-    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
     <ProjectReference Include="../StripePayments/SwiftBindings.Stripe.Payments.csproj" />
-    <ProjectReference Include="../StripeUICore/SwiftBindings.Stripe.UICore.csproj" />
   </ItemGroup>
+  <!-- END auto-detected ProjectReference -->
 
 </Project>
