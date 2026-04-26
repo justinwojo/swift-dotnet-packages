@@ -473,6 +473,46 @@ internal static class Tests
             Fail("Product.SubscriptionOffer.OfferType singletons", ex.Message);
         }
 
+        // Test 30: VerificationResult<T>.TryGetVerified / TryGetUnverified are reachable as concrete methods
+        // with the expected out-parameter shapes. Constructing a real VerificationResult<Transaction> requires
+        // a sandbox StoreKit configuration (live IAP transactions), so we verify the API surface by reflection
+        // — the methods must exist with `out` parameters and return bool.
+        try
+        {
+            var t = typeof(VerificationResult<Transaction>);
+
+            var verified = t.GetMethod("TryGetVerified");
+            if (verified is null)
+                throw new InvalidOperationException("TryGetVerified method not found");
+            if (verified.ReturnType != typeof(bool))
+                throw new InvalidOperationException($"TryGetVerified should return bool, got {verified.ReturnType.Name}");
+            var verifiedParams = verified.GetParameters();
+            if (verifiedParams.Length != 1 || !verifiedParams[0].IsOut)
+                throw new InvalidOperationException($"TryGetVerified should have 1 out param, got {verifiedParams.Length} (out={(verifiedParams.Length > 0 ? verifiedParams[0].IsOut.ToString() : "n/a")})");
+            // out parameter ElementType is the unwrapped payload (TSignedType = Transaction here).
+            if (verifiedParams[0].ParameterType.GetElementType() != typeof(Transaction))
+                throw new InvalidOperationException($"TryGetVerified out param should be Transaction, got {verifiedParams[0].ParameterType.GetElementType()?.Name}");
+
+            var unverified = t.GetMethod("TryGetUnverified");
+            if (unverified is null)
+                throw new InvalidOperationException("TryGetUnverified method not found");
+            if (unverified.ReturnType != typeof(bool))
+                throw new InvalidOperationException($"TryGetUnverified should return bool, got {unverified.ReturnType.Name}");
+            var unverifiedParams = unverified.GetParameters();
+            // Unverified case carries (T, VerificationError) — two out parameters.
+            if (unverifiedParams.Length != 2 || !unverifiedParams[0].IsOut || !unverifiedParams[1].IsOut)
+                throw new InvalidOperationException($"TryGetUnverified should have 2 out params, got {unverifiedParams.Length}");
+            if (unverifiedParams[0].ParameterType.GetElementType() != typeof(Transaction))
+                throw new InvalidOperationException($"TryGetUnverified[0] should be Transaction, got {unverifiedParams[0].ParameterType.GetElementType()?.Name}");
+
+            Log($"VerificationResult<Transaction>: TryGetVerified(out Transaction), TryGetUnverified(out Transaction, out VerificationError)");
+            Pass("VerificationResult<T>.TryGetVerified/TryGetUnverified shape");
+        }
+        catch (Exception ex)
+        {
+            Fail("VerificationResult<T>.TryGetVerified/TryGetUnverified shape", ex.Message);
+        }
+
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
         if (failed == 0)

@@ -452,6 +452,43 @@ internal static class Tests
             Fail("RecentlyPlayedMusicItem.CaseTag values", ex.Message);
         }
 
+        // Test 37a: MusicItemCollection<Song> ergonomic methods (Index/FormIndex/Distance) are concrete,
+        // not SB0001 stubs. Constructing a real MusicItemCollection<Song> requires Apple Music
+        // entitlement + authorization, so we verify the API surface by reflection. These were the
+        // 4 SB0001 from Round 5 that Session 6 cleared via the DoesPairingSatisfyAssociatedTypeConstraints
+        // relaxation — the Round 6 grep gate confirms 0 SB0001, this test enforces the shape.
+        try
+        {
+            var t = typeof(MusicItemCollection<Song>);
+            if (!typeof(System.Collections.Generic.IReadOnlyList<Song>).IsAssignableFrom(t))
+                throw new InvalidOperationException("MusicItemCollection<Song> does not implement IReadOnlyList<Song>");
+
+            // Two arities each — int and nint overloads.
+            if (t.GetMethod("Index", new[] { typeof(int) }) is null)
+                throw new InvalidOperationException("Index(int) missing");
+            if (t.GetMethod("FormIndex", new[] { typeof(int) }) is null)
+                throw new InvalidOperationException("FormIndex(int) missing");
+            if (t.GetMethod("Index", new[] { typeof(int), typeof(int) }) is null)
+                throw new InvalidOperationException("Index(int, int) missing");
+            if (t.GetMethod("Distance", new[] { typeof(int), typeof(int) }) is null)
+                throw new InvalidOperationException("Distance(int, int) missing");
+
+            // Index methods must NOT be marked [Obsolete] (Session 6 promoted them out of SB0001).
+            foreach (var m in t.GetMethods())
+            {
+                if (m.Name is "Index" or "FormIndex" or "Distance"
+                    && m.GetCustomAttributes(typeof(ObsoleteAttribute), false).Length > 0)
+                {
+                    throw new InvalidOperationException($"{m.Name}({string.Join(",", Array.ConvertAll(m.GetParameters(), p => p.ParameterType.Name))}) is still [Obsolete] — Session 6 SB0001 cleanup regressed");
+                }
+            }
+            Pass("MusicItemCollection<Song> ergonomics shape");
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicItemCollection<Song> ergonomics shape", ex.Message);
+        }
+
         // Test 37: MusicSubscription.GetCurrentAsync — dispatch the call; framework error counts as pass.
         // Binding-load failures are real bugs and must fail.
         try

@@ -352,7 +352,44 @@ internal static class Tests
             Fail("Wind.CompassDirectionType.North.GetDescription", ex.Message);
         }
 
-        // Test 25: WeatherService.GetAttributionAsync — dispatch fires without framework crash.
+        // Test 25a: Forecast<HourWeather> implements IReadOnlyList<HourWeather>.
+        // Constructing a real Forecast<T> requires a live WeatherKit entitlement (paid Apple developer
+        // program + WeatherKit capability), so we verify the projection by reflection — the type must
+        // implement IReadOnlyList<TElement> and expose Count / indexer / GetEnumerator.
+        try
+        {
+            var t = typeof(Forecast<HourWeather>);
+            if (!typeof(System.Collections.Generic.IReadOnlyList<HourWeather>).IsAssignableFrom(t))
+                throw new InvalidOperationException("Forecast<HourWeather> does not implement IReadOnlyList<HourWeather>");
+            if (t.GetProperty("Count") is null)
+                throw new InvalidOperationException("Forecast<HourWeather>.Count property missing");
+            if (t.GetMethod("GetEnumerator") is null)
+                throw new InvalidOperationException("Forecast<HourWeather>.GetEnumerator missing");
+            // Indexer: parameterless name "Item" with int parameter, returns TElement.
+            var indexer = t.GetProperty("Item", new[] { typeof(int) });
+            if (indexer is null || indexer.PropertyType != typeof(HourWeather))
+                throw new InvalidOperationException($"Forecast<HourWeather>[int] indexer missing or wrong type ({indexer?.PropertyType.Name ?? "(null)"})");
+            Pass("Forecast<HourWeather> IReadOnlyList projection");
+        }
+        catch (Exception ex)
+        {
+            Fail("Forecast<HourWeather> IReadOnlyList projection", ex.Message);
+        }
+
+        // Test 25b: Forecast<DayWeather> implements IReadOnlyList<DayWeather>.
+        try
+        {
+            var t = typeof(Forecast<DayWeather>);
+            if (!typeof(System.Collections.Generic.IReadOnlyList<DayWeather>).IsAssignableFrom(t))
+                throw new InvalidOperationException("Forecast<DayWeather> does not implement IReadOnlyList<DayWeather>");
+            Pass("Forecast<DayWeather> IReadOnlyList projection");
+        }
+        catch (Exception ex)
+        {
+            Fail("Forecast<DayWeather> IReadOnlyList projection", ex.Message);
+        }
+
+        // Test 26: WeatherService.GetAttributionAsync — dispatch fires without framework crash.
         // WeatherKit requires an API key for real data; expect a SwiftException error, which still
         // proves the Swift→C# async bridge is wired correctly.
         try
