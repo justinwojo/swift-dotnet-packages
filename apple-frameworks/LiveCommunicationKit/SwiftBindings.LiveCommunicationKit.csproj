@@ -5,8 +5,10 @@
     <PackageId>SwiftBindings.LiveCommunicationKit</PackageId>
     <Version>26.2.0</Version>
     <Description>Native Swift interop bindings for Apple LiveCommunicationKit</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <SwiftAppleFrameworkTarget Include="LiveCommunicationKit" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

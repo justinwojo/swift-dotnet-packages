@@ -5,8 +5,10 @@
     <PackageId>SwiftBindings.RoomPlan</PackageId>
     <Version>26.2.0</Version>
     <Description>Native Swift interop bindings for Apple RoomPlan</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <SwiftAppleFrameworkTarget Include="RoomPlan" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

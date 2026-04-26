@@ -6,8 +6,10 @@
     <PackageId>SwiftBindings.WeatherKit</PackageId>
     <Version>26.2.0</Version>
     <Description>Native Swift interop bindings for Apple WeatherKit</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <SwiftAppleFrameworkTarget Include="WeatherKit" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

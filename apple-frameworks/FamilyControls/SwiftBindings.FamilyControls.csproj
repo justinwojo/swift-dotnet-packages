@@ -6,8 +6,10 @@
     <PackageId>SwiftBindings.FamilyControls</PackageId>
     <Version>26.2.0</Version>
     <Description>Native Swift interop bindings for Apple FamilyControls</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <SwiftAppleFrameworkTarget Include="FamilyControls" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

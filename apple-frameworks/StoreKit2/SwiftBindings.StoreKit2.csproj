@@ -6,9 +6,11 @@
     <PackageId>SwiftBindings.StoreKit2</PackageId>
     <Version>26.2.0</Version>
     <Description>Native Swift interop bindings for Apple StoreKit 2</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <!-- Use StoreKit2 namespace to avoid collision with Microsoft's StoreKit types -->
     <SwiftAppleFrameworkTarget Include="StoreKit" NamespacePattern="StoreKit2" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>
