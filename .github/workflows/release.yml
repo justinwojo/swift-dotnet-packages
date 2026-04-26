@@ -19,8 +19,15 @@ on:
         type: boolean
         default: true
 
+# For workflow_dispatch, github.ref_name is the branch (`main`) — not the tag
+# we're publishing. Without `inputs.tag` taking precedence here, every
+# workflow_dispatch run collapses to group `release-main` and GHA's queue
+# semantics cancel pending runs when newer ones arrive (cancel-in-progress
+# only protects the in-progress slot, not pending). For tag-push events
+# `inputs.tag` is empty and ref_name is the tag (e.g. `WeatherKit/26.2.0`),
+# so the fallback handles that case correctly.
 concurrency:
-  group: release-${{ github.ref_name || github.event.inputs.tag }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
