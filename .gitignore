@@ -4,6 +4,10 @@ obj/
 *.nupkg
 *.snupkg
 
+# Release pack output (BuildAndPackRelease default + RELEASE-1.0.md convention)
+artifacts/
+release-out/
+
 # Test app build output
 tests/*/bin/
 tests/*/obj/

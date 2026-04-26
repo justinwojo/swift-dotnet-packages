@@ -97,20 +97,32 @@ partial class Build
             Log.Information("=== BuildAndPackRelease {Library} v{Version} (dry_run={DryRun}) ===",
                 library, version, DryRun);
 
-            // Step 1: full build at Release.
-            // We invoke the implementation directly rather than going
-            // through the Nuke target graph because we need to override
-            // the Configuration parameter in this scope. The runtime
-            // Configuration field stays at Debug (its declared default)
-            // unless the caller passes --configuration Release explicitly,
-            // so we forward it via a local helper that mirrors what the
-            // BuildLibrary target's executor does.
-            BuildLibraryAtConfiguration(library, "Release");
+            // Dispatch on kind: third-party libraries follow the multi-product
+            // library.json flow; Apple frameworks are single-csproj, no
+            // library.json, no xcframework build (the SDK reads the system
+            // framework target directly).
+            var (kind, dir) = ResolveLibrary(library);
+            if (kind == LibraryKind.AppleFramework)
+            {
+                BuildAndPackAppleFramework(dir, version, outputDir);
+            }
+            else
+            {
+                // Step 1: full build at Release.
+                // We invoke the implementation directly rather than going
+                // through the Nuke target graph because we need to override
+                // the Configuration parameter in this scope. The runtime
+                // Configuration field stays at Debug (its declared default)
+                // unless the caller passes --configuration Release explicitly,
+                // so we forward it via a local helper that mirrors what the
+                // BuildLibrary target's executor does.
+                BuildLibraryAtConfiguration(library, "Release");
 
-            // Step 2: pack at Release into the release output dir.
-            // Same Configuration override note: pack --no-build needs to
-            // see Release-built artifacts.
-            PackAtConfiguration(library, "Release", version, outputDir);
+                // Step 2: pack at Release into the release output dir.
+                // Same Configuration override note: pack --no-build needs to
+                // see Release-built artifacts.
+                PackAtConfiguration(library, "Release", version, outputDir);
+            }
 
             // Step 3: generate release-manifest.json — exact JSON shape
             // from release.yml:219–228, including the boolean dry_run and
@@ -119,6 +131,37 @@ partial class Build
 
             Log.Information("=== BuildAndPackRelease complete: {Output} ===", outputDir);
         });
+
+    /// <summary>
+    /// Apple-framework variant of the third-party build+pack pair. Single
+    /// <c>dotnet build -c Release</c> (the SDK handles binding generation
+    /// from <c>SwiftAppleFrameworkTarget</c> in one shot, all TFMs at once),
+    /// then <c>dotnet pack --no-build</c> with the version override.
+    /// </summary>
+    static void BuildAndPackAppleFramework(AbsolutePath dir, string version, AbsolutePath outputDir)
+    {
+        var csproj = dir.GlobFiles("SwiftBindings.*.csproj").SingleOrDefault()
+            ?? throw new InvalidOperationException(
+                $"No SwiftBindings.*.csproj found in {dir}");
+
+        Log.Information("BuildAndPackRelease (Apple framework): build {Csproj} -c Release", csproj);
+        var buildExit = RunDotnet(new[] { "build", (string)csproj, "-c", "Release" });
+        if (buildExit != 0)
+            throw new InvalidOperationException($"dotnet build failed (exit {buildExit}) for {csproj}");
+
+        Log.Information("BuildAndPackRelease (Apple framework): pack {Csproj} -p:Version={Version} → {Output}",
+            csproj, version, outputDir);
+        var packExit = RunDotnet(new[]
+        {
+            "pack", (string)csproj,
+            "--no-build",
+            "-c", "Release",
+            $"/p:Version={version}",
+            "-o", (string)outputDir,
+        });
+        if (packExit != 0)
+            throw new InvalidOperationException($"dotnet pack failed (exit {packExit}) for {csproj}");
+    }
 
     /// <summary>
     /// Push every <c>.nupkg</c> in <see cref="PackagesDir"/> to nuget.org.
