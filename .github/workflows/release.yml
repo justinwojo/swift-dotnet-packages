@@ -72,6 +72,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # The macos-26 runner ships multiple Xcodes side-by-side. Default is
+      # Xcode 26.2, but the .NET 10 iOS workload (26.2.10233+) requires
+      # Xcode 26.3 — without this select, the test app build fails with
+      # "This version of .NET for iOS requires Xcode 26.3". The package
+      # itself targets net10.0-ios26.2 (the iOS SDK, not the build
+      # toolchain), so building with Xcode 26.3 produces packages with
+      # the same API surface.
+      - name: Select Xcode 26.3
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
       - name: Ensure local NuGet source exists
         run: mkdir -p local-packages
 
@@ -99,6 +109,7 @@ jobs:
         run: dotnet tool restore
 
       - name: Build, pack, and write release manifest
+        id: pack
         run: |
           dotnet nuke BuildAndPackRelease \
             --library "${{ steps.parse.outputs.library }}" \
@@ -133,7 +144,14 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # Summarize + upload run whenever the pack step succeeded, even if a
+      # later step (e.g. the sim test) failed. Without the explicit if:
+      # gate, GHA's default skip-on-failure behavior strands the .nupkg
+      # on the runner and we can't grab it for inspection — particularly
+      # frustrating during dry-runs where flaky sim infrastructure
+      # shouldn't block artifact retrieval.
       - name: Summarize packed packages
+        if: steps.pack.outcome == 'success'
         run: |
           {
             echo ""
@@ -145,6 +163,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload package artifacts
+        if: steps.pack.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: nuget-packages-${{ steps.parse.outputs.library }}-${{ steps.parse.outputs.version }}

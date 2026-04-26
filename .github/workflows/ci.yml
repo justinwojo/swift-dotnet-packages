@@ -94,6 +94,17 @@ jobs:
       - uses: actions/checkout@v4
         if: matrix.kind == 'third-party'
 
+      # The macos-26 runner ships multiple Xcodes side-by-side. Default is
+      # Xcode 26.2, but the .NET 10 iOS workload (26.2.10233+) requires
+      # Xcode 26.3 — without this select, the test app build fails with
+      # "This version of .NET for iOS requires Xcode 26.3". The package
+      # itself targets net10.0-ios26.2 (the iOS SDK, not the build
+      # toolchain), so building with Xcode 26.3 produces packages with
+      # the same API surface.
+      - name: Select Xcode 26.3
+        if: matrix.kind == 'third-party'
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
       - name: Ensure local NuGet source exists
         if: matrix.kind == 'third-party'
         run: mkdir -p local-packages
@@ -162,6 +173,13 @@ jobs:
 
       - uses: actions/checkout@v4
         if: matrix.kind == 'apple-framework'
+
+      # See note on the third-party build job above — Xcode 26.3 is
+      # required by the .NET 10 iOS workload despite the runner default
+      # being 26.2.
+      - name: Select Xcode 26.3
+        if: matrix.kind == 'apple-framework'
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
 
       - name: Ensure local NuGet source exists
         if: matrix.kind == 'apple-framework'
