@@ -427,6 +427,54 @@ partial class Build
                     "Foo emitted more than once across rerun");
             }
 
+            // ── Case 12: Heuristic hit duplicating an out-of-block manual SFD is suppressed ──
+            // On rerun (marker-present), if the heuristic re-detects an SFD already
+            // declared in an unmarked ItemGroup, the in-place replace leaves the
+            // manual entry untouched — emitting it inside the auto-block too
+            // would publish the same <SwiftFrameworkDependency> (and its
+            // PackageId/PackageVersion attrs) twice.
+            {
+                const string input = $$"""
+                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                      <PropertyGroup>
+                        <TargetFramework>net10.0-ios</TargetFramework>
+                      </PropertyGroup>
+
+                      <ItemGroup>
+                        <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.6.2" />
+                      </ItemGroup>
+
+                      {{CsprojRewriter.SfdBeginMarker}}
+                      <ItemGroup>
+                        <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" />
+                      </ItemGroup>
+                      {{CsprojRewriter.SfdEndMarker}}
+
+                    </Project>
+                    """;
+                var siblings = new[]
+                {
+                    "../StripeCore/StripeCore.xcframework",  // also declared out-of-block
+                    "../Stripe3DS2/Stripe3DS2.xcframework",  // in-block already
+                };
+                var output = CsprojRewriter.ApplyFrameworkDeps(input, siblings, siblings);
+                Assert(
+                    "Out-of-block manual SFD not duplicated into auto-block on rerun",
+                    System.Text.RegularExpressions.Regex.Matches(
+                        output, @"Include=""\.\./StripeCore/StripeCore\.xcframework""").Count == 1,
+                    "manual out-of-block StripeCore was duplicated inside the auto-block");
+                Assert(
+                    "Manual out-of-block PackageId/PackageVersion attrs preserved",
+                    output.Contains("PackageId=\"SwiftBindings.Stripe.Core\"")
+                        && output.Contains("PackageVersion=\"25.6.2\""),
+                    "manual entry attrs lost");
+                Assert(
+                    "In-block sibling retained on rerun (not dropped)",
+                    System.Text.RegularExpressions.Regex.Matches(
+                        output, @"Include=""\.\./Stripe3DS2/Stripe3DS2\.xcframework""").Count == 1,
+                    "in-block Stripe3DS2 lost or duplicated");
+            }
+
             if (failures.Count > 0)
             {
                 Log.Error("CsprojRewriter test failures:");

@@ -56,10 +56,16 @@ public static class LibraryConfigLoader
                 if (string.IsNullOrEmpty(config.Version))
                     throw new InvalidOperationException($"version is required in {configPath} for {config.Mode} mode");
                 break;
+            case BuildMode.Zip:
+                if (string.IsNullOrEmpty(config.ZipUrl))
+                    throw new InvalidOperationException($"zipUrl is required in {configPath} for zip mode");
+                if (string.IsNullOrEmpty(config.Version))
+                    throw new InvalidOperationException($"version is required in {configPath} for zip mode");
+                break;
             case BuildMode.Manual:
                 break;
             default:
-                throw new InvalidOperationException($"Unknown mode in {configPath}. Must be 'source', 'binary', or 'manual'.");
+                throw new InvalidOperationException($"Unknown mode in {configPath}. Must be 'source', 'binary', 'zip', or 'manual'.");
         }
 
         return config;

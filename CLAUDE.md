@@ -52,21 +52,22 @@ Each library root has a `library.json` declaring its SPM source and products:
 }
 ```
 
-**Fields:** `repository` (SPM URL — required for source/binary), `version` (git tag — required for source/binary), `revision` (optional SHA verification), `mode` (`"source"`, `"binary"`, or `"manual"`), `minIOS` (default `"15.0"`), `products[]` (framework, module, subdirectory, useTarget, internal).
+**Fields:** `repository` (SPM URL — required for source/binary), `version` (git tag — required for source/binary/zip), `revision` (optional SHA verification), `mode` (`"source"`, `"binary"`, `"zip"`, or `"manual"`), `minIOS` (default `"15.0"`), `zipUrl` (required for zip mode — supports `{version}` substitution), `products[]` (framework, module, subdirectory, useTarget, internal).
 
-**Per-product fields:** `framework` (required — SPM product/target name and output xcframework name), `module` (optional — Swift module name if different), `subdirectory` (optional — multi-product vendor layout), `useTarget` (optional — opt into spm-to-xcframework's `--target` escape hatch for SPM `.target(...)` entries not exposed as `.library(...)`; required for Stripe's 11 target-based modules), `internal` (optional — no C# bindings/csproj, build xcframework only).
+**Per-product fields:** `framework` (required — SPM product/target name and output xcframework name), `module` (optional — Swift module name if different), `subdirectory` (optional — multi-product vendor layout), `useTarget` (optional — opt into spm-to-xcframework's `--target` escape hatch for SPM `.target(...)` entries not exposed as `.library(...)`; source-mode only), `internal` (optional — no C# bindings/csproj, build xcframework only).
 
 ### Build Modes
 
-- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, Stripe, Kingfisher, BlinkIDUX, GRDB, etc.
+- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, Kingfisher, BlinkIDUX, etc.
 - **Binary mode** — Delegates to `spm-to-xcframework --binary`, which resolves the tag via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today.
+- **Zip mode** — Downloads a single release zip from `zipUrl` (with `{version}` substitution), extracts it, and picks out each product's xcframework by name from the archive root. Used only by Stripe today (their `Stripe.xcframework.zip` release asset bundles all 14 product + internal xcframeworks at the archive root).
 - **Manual mode** — No build. Verifies that the expected `<framework>.xcframework` directories already exist under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be provisioned out-of-band. Manual xcframeworks are never committed to the repo.
 
 ### Nuke Build Targets
 
 All build/test/release orchestration runs through the Nuke harness at the repo root: `dotnet nuke <Target> [--library Name] [...]`. Implementation lives under `build/Build.*.cs` (one partial class per concern). Key targets:
 
-- `BuildXcframework --library X [--products P1,P2] [--all-products]` — builds Swift xcframeworks via spm-to-xcframework.
+- `BuildXcframework --library X [--products P1,P2] [--all-products]` — builds Swift xcframeworks (dispatches on `library.json`'s `mode`: source/binary via `spm-to-xcframework`, zip via direct download + extract, manual via verify-only).
 - `BuildLibrary --library X [--all-products]` — full end-to-end: xcframework build → dependency injection (multi-product) → two-pass `dotnet build`.
 - `BuildTestApp --library X [--device] [--aot] [--platform ios|macos|maccatalyst|tvos]` — builds the test app co-located under `libraries/X/tests/` or `apple-frameworks/X/tests/`.
 - `ValidateSim --library X [--timeout 30]` — install + launch on a booted simulator, watch stdout for `TEST SUCCESS` / crash.
@@ -261,6 +262,14 @@ The inject-project-refs step migrates any hand-authored sibling ProjectReference
 ### Scheme Name Mismatches
 
 Some products have Xcode schemes that differ from their framework name. Example: the `Stripe` umbrella framework uses scheme `StripeiOS`, not `Stripe`. Check available schemes with `xcodebuild -list` in the source repo.
+
+### Stripe-specific: zip-mode ingest
+
+Stripe is the only library on `mode: "zip"`. Their GitHub release page publishes a single `Stripe.xcframework.zip` asset that bundles all 14 product + internal xcframeworks at the archive root (Stripe, Stripe3DS2, StripeApplePay, StripeCameraCore, StripeCardScan, StripeConnect, StripeCore, StripeCryptoOnramp, StripeFinancialConnections, StripeIdentity, StripeIssuing, StripePayments, StripePaymentSheet, StripePaymentsUI, StripeUICore — 13 are referenced from our `library.json`; StripeCryptoOnramp is not yet bound). `BuildXcframework --library Stripe` downloads this single zip, extracts, and lays out each product under `libraries/Stripe/<subdirectory>/<framework>.xcframework`. No SPM checkout, no per-product compile.
+
+Bumping Stripe's version is a single edit to `version` in `libraries/Stripe/library.json`. The `zipUrl` field substitutes `{version}` at build time. Stripe API surface can shift between minor releases (e.g. 25.11.0 dropped `PaymentSheetError.FetchPaymentMethodsFailure`) — always run the full `BuildLibrary --library Stripe --all-products` + sim + device validation after a version bump and update the test app to match.
+
+**Heads-up on incremental builds:** when the Stripe xcframeworks change (zip re-downloaded with a new version), MSBuild's incremental copy of `<NativeReference>` framework slices into the test app's `.app/Frameworks/` can miss the change. After a Stripe version bump, wipe both `bin/Debug` + `bin/Release` (and matching `obj/`) under `libraries/Stripe/**` before re-running `BuildTestApp`, otherwise the .app may ship stale frameworks and fail at dyld load with `Symbol not found`.
 
 ## Working Guidelines
 

@@ -83,6 +83,9 @@ partial class Build
             case BuildMode.Binary:
                 BuildBinary(libraryDir, config, selected);
                 break;
+            case BuildMode.Zip:
+                BuildZip(libraryDir, config, selected);
+                break;
             case BuildMode.Manual:
                 VerifyManual(libraryDir, selected);
                 break;
@@ -183,6 +186,75 @@ partial class Build
         InstallProducts(libraryDir, outputDir, selected);
 
         workspace.DeleteDirectory();
+    }
+
+    // ── Zip mode ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Download a single release zip and extract per-product xcframeworks. Used for
+    /// vendors who publish a bundle of xcframeworks on their GitHub release page —
+    /// today only Stripe (<c>Stripe.xcframework.zip</c> contains all 14 product +
+    /// internal xcframeworks at the archive root).
+    /// </summary>
+    void BuildZip(AbsolutePath libraryDir, LibraryConfig config, IReadOnlyList<Product> selected)
+    {
+        var url = config.ZipUrl!.Replace("{version}", config.Version!);
+
+        var workspace = libraryDir / ".build-workspace";
+        var outputDir = workspace / "xcframeworks";
+        workspace.CreateOrCleanDirectory();
+        outputDir.CreateDirectory();
+
+        var zipPath = workspace / "release.zip";
+
+        Log.Information("=== Downloading release zip: {Url} ===", url);
+        DownloadFile(url, zipPath);
+
+        Log.Information("=== Extracting {Zip} → {Out} ===", zipPath, outputDir);
+        System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, outputDir);
+
+        // The Stripe zip lays xcframeworks out at the archive root. Confirm each
+        // selected product's xcframework is present where InstallProducts will
+        // look for it (outputDir/<framework>.xcframework).
+        var missing = selected
+            .Select(p => p.Framework)
+            .Where(f => !Directory.Exists(outputDir / $"{f}.xcframework"))
+            .ToList();
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Release zip from {url} did not contain expected xcframework(s): " +
+                string.Join(", ", missing) + ". " +
+                "Top-level entries in the extracted archive: " +
+                string.Join(", ", Directory.EnumerateDirectories(outputDir).Select(Path.GetFileName)));
+        }
+
+        InstallProducts(libraryDir, outputDir, selected);
+
+        workspace.DeleteDirectory();
+    }
+
+    /// <summary>
+    /// Download a URL to a file path, streaming. Uses HttpClient with a 10-minute
+    /// timeout — Stripe's release zip is ~75 MiB and finishes well under that on
+    /// any reasonable connection.
+    /// </summary>
+    static void DownloadFile(string url, AbsolutePath destination)
+    {
+        using var http = new System.Net.Http.HttpClient
+        {
+            Timeout = TimeSpan.FromMinutes(10),
+        };
+        // GitHub release downloads accept any User-Agent, but reject anonymous
+        // requests with no UA at all. Set one explicitly.
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("swift-dotnet-packages-build/1.0");
+
+        using var response = http.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+
+        using var src = response.Content.ReadAsStream();
+        using var dst = File.Create(destination);
+        src.CopyTo(dst);
     }
 
     // ── Manual mode ─────────────────────────────────────────────────────────

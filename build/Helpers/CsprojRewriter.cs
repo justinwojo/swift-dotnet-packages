@@ -182,7 +182,34 @@ public static class CsprojRewriter
             // ships [StripeCore, Stripe3DS2], not the ordinal-sorted
             // [Stripe3DS2, StripeCore]) would otherwise churn on every rerun
             // even when the *content* is identical.
-            var orderedIncludes = OrderInBlockIncludes(content, depIncludes, knownSiblings);
+
+            // Suppress heuristic hits that already exist OUTSIDE the auto-
+            // block as user-authored manual overrides. The in-place regex
+            // replacement only touches the marked block, so the manual entry
+            // stays put — emitting it in-block too would duplicate the
+            // <SwiftFrameworkDependency> (and its PackageId/PackageVersion
+            // metadata).
+            var blockSpan = new Regex(
+                Regex.Escape(SfdBeginMarker) + ".*?" + Regex.Escape(SfdEndMarker),
+                RegexOptions.Singleline);
+            var contentOutsideBlock = blockSpan.Replace(content, "");
+            var outOfBlockIncludes = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Match m in sfdElementRegex.Matches(contentOutsideBlock))
+            {
+                foreach (Match a in attrRegex.Matches(m.Groups[1].Value))
+                {
+                    if (a.Groups[1].Value == "Include")
+                    {
+                        outOfBlockIncludes.Add(a.Groups[2].Value);
+                        break;
+                    }
+                }
+            }
+            IReadOnlyCollection<string> filteredDeps = outOfBlockIncludes.Count > 0
+                ? depIncludes.Where(d => !outOfBlockIncludes.Contains(d)).ToList()
+                : depIncludes;
+
+            var orderedIncludes = OrderInBlockIncludes(content, filteredDeps, knownSiblings);
             var depsBlock = BuildSfdBlock(orderedIncludes, preservedAttrs);
 
             var inPlacePattern = new Regex(

@@ -14,6 +14,13 @@ public enum BuildMode
     /// <summary>Resolve the SPM tag and copy prebuilt xcframeworks via spm-to-xcframework --binary.</summary>
     Binary,
 
+    /// <summary>
+    /// Download a single release zip from <c>zipUrl</c> (with <c>{version}</c> substitution),
+    /// extract it, and pick out each product's xcframework by name. Used for vendors who
+    /// publish a bundle of xcframeworks on their GitHub release page (e.g. Stripe).
+    /// </summary>
+    Zip,
+
     /// <summary>Verify-only path. Xcframeworks must be provisioned out-of-band.</summary>
     Manual,
 }
@@ -48,6 +55,14 @@ public sealed class LibraryConfig
     /// <summary>Minimum iOS deployment target. Defaults to 15.0 to match the bash wrapper.</summary>
     [JsonPropertyName("minIOS")]
     public string MinIOS { get; init; } = "15.0";
+
+    /// <summary>
+    /// Release-zip URL for <see cref="BuildMode.Zip"/>. Supports <c>{version}</c> substitution
+    /// (e.g. <c>https://github.com/stripe/stripe-ios/releases/download/{version}/Stripe.xcframework.zip</c>).
+    /// Required for Zip mode; ignored otherwise.
+    /// </summary>
+    [JsonPropertyName("zipUrl")]
+    public string? ZipUrl { get; init; }
 
     /// <summary>Products produced by this library. Order is significant — used to resolve indices for selection flags.</summary>
     [JsonPropertyName("products")]
