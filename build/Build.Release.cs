@@ -282,7 +282,7 @@ partial class Build
         Log.Information("=== Pass 1: dotnet build -c {Config} (wrapper failures tolerated) ===", configuration);
         DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: true);
 
-        InjectProjectRefsForLibrary(library, Array.Empty<string>(), allProducts: true);
+        InjectProjectRefsForLibrary(library, Array.Empty<string>(), allProducts: true, configurationOverride: configuration);
         Log.Information("=== Pass 2: dotnet build -c {Config} (must succeed) ===", configuration);
         DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false);
     }

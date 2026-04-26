@@ -152,7 +152,8 @@ partial class Build
         }
     }
 
-    void InjectProjectRefsForLibrary(string library, string[] requestedProducts, bool allProducts)
+    void InjectProjectRefsForLibrary(string library, string[] requestedProducts, bool allProducts,
+        string? configurationOverride = null)
     {
         var libraryDir = LibraryDir(library);
         var config = LibraryConfigLoader.Load(LibraryConfigPath(library));
@@ -196,7 +197,7 @@ partial class Build
         var freshnessCache = new Dictionary<AbsolutePath, IReadOnlyList<AbsolutePath>>();
         foreach (var (product, csproj) in products)
         {
-            var swiftBindingDir = SwiftBindingDir(product, libraryDir);
+            var swiftBindingDir = SwiftBindingDir(product, libraryDir, configurationOverride);
             var xcfwPlist = product.XcframeworkPath(libraryDir) / "Info.plist";
             freshnessCache[csproj] = Freshness.CheckFresh(product.Framework, csproj, xcfwPlist, swiftBindingDir);
         }
@@ -282,11 +283,15 @@ partial class Build
     /// <summary>
     /// Resolve the SDK's swift-binding output directory for one product.
     /// Configuration-aware: <c>obj/&lt;Configuration&gt;/net10.0-ios/swift-binding</c>.
+    /// Pass <paramref name="configurationOverride"/> when the caller built at a
+    /// configuration other than the runtime Nuke field default (e.g. the
+    /// release path runs at <c>Release</c> while the field stays <c>Debug</c>).
     /// </summary>
-    AbsolutePath SwiftBindingDir(Product product, AbsolutePath libraryDir)
+    AbsolutePath SwiftBindingDir(Product product, AbsolutePath libraryDir, string? configurationOverride = null)
     {
         var productDir = product.ProductDir(libraryDir);
-        return productDir / "obj" / Configuration / "net10.0-ios" / "swift-binding";
+        var configuration = configurationOverride ?? (string)Configuration;
+        return productDir / "obj" / configuration / "net10.0-ios" / "swift-binding";
     }
 
     /// <summary>
