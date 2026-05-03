@@ -25,4 +25,16 @@
   -->
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.tests.props.local"
           Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.tests.props.local')" />
+
+  <!-- tvOS test apps: Apple disallows JIT on any tvOS target, so the default
+       Debug pipeline AOT-compiles managed code, which surfaces the Swift
+       stdlib P/Invokes (Swift.Array.init, Swift.Dictionary.*, …) declared in
+       Swift.Runtime as undefined externs at the native link step. The Mono
+       interpreter is permitted on tvOS and resolves P/Invokes lazily, same
+       as the iOS sim Mono JIT path. Mirrors the workaround already in
+       BindingTests/RuntimeTestsApp.tvOS.csproj. -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('tvos'))">
+    <MtouchLink>None</MtouchLink>
+    <UseInterpreter>true</UseInterpreter>
+  </PropertyGroup>
 </Project>

@@ -1,11 +1,11 @@
-# SwiftBindings.TipKit
+# SwiftBindings.Apple.TipKit
 
 Native .NET bindings for Apple's [TipKit](https://developer.apple.com/documentation/tipkit) framework — in-app tips for surfacing app features. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.TipKit
+dotnet add package SwiftBindings.Apple.TipKit
 ```
 
 ## Requirements

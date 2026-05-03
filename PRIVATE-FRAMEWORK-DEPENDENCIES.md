@@ -1,5 +1,9 @@
 # Private framework dependencies — SDK gap blocking the Stripe 1.0 release
 
+> **Status update 2026-05-02 — postponed in favor of standalone-NuGet route.** After plan review and a strategy round with Codex, we're shipping `Stripe3DS2` and `StripeCameraCore` as standalone NuGets (`SwiftBindings.Stripe.3DS2`, `SwiftBindings.Stripe.CameraCore`) instead of building the SDK-level bundling feature. NuGet's transitive-dep mechanism handles shared deps natively, the existing rewriter and pack pipeline already support this path, and consumer disk/download cost is *better* than bundling (one copy in the NuGet cache vs. duplicated across every sibling pkg). The SDK-feature plan is parked at `swift-bindings/src/docs/Future/private-framework-dependencies-plan.md` — revisit if a second vendor (Firebase, Facebook SDK, etc.) lands with the same internal-framework graph or if consumer feedback flags the standalone-NuGet pattern as confusing. The original analysis below is preserved as historical context for the decision.
+
+---
+
 ## TL;DR
 
 The SwiftBindings SDK conflates two purposes of `<SwiftFrameworkDependency>`: a build-time framework search-path entry (and runtime native-reference), and a pack-time NuGet `<PackageReference>` declaration. There's no way to express the first without the second.

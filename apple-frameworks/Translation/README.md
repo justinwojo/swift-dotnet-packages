@@ -1,11 +1,11 @@
-# SwiftBindings.Translation
+# SwiftBindings.Apple.Translation
 
 Native .NET bindings for Apple's [Translation](https://developer.apple.com/documentation/translation) framework — on-device language translation and language-availability queries. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.Translation
+dotnet add package SwiftBindings.Apple.Translation
 ```
 
 ## Requirements

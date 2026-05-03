@@ -1,11 +1,11 @@
-# SwiftBindings.StoreKit2
+# SwiftBindings.Apple.StoreKit2
 
 Native .NET bindings for Apple's StoreKit 2 — the Swift-first In-App Purchase API on top of [StoreKit](https://developer.apple.com/documentation/storekit). These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.StoreKit2
+dotnet add package SwiftBindings.Apple.StoreKit2
 ```
 
 ## Requirements

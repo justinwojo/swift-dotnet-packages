@@ -1,11 +1,11 @@
-# SwiftBindings.LiveCommunicationKit
+# SwiftBindings.Apple.LiveCommunicationKit
 
 Native .NET bindings for Apple's [LiveCommunicationKit](https://developer.apple.com/documentation/livecommunicationkit) framework — VoIP and Live Communication conversations on iOS. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.LiveCommunicationKit
+dotnet add package SwiftBindings.Apple.LiveCommunicationKit
 ```
 
 ## Requirements

@@ -1,4 +1,4 @@
-# SwiftBindings.ActivityKit
+# SwiftBindings.Apple.ActivityKit
 
 Native .NET bindings for Apple's [ActivityKit](https://developer.apple.com/documentation/activitykit) framework — the API behind Live Activities and Dynamic Island on iOS.
 
@@ -6,7 +6,7 @@ Native .NET bindings for Apple's [ActivityKit](https://developer.apple.com/docum
 
 ActivityKit is **not being published to nuget.org for the 1.0 release**. The blocker (below) is structural — first-class C# activity authorship would require a C# source generator that emits a Swift companion target, which is not in scope for 1.0.
 
-If you're searching nuget.org for `SwiftBindings.ActivityKit`: it is intentionally absent. The README is kept here so that the decision (and the path forward) is discoverable in the repository.
+If you're searching nuget.org for `SwiftBindings.Apple.ActivityKit` (or the legacy `SwiftBindings.ActivityKit`): it is intentionally absent. The README is kept here so that the decision (and the path forward) is discoverable in the repository.
 
 ## Why it is shelved
 

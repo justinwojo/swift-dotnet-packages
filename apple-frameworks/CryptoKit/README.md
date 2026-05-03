@@ -1,11 +1,11 @@
-# SwiftBindings.CryptoKit
+# SwiftBindings.Apple.CryptoKit
 
 Native .NET bindings for Apple's [CryptoKit](https://developer.apple.com/documentation/cryptokit) framework — hashing, symmetric and authenticated encryption, key agreement, and signatures. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.CryptoKit
+dotnet add package SwiftBindings.Apple.CryptoKit
 ```
 
 ## Requirements

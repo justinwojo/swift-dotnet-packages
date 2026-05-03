@@ -1,11 +1,11 @@
-# SwiftBindings.FamilyControls
+# SwiftBindings.Apple.FamilyControls
 
 Native .NET bindings for Apple's [FamilyControls](https://developer.apple.com/documentation/familycontrols) framework — Screen Time authorization for parental-control and digital-wellbeing apps. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
 ## Installation
 
 ```
-dotnet add package SwiftBindings.FamilyControls
+dotnet add package SwiftBindings.Apple.FamilyControls
 ```
 
 ## Requirements

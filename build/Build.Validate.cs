@@ -139,12 +139,19 @@ partial class Build
     /// </summary>
     (AbsolutePath TestDir, string AppName, string BundleId) ResolveTestNames(string library)
     {
-        var testDir = LibraryDir(library) / "tests";
+        var (kind, libDir) = ResolveLibrary(library);
+        var testDir = libDir / "tests";
         if (!Directory.Exists(testDir))
             throw new InvalidOperationException(
                 $"Test directory not found for '{library}'. Expected: {testDir}");
 
-        var appName = $"SwiftBindings.{library}.Tests";
+        // apple-frameworks/<Lib> ships as `SwiftBindings.Apple.<Lib>` so the
+        // test csproj is `SwiftBindings.Apple.<Lib>.Tests.csproj` and its
+        // produced `.app` bundle carries the same name. Third-party libs
+        // under libraries/<Lib> stay on the unprefixed convention.
+        var appName = kind == LibraryKind.AppleFramework
+            ? $"SwiftBindings.Apple.{library}.Tests"
+            : $"SwiftBindings.{library}.Tests";
         var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}.tests";
         return (testDir, appName, bundleId);
     }
