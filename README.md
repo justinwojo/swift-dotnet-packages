@@ -10,19 +10,21 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 
 | Package | Description | Version |
 |---|---|---|
-| [`SwiftBindings.CryptoKit`](apple-frameworks/CryptoKit/README.md) | Hashing, symmetric/authenticated encryption, key agreement, signatures | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.CryptoKit.svg)](https://www.nuget.org/packages/SwiftBindings.CryptoKit) |
-| [`SwiftBindings.FamilyControls`](apple-frameworks/FamilyControls/README.md) | Screen Time authorization for parental-control apps | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.FamilyControls.svg)](https://www.nuget.org/packages/SwiftBindings.FamilyControls) |
-| [`SwiftBindings.LiveCommunicationKit`](apple-frameworks/LiveCommunicationKit/README.md) | VoIP and Live Communication conversations | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.LiveCommunicationKit.svg)](https://www.nuget.org/packages/SwiftBindings.LiveCommunicationKit) |
-| [`SwiftBindings.MusicKit`](apple-frameworks/MusicKit/README.md) | Apple Music catalog, library access, and playback | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.MusicKit.svg)](https://www.nuget.org/packages/SwiftBindings.MusicKit) |
-| [`SwiftBindings.ProximityReader`](apple-frameworks/ProximityReader/README.md) | Tap to Pay on iPhone, contactless payment-card and NFC reads | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.ProximityReader.svg)](https://www.nuget.org/packages/SwiftBindings.ProximityReader) |
-| [`SwiftBindings.RoomPlan`](apple-frameworks/RoomPlan/README.md) | LiDAR-based 3D room capture and floorplan reconstruction | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.RoomPlan.svg)](https://www.nuget.org/packages/SwiftBindings.RoomPlan) |
-| [`SwiftBindings.StoreKit2`](apple-frameworks/StoreKit2/README.md) | Swift-first In-App Purchase API | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.StoreKit2.svg)](https://www.nuget.org/packages/SwiftBindings.StoreKit2) |
-| [`SwiftBindings.TipKit`](apple-frameworks/TipKit/README.md) | In-app tips for surfacing app features (see README for `@_alwaysEmitIntoClient` DSL caveat) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.TipKit.svg)](https://www.nuget.org/packages/SwiftBindings.TipKit) |
-| [`SwiftBindings.Translation`](apple-frameworks/Translation/README.md) | On-device language translation | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Translation.svg)](https://www.nuget.org/packages/SwiftBindings.Translation) |
-| [`SwiftBindings.WeatherKit`](apple-frameworks/WeatherKit/README.md) | Current conditions, forecasts, alerts, historical weather | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.WeatherKit.svg)](https://www.nuget.org/packages/SwiftBindings.WeatherKit) |
-| [`SwiftBindings.WorkoutKit`](apple-frameworks/WorkoutKit/README.md) | Custom workouts and Apple Watch scheduling (HealthKit writes deferred — see README) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.WorkoutKit.svg)](https://www.nuget.org/packages/SwiftBindings.WorkoutKit) |
+| [`SwiftBindings.Apple.CryptoKit`](apple-frameworks/CryptoKit/README.md) | Hashing, symmetric/authenticated encryption, key agreement, signatures | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.CryptoKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.CryptoKit) |
+| [`SwiftBindings.Apple.FamilyControls`](apple-frameworks/FamilyControls/README.md) | Screen Time authorization for parental-control apps | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.FamilyControls.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.FamilyControls) |
+| [`SwiftBindings.Apple.LiveCommunicationKit`](apple-frameworks/LiveCommunicationKit/README.md) | VoIP and Live Communication conversations | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.LiveCommunicationKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.LiveCommunicationKit) |
+| [`SwiftBindings.Apple.MusicKit`](apple-frameworks/MusicKit/README.md) | Apple Music catalog, library access, and playback | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.MusicKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.MusicKit) |
+| [`SwiftBindings.Apple.ProximityReader`](apple-frameworks/ProximityReader/README.md) | Tap to Pay on iPhone, contactless payment-card and NFC reads | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.ProximityReader.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.ProximityReader) |
+| [`SwiftBindings.Apple.RealityFoundation`](apple-frameworks/RealityFoundation/README.md) | Entity / component / scene foundation re-exported by RealityKit (`Entity`, `ModelEntity`, transforms, materials) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.RealityFoundation.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.RealityFoundation) |
+| [`SwiftBindings.Apple.RealityKit`](apple-frameworks/RealityKit/README.md) | High-level 3D rendering, simulation, and AR composition (`ARView`, gesture recognizers, render options) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.RealityKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.RealityKit) |
+| [`SwiftBindings.Apple.RoomPlan`](apple-frameworks/RoomPlan/README.md) | LiDAR-based 3D room capture and floorplan reconstruction | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.RoomPlan.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.RoomPlan) |
+| [`SwiftBindings.Apple.StoreKit2`](apple-frameworks/StoreKit2/README.md) | Swift-first In-App Purchase API | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.StoreKit2.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.StoreKit2) |
+| [`SwiftBindings.Apple.TipKit`](apple-frameworks/TipKit/README.md) | In-app tips for surfacing app features (see README for `@_alwaysEmitIntoClient` DSL caveat) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.TipKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.TipKit) |
+| [`SwiftBindings.Apple.Translation`](apple-frameworks/Translation/README.md) | On-device language translation | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.Translation.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.Translation) |
+| [`SwiftBindings.Apple.WeatherKit`](apple-frameworks/WeatherKit/README.md) | Current conditions, forecasts, alerts, historical weather | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.WeatherKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.WeatherKit) |
+| [`SwiftBindings.Apple.WorkoutKit`](apple-frameworks/WorkoutKit/README.md) | Custom workouts and Apple Watch scheduling (HealthKit writes deferred — see README) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.WorkoutKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.WorkoutKit) |
 
-> [`SwiftBindings.ActivityKit`](apple-frameworks/ActivityKit/README.md) is **not published**. Live Activities require user-defined `Codable & Hashable` Swift types that the binding layer cannot synthesize from C#. See its README for the full reasoning.
+> [`SwiftBindings.Apple.ActivityKit`](apple-frameworks/ActivityKit/README.md) is **not published**. Live Activities require user-defined `Codable & Hashable` Swift types that the binding layer cannot synthesize from C#. See its README for the full reasoning.
 
 ## Third-party libraries
 
@@ -42,20 +44,20 @@ Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stri
 
 | Package | Description | Version |
 |---|---|---|
-| [`SwiftBindings.Stripe`](libraries/Stripe/Stripe/README.md) | Umbrella module re-exporting the common payment APIs | _Coming soon_ |
-| [`SwiftBindings.Stripe.Core`](libraries/Stripe/StripeCore/README.md) | `STPAPIClient`, networking, shared types | _Coming soon_ |
-| [`SwiftBindings.Stripe.Payments`](libraries/Stripe/StripePayments/README.md) | `PaymentIntent`, `SetupIntent`, `PaymentMethod` flows | _Coming soon_ |
-| [`SwiftBindings.Stripe.PaymentsUI`](libraries/Stripe/StripePaymentsUI/README.md) | UI controls (`STPCardFormView`, `STPPaymentCardTextField`) | _Coming soon_ |
-| [`SwiftBindings.Stripe.PaymentSheet`](libraries/Stripe/StripePaymentSheet/README.md) | Drop-in payment UI with 3DS and Apple Pay | _Coming soon_ |
-| [`SwiftBindings.Stripe.ApplePay`](libraries/Stripe/StripeApplePay/README.md) | Lightweight Apple Pay integration | _Coming soon_ |
-| [`SwiftBindings.Stripe.Connect`](libraries/Stripe/StripeConnect/README.md) | Stripe Connect embedded components | _Coming soon_ |
-| [`SwiftBindings.Stripe.Identity`](libraries/Stripe/StripeIdentity/README.md) | Stripe Identity verification sheet | _Coming soon_ |
-| [`SwiftBindings.Stripe.Issuing`](libraries/Stripe/StripeIssuing/README.md) | Push-provisioning to Apple Wallet | _Coming soon_ |
-| [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | _Coming soon_ |
-| [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | _Coming soon_ |
-| [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) | Shared UI primitives consumed by sibling Stripe packages (do not use directly) | _Coming soon_ |
-
-> Stripe publish is paused on a SwiftBindings SDK gap: the upstream `Stripe.xcframework.zip` includes two internal frameworks (`Stripe3DS2`, `StripeCameraCore`) that several public sub-packages link against but that we don't want to surface as standalone NuGets. The SDK has no way today to declare a build/runtime framework dependency without also emitting a NuGet `<PackageReference>`. See [`PRIVATE-FRAMEWORK-DEPENDENCIES.md`](PRIVATE-FRAMEWORK-DEPENDENCIES.md) for the full write-up and proposed `SwiftFrameworkPrivateDependency` design.
+| [`SwiftBindings.Stripe`](libraries/Stripe/Stripe/README.md) | Umbrella module re-exporting the common payment APIs | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe) |
+| [`SwiftBindings.Stripe.Core`](libraries/Stripe/StripeCore/README.md) | `STPAPIClient`, networking, shared types | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Core.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Core) |
+| [`SwiftBindings.Stripe.Payments`](libraries/Stripe/StripePayments/README.md) | `PaymentIntent`, `SetupIntent`, `PaymentMethod` flows | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Payments.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Payments) |
+| [`SwiftBindings.Stripe.PaymentsUI`](libraries/Stripe/StripePaymentsUI/README.md) | UI controls (`STPCardFormView`, `STPPaymentCardTextField`) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.PaymentsUI.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentsUI) |
+| [`SwiftBindings.Stripe.PaymentSheet`](libraries/Stripe/StripePaymentSheet/README.md) | Drop-in payment UI with 3DS and Apple Pay | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.PaymentSheet.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentSheet) |
+| [`SwiftBindings.Stripe.ApplePay`](libraries/Stripe/StripeApplePay/README.md) | Lightweight Apple Pay integration | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.ApplePay.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.ApplePay) |
+| [`SwiftBindings.Stripe.Connect`](libraries/Stripe/StripeConnect/README.md) | Stripe Connect embedded components | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Connect.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Connect) |
+| [`SwiftBindings.Stripe.Identity`](libraries/Stripe/StripeIdentity/README.md) | Stripe Identity verification sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Identity.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Identity) |
+| [`SwiftBindings.Stripe.Issuing`](libraries/Stripe/StripeIssuing/README.md) | Push-provisioning to Apple Wallet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Issuing.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Issuing) |
+| [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CardScan.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CardScan) |
+| [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.FinancialConnections.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.FinancialConnections) |
+| [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) | Shared UI primitives consumed by sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.UICore.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.UICore) |
+| [`SwiftBindings.Stripe.ThreeDS2`](libraries/Stripe/Stripe3DS2/README.md) | 3-D Secure 2 transitive dependency for sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.ThreeDS2.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.ThreeDS2) |
+| [`SwiftBindings.Stripe.CameraCore`](libraries/Stripe/StripeCameraCore/README.md) | Camera-scanning transitive dependency for sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CameraCore.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CameraCore) |
 
 ## Apple framework support
 
@@ -65,7 +67,7 @@ Apple-framework packages bind the system SDK directly. There is no SPM checkout 
 
 - macOS host with Xcode 26.3 or later (for the iOS 26.2 / macOS 26.2 / Mac Catalyst 26.2 / tvOS 26.2 SDKs).
 - .NET SDK 10.0+ (pinned at `10.0.103` in `global.json`).
-- The `SwiftBindings.Apple` supplement package (currently `26.2.0`) is pulled in transitively — do not pin it directly.
+- The `SwiftBindings.Apple` supplement package (currently `26.2.1`) is pulled in transitively — do not pin it directly.
 
 **Consumer requirements** (apps that install these NuGets):
 
