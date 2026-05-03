@@ -44,12 +44,14 @@
         "PackValidate",
         "PackValidateAppleFramework",
         "PublishRelease",
+        "RegressionValidate",
         "Restore",
         "RunCiSimTest",
         "ShutdownSim",
         "TestCsprojRewriter",
         "ValidateDevice",
         "ValidateMac",
+        "ValidateMacCatalyst",
         "ValidateRewriter",
         "ValidateSim",
         "ValidateWatcherSelfTest"
@@ -170,6 +172,10 @@
           "type": "boolean",
           "description": "Mark this release as a dry run (build + pack, skip publish)"
         },
+        "Filter": {
+          "type": "string",
+          "description": "RegressionValidate: single package filter (parity with --library)"
+        },
         "HeadSha": {
           "type": "string",
           "description": "Head SHA for ListChangedLibraries diff"
@@ -207,6 +213,10 @@
         "Platform": {
           "type": "string",
           "description": "Target platform for test app build/validate: ios (default), macos, maccatalyst, tvos"
+        },
+        "Platforms": {
+          "type": "string",
+          "description": "RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device, macos, maccatalyst, tvos"
         },
         "Products": {
           "type": "array",

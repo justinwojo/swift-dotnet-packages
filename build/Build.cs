@@ -180,6 +180,44 @@ partial class Build : NukeBuild
         return false;
     }
 
+    /// <summary>
+    /// Parse the declared TFM list from a test csproj. Handles both
+    /// <c>&lt;TargetFrameworks&gt;a;b;c&lt;/TargetFrameworks&gt;</c> (multi) and
+    /// <c>&lt;TargetFramework&gt;a&lt;/TargetFramework&gt;</c> (single). Returns
+    /// an empty list if no test csproj is found in <paramref name="testDir"/>
+    /// or both elements are empty/missing.
+    /// </summary>
+    static IReadOnlyList<string> ParseTestProjectTfms(AbsolutePath testDir)
+    {
+        var tfms = new List<string>();
+        foreach (var csproj in Directory.EnumerateFiles(testDir, "*.csproj"))
+        {
+            var content = File.ReadAllText(csproj);
+            var multi = System.Text.RegularExpressions.Regex.Match(
+                content, @"<TargetFrameworks>([^<]+)</TargetFrameworks>",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (multi.Success)
+            {
+                foreach (var raw in multi.Groups[1].Value.Split(';'))
+                {
+                    var t = raw.Trim();
+                    if (t.Length > 0) tfms.Add(t);
+                }
+                return tfms;
+            }
+            var single = System.Text.RegularExpressions.Regex.Match(
+                content, @"<TargetFramework>([^<]+)</TargetFramework>",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (single.Success)
+            {
+                var t = single.Groups[1].Value.Trim();
+                if (t.Length > 0) tfms.Add(t);
+                return tfms;
+            }
+        }
+        return tfms;
+    }
+
     // ── Stub targets ────────────────────────────────────────────────────────
 
     Target Clean => _ => _

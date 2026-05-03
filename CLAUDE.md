@@ -72,11 +72,14 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 - `BuildTestApp --library X [--device] [--aot] [--platform ios|macos|maccatalyst|tvos]` — builds the test app co-located under `libraries/X/tests/` or `apple-frameworks/X/tests/`.
 - `ValidateSim --library X [--timeout 30]` — install + launch on a booted simulator, watch stdout for `TEST SUCCESS` / crash.
 - `ValidateDevice --library X [--timeout 30]` — same for a connected physical device (`xcrun devicectl`).
+- `ValidateMac --library X [--timeout 30]` — run a macOS test binary directly and watch stdout (no install step, no simulator).
+- `ValidateMacCatalyst --library X [--timeout 30]` — run the bundled MacCatalyst executable inside `<App>.app/Contents/MacOS/<App>` and watch stdout. Direct binary launch (not `open`) so Console output pipes back to the parent shell.
 - `RunCiSimTest --library X [--reuse-sim] [--timeout N] [--step-timeout N]` — CI-only entry point that boots a simulator from the fleet, runs `BuildTestApp` + `ValidateSim`, and uploads diagnostics to `/tmp/sim-diagnostics/`.
 - `Pack --library X --version V [--output dir]` — packs all non-internal products to `.nupkg`.
 - `PackValidate --library X` — CI smoke pack with version `0.0.0-ci`.
 - `BuildAndPackRelease --library X --version V [--output dir] [--dry-run]` — release build at `-c Release`, then pack, then write `release-manifest.json`.
 - `PublishRelease --packages-dir dir --nuget-api-key K` — push `.nupkg` files to nuget.org (parallelism=5, `--skip-duplicate`).
+- `RegressionValidate --version V [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS and MacCatalyst run binaries directly. Only tvOS remains BUILD-ONLY (no validator yet).
 - `ListChangedLibraries [--base-sha S --head-sha S | --all] [--json]` — emit the CI matrix (newline-delimited or GHA `{"include":[...]}` JSON).
 - `ListSims` / `BootSim` / `ShutdownSim` — simulator fleet management.
 
