@@ -131,6 +131,7 @@ internal static class Tests
             Fail("Transaction.Updates", ex.Message);
         }
 
+#if !TVOS
         // Test 8: PurchaseIntent.Intents async sequence creation (no enumeration)
         // Note: PurchaseIntents is ISwiftObject — do NOT Dispose.
         try
@@ -143,6 +144,7 @@ internal static class Tests
         {
             Fail("PurchaseIntent.Intents", ex.Message);
         }
+#endif
 
 #if IOS || MACCATALYST
         // Test 9: Message.Messages async sequence creation (no enumeration)
@@ -370,7 +372,9 @@ internal static class Tests
 #if IOS || MACCATALYST
         MetadataTest<Message>("Message");
 #endif
+#if !TVOS
         MetadataTest<PurchaseIntent>("PurchaseIntent");
+#endif
         MetadataTest<Product.SubscriptionInfo>("Product.SubscriptionInfo");
 
         // Test 23: TransactionRefundRequestError extension methods (GetErrorDescription, GetFailureReason)

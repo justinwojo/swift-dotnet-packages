@@ -7,13 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.musickit.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.storekit2.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">16.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">14.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-tvos'))">16.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">16.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">12.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-tvos'))">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">15.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos'))">true</IncludeSwiftBindingsRuntimeNative>
     <!-- macOS console apps don't need provisioning -->
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
@@ -28,7 +28,7 @@
   <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
        must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.MusicKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.StoreKit2.csproj" />
   </ItemGroup>
 
 </Project>

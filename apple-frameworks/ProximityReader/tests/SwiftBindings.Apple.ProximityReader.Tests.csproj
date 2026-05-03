@@ -23,7 +23,7 @@
   <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
        must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.ProximityReader.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.ProximityReader.csproj" />
   </ItemGroup>
 
 </Project>

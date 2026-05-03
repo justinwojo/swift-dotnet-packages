@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.weatherkit.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.cryptokit.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">26.0</SupportedOSPlatformVersion>
@@ -19,12 +19,16 @@
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
   </PropertyGroup>
 
+  <!-- iOS, tvOS, and MacCatalyst are UIKit app targets — they need an Info.plist.
+       macOS (console) does not. -->
   <ItemGroup Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos')) or $(TargetFramework.Contains('-maccatalyst'))">
     <None Include="Info.plist" />
   </ItemGroup>
 
+  <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
+       must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.WeatherKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.CryptoKit.csproj" />
   </ItemGroup>
 
 </Project>

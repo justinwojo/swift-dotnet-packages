@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.cryptokit.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.tipkit.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">26.0</SupportedOSPlatformVersion>
@@ -15,20 +15,15 @@
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-tvos'))">26.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">26.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos'))">true</IncludeSwiftBindingsRuntimeNative>
-    <!-- macOS console apps don't need provisioning -->
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
   </PropertyGroup>
 
-  <!-- iOS, tvOS, and MacCatalyst are UIKit app targets — they need an Info.plist.
-       macOS (console) does not. -->
   <ItemGroup Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos')) or $(TargetFramework.Contains('-maccatalyst'))">
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
-       must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.CryptoKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.TipKit.csproj" />
   </ItemGroup>
 
 </Project>

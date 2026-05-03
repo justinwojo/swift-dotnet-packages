@@ -1,14 +1,14 @@
-<Project Sdk="SwiftBindings.Sdk/0.8.0">
+<Project Sdk="SwiftBindings.Sdk/0.9.0">
   <PropertyGroup>
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2</TargetFrameworks>
-    <PackageId>SwiftBindings.RoomPlan</PackageId>
-    <Version>26.2.0</Version>
-    <Description>Native Swift interop bindings for Apple RoomPlan</Description>
+    <PackageId>SwiftBindings.Apple.Translation</PackageId>
+    <Version>26.2.1</Version>
+    <Description>Native Swift interop bindings for Apple Translation</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <SwiftAppleFrameworkTarget Include="RoomPlan" />
+    <SwiftAppleFrameworkTarget Include="Translation" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

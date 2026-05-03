@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.ActivityKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.ActivityKit.csproj" />
   </ItemGroup>
 
 </Project>

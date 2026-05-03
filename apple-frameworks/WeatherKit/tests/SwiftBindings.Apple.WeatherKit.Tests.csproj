@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.tipkit.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.weatherkit.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">26.0</SupportedOSPlatformVersion>
@@ -15,6 +15,7 @@
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-tvos'))">26.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">26.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos'))">true</IncludeSwiftBindingsRuntimeNative>
+    <!-- macOS console apps don't need provisioning -->
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
   </PropertyGroup>
 
@@ -23,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.TipKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.WeatherKit.csproj" />
   </ItemGroup>
 
 </Project>

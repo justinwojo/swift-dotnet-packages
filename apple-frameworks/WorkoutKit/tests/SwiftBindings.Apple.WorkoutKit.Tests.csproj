@@ -7,12 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationId>com.swiftbindings.livecommunicationkit.tests</ApplicationId>
+    <ApplicationId>com.swiftbindings.workoutkit.tests</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">26.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">26.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">26.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">17.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">14.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios'))">true</IncludeSwiftBindingsRuntimeNative>
     <!-- macOS console apps don't need provisioning -->
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
@@ -27,7 +27,7 @@
   <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
        must be validated against the local change, not a nuget.org version. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.LiveCommunicationKit.csproj" />
+    <ProjectReference Include="../SwiftBindings.Apple.WorkoutKit.csproj" />
   </ItemGroup>
 
 </Project>
