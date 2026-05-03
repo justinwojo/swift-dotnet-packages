@@ -35,7 +35,7 @@ partial class Build
             // ── Case 1: PropertyGroup is never edited ──
             {
                 const string input = """
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
 
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
@@ -61,7 +61,7 @@ partial class Build
             // ── Case 2: First-run injection appends auto-block before </Project> ──
             {
                 const string input = """
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -90,7 +90,7 @@ partial class Build
             // <ItemGroup>; the rewriter must not migrate or strip them.
             {
                 const string input = """
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -125,7 +125,7 @@ partial class Build
             // ── Case 4: First-run injection adds NEW heuristic hits and keeps user items ──
             {
                 const string input = """
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -167,7 +167,7 @@ partial class Build
             // the same heuristic results must not churn the order.
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -199,7 +199,7 @@ partial class Build
             // keep an in-block entry the heuristic doesn't reproduce.
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -238,7 +238,7 @@ partial class Build
             // ── Case 7: New heuristic hit appends to existing block in sorted order ──
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -273,7 +273,7 @@ partial class Build
             // ── Case 8: Asymmetric markers throw rather than corrupt the file ──
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -304,7 +304,7 @@ partial class Build
             // ── Case 9: Empty depIncludes on a marked block strips the block ──
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -320,7 +320,7 @@ partial class Build
                 // Empty depIncludes — but A is in-block, so union semantics keep it.
                 // The block-stripping path is reached only when the union is empty.
                 var stripInput = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -360,7 +360,7 @@ partial class Build
             // than stay pinned forever.
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -396,7 +396,7 @@ partial class Build
             // is a true no-op.
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
@@ -435,7 +435,7 @@ partial class Build
             // PackageId/PackageVersion attrs) twice.
             {
                 const string input = $$"""
-                    <Project Sdk="SwiftBindings.Sdk/0.8.0">
+                    <Project Sdk="SwiftBindings.Sdk/0.9.0">
                       <PropertyGroup>
                         <TargetFramework>net10.0-ios</TargetFramework>
                       </PropertyGroup>
