@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.8.0">
+<Project Sdk="SwiftBindings.Sdk/0.9.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -20,7 +20,7 @@
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
     <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
-    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" />
+    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" PackageId="SwiftBindings.Stripe.ThreeDS2" PackageVersion="25.11.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

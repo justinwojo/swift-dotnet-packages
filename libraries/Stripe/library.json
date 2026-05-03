@@ -55,13 +55,11 @@
     },
     {
       "framework": "Stripe3DS2",
-      "subdirectory": "Stripe3DS2",
-      "internal": true
+      "subdirectory": "Stripe3DS2"
     },
     {
       "framework": "StripeCameraCore",
-      "subdirectory": "StripeCameraCore",
-      "internal": true
+      "subdirectory": "StripeCameraCore"
     }
   ]
 }
