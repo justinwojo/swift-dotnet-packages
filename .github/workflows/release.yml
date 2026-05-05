@@ -99,7 +99,7 @@ jobs:
           dotnet-quality: preview
 
       - name: Install workloads
-        run: dotnet workload install ios macos maccatalyst tvos
+        run: dotnet workload restore
 
       # Cache must come BEFORE `dotnet tool restore` so the restored
       # ~/.nuget/packages already contains nuke.globaltool on cache-hit

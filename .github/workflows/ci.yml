@@ -118,7 +118,7 @@ jobs:
 
       - name: Install workloads
         if: matrix.kind == 'third-party'
-        run: dotnet workload install ios macos maccatalyst tvos
+        run: dotnet workload restore
 
       - name: Cache NuGet packages
         if: matrix.kind == 'third-party'
@@ -194,7 +194,7 @@ jobs:
 
       - name: Install workloads
         if: matrix.kind == 'apple-framework'
-        run: dotnet workload install ios macos maccatalyst tvos
+        run: dotnet workload restore
 
       - name: Cache NuGet packages
         if: matrix.kind == 'apple-framework'
