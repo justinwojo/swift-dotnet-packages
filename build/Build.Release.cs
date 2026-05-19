@@ -265,6 +265,12 @@ partial class Build
         Log.Information("BuildAndPackRelease: BuildLibrary {Library} -c {Config} --all-products",
             library, configuration);
 
+        // Step 0: cross-library xcframework prerequisites (see
+        // BuildLibraryEndToEnd for rationale — release path needs the same
+        // pre-build since BuildAndPackRelease is what CI invokes for one
+        // tagged library at a time).
+        BuildCrossLibraryXcframeworkPrerequisites(library);
+
         // Step 1: xcframeworks.
         BuildXcframeworkForLibrary(library, Array.Empty<string>(), allProducts: true);
 

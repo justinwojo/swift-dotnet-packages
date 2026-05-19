@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Serilog;
@@ -60,6 +61,17 @@ partial class Build
         var configPath = LibraryConfigPath(library);
         var config = LibraryConfigLoader.Load(configPath);
         var selected = config.ResolveProducts(requestedProducts, allProducts);
+
+        // ── Step 0: cross-library xcframework prerequisites ──
+        // The SDK generator's --framework-dependency flag is fed from
+        // <SwiftFrameworkDependency Include="../X/X.xcframework">. When X is a
+        // different top-level library, X's xcframework must exist on disk
+        // before our pass-1 dotnet build runs (the generator opens its
+        // .swiftinterface for cross-module type resolution). The single
+        // cross-library edge in the repo today is BlinkIDUX → BlinkID; a CI
+        // run that builds only BlinkIDUX previously failed because BlinkID's
+        // xcframework was never materialized.
+        BuildCrossLibraryXcframeworkPrerequisites(library);
 
         // ── Step 1: xcframeworks ──
         BuildXcframeworkForLibrary(library, requestedProducts, allProducts);
@@ -174,5 +186,152 @@ partial class Build
             throw new InvalidOperationException("dotnet build timed out after 30 minutes");
         }
         return process.ExitCode;
+    }
+
+    /// <summary>
+    /// Matches a self-closing <c>&lt;SwiftFrameworkDependency Include="..." /&gt;</c>
+    /// item. Same shape used by <c>CsprojRewriter</c>; the <c>Include</c> attribute
+    /// is captured for resolution.
+    /// </summary>
+    static readonly Regex SfdIncludeRegex = new(
+        @"<SwiftFrameworkDependency\b[^>]*?\bInclude\s*=\s*""([^""]+)""[^>]*?/>",
+        RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Pre-build every cross-library xcframework <paramref name="library"/>
+    /// depends on, in dependency-first order. Each prerequisite is built with
+    /// <c>--all-products</c> so that any sibling xcframework the consumer
+    /// might reference is materialized regardless of which specific product
+    /// the SFD points at.
+    /// </summary>
+    void BuildCrossLibraryXcframeworkPrerequisites(string library)
+    {
+        var prereqs = ResolveCrossLibraryXcframeworkPrerequisites(library);
+        if (prereqs.Count == 0)
+            return;
+
+        Log.Information("Cross-library xcframework prerequisites for {Library}: [{Prereqs}]",
+            library, string.Join(", ", prereqs));
+
+        foreach (var prereq in prereqs)
+        {
+            Log.Information("=== Pre-building cross-library prerequisite: {Prereq} ===", prereq);
+            BuildXcframeworkForLibrary(prereq, Array.Empty<string>(), allProducts: true);
+        }
+    }
+
+    /// <summary>
+    /// Resolve the transitive cross-library xcframework prerequisites of
+    /// <paramref name="library"/> by scanning every non-test
+    /// <c>SwiftBindings.*.csproj</c> in the library tree for
+    /// <c>&lt;SwiftFrameworkDependency Include="../X/..."&gt;</c> items where
+    /// <c>X</c> resolves to a sibling library directory under
+    /// <c>libraries/</c> (not the target itself, not intra-library product
+    /// subdirectories).
+    ///
+    /// <para>
+    /// Result is a deduped, post-order DFS list — dependencies appear before
+    /// the libraries that depend on them. The target library itself is never
+    /// included. Cycles aren't expected (the dep graph is depth-1 today:
+    /// BlinkIDUX → BlinkID) but the visited-set guards make a cycle a no-op
+    /// rather than an infinite loop.
+    /// </para>
+    ///
+    /// <para>
+    /// Intra-library SFDs (e.g. Stripe's <c>StripePayments → StripeCore</c>,
+    /// where both csprojs sit under <c>libraries/Stripe/</c>) are filtered
+    /// out because <c>BuildXcframeworkForLibrary(library, allProducts: true)</c>
+    /// already builds every sibling product in the same library.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<string> ResolveCrossLibraryXcframeworkPrerequisites(string library)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<string>();
+
+        void Visit(string lib)
+        {
+            if (!visited.Add(lib))
+                return;
+
+            foreach (var dep in DirectCrossLibraryDeps(lib))
+                Visit(dep);
+
+            if (!string.Equals(lib, library, StringComparison.Ordinal))
+                ordered.Add(lib);
+        }
+
+        Visit(library);
+        return ordered;
+    }
+
+    /// <summary>
+    /// Direct (non-transitive) cross-library SFD targets of
+    /// <paramref name="lib"/>. Returns sibling library names under
+    /// <c>libraries/</c>, deduped, in deterministic order.
+    /// </summary>
+    IEnumerable<string> DirectCrossLibraryDeps(string lib)
+    {
+        AbsolutePath libDir;
+        try
+        {
+            libDir = LibraryDir(lib);
+        }
+        catch (InvalidOperationException)
+        {
+            // ResolveLibrary throws only for names absent from both
+            // libraries/ and apple-frameworks/. Apple framework names DO
+            // resolve here (under apple-frameworks/) and will fall through
+            // to the scan loop below; their library.json check later filters
+            // them out without warning.
+            yield break;
+        }
+
+        var librariesPrefix = ((string)LibrariesDir) + Path.DirectorySeparatorChar;
+        var seen = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var csproj in Directory.EnumerateFiles(libDir, "SwiftBindings.*.csproj", SearchOption.AllDirectories))
+        {
+            // Skip test csprojs — only the package csprojs feed the SDK
+            // generator, so test-only SFDs (none exist today, but the
+            // template could grow them) are not build prerequisites.
+            var rel = Path.GetRelativePath(libDir, csproj);
+            if (rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   .Any(seg => string.Equals(seg, "tests", StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var csprojDir = Path.GetDirectoryName(csproj)!;
+            var content = File.ReadAllText(csproj);
+            foreach (Match m in SfdIncludeRegex.Matches(content))
+            {
+                var include = m.Groups[1].Value;
+                var resolved = Path.GetFullPath(Path.Combine(csprojDir, include));
+
+                if (!resolved.StartsWith(librariesPrefix, StringComparison.Ordinal))
+                    continue;
+
+                var rest = resolved.Substring(librariesPrefix.Length);
+                var firstSep = rest.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+                if (firstSep <= 0)
+                    continue;
+
+                var other = rest.Substring(0, firstSep);
+                if (string.Equals(other, lib, StringComparison.Ordinal))
+                    continue; // intra-library
+
+                if (!File.Exists(LibrariesDir / other / "library.json"))
+                {
+                    Log.Warning(
+                        "Cross-library SwiftFrameworkDependency in {Csproj} references {Other} which has no library.json — skipping",
+                        Path.GetRelativePath(RootDirectory, csproj), other);
+                    continue;
+                }
+
+                seen.Add(other);
+            }
+        }
+
+        foreach (var s in seen)
+            yield return s;
     }
 }
