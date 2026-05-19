@@ -7,6 +7,7 @@ using Foundation;
 using UIKit;
 using Swift;
 using BlinkID;
+using BlinkID.BlinkIDSDK;
 using Swift.Runtime;
 
 namespace BlinkIDSimTests;
@@ -608,7 +609,6 @@ public class MainViewController : UIViewController
             ("CameraAngleTooSteep", () => DetectionStatus.CameraAngleTooSteep, DetectionStatus.CaseTag.CameraAngleTooSteep),
             ("DocumentTooCloseToCameraEdge", () => DetectionStatus.DocumentTooCloseToCameraEdge, DetectionStatus.CaseTag.DocumentTooCloseToCameraEdge),
             ("DocumentPartiallyVisible", () => DetectionStatus.DocumentPartiallyVisible, DetectionStatus.CaseTag.DocumentPartiallyVisible),
-            ("FallbackSuccess", () => DetectionStatus.FallbackSuccess, DetectionStatus.CaseTag.FallbackSuccess),
         });
 
         // DetectionStatus.RawValue round-trip
@@ -929,15 +929,15 @@ public class MainViewController : UIViewController
         try
         {
             var allCases = FieldType.AllCases;
-            if (allCases != null && allCases.Count == 64)
+            if (allCases != null && allCases.Count == 74)
             {
                 logger.Pass($"FieldType.AllCases count={allCases.Count}");
                 results.Pass("FieldType_AllCases");
             }
             else
             {
-                logger.Fail($"FieldType.AllCases: expected 64, got {allCases?.Count}");
-                results.Fail("FieldType_AllCases", $"Expected 64, got {allCases?.Count}");
+                logger.Fail($"FieldType.AllCases: expected 74, got {allCases?.Count}");
+                results.Fail("FieldType_AllCases", $"Expected 74, got {allCases?.Count}");
             }
         }
         catch (Exception ex)

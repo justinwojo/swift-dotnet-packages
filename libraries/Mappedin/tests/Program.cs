@@ -175,23 +175,20 @@ public class MainViewController : UIViewController
         logger.Info("=== Section 2: Integer Enums ===");
         RunIntegerEnumTests(logger, results);
 
-        logger.Info("=== Section 3: String-Based Enums ===");
+        logger.Info("=== Section 3: String-Based Enums (Singletons) ===");
         RunStringEnumTests(logger, results);
 
-        logger.Info("=== Section 4: MPIOptions String-Based Enums ===");
-        RunOptionsEnumTests(logger, results);
-
-        logger.Info("=== Section 5: Constructor Tests ===");
+        logger.Info("=== Section 4: Constructors & Properties ===");
         RunConstructorTests(logger, results);
 
-        logger.Info("=== Section 6: String-Enum RawValue & FromRawValue ===");
+        logger.Info("=== Section 5: String-Enum RawValue & FromRawValue ===");
         RunRawValueTests(logger, results);
 
-        logger.Info("=== Section 7: Protocol Interface Tests ===");
+        logger.Info("=== Section 6: Protocol & Interface Conformance ===");
         RunProtocolTests(logger, results);
 
-        logger.Info("=== Section 8: MPIOptions Nested Struct Metadata ===");
-        RunOptionsStructMetadataTests(logger, results);
+        logger.Info("=== Section 7: WKWebView Inheritance ===");
+        RunInheritanceTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -221,59 +218,60 @@ public class MainViewController : UIViewController
     // ──────────────────────────────────────────────
     // Section 1: Type Metadata
     // ──────────────────────────────────────────────
+    //
+    // Mappedin 6.2.0 exports an unprefixed surface (Coordinate, Directions, BearingType, …).
+    // These checks exercise generator-emitted TypeMetadata access across a representative
+    // mix of classes, value-style structs, generic types, and nested types.
 
     private void RunMetadataTests(TestLogger logger, TestResults results)
     {
-        // Test metadata access for all key struct, class, and enum types
         var metadataTests = new (string Name, Func<TypeMetadata> GetMetadata)[]
         {
-            // Structs
-            ("MPISiblingGroup", () => SwiftObjectHelper<MPISiblingGroup>.GetTypeMetadata()),
-            ("MPIBlueDotPositionUpdate", () => SwiftObjectHelper<MPIBlueDotPositionUpdate>.GetTypeMetadata()),
-            ("MPIBlueDotStateChange", () => SwiftObjectHelper<MPIBlueDotStateChange>.GetTypeMetadata()),
-            ("MPIPhone", () => SwiftObjectHelper<MPIPhone>.GetTypeMetadata()),
-            ("MPIVenueResponse", () => SwiftObjectHelper<MPIVenueResponse>.GetTypeMetadata()),
-            ("MPIPath", () => SwiftObjectHelper<MPIPath>.GetTypeMetadata()),
-            ("MPILanguage", () => SwiftObjectHelper<MPILanguage>.GetTypeMetadata()),
-            ("MPIGalleryImage", () => SwiftObjectHelper<MPIGalleryImage>.GetTypeMetadata()),
-            ("MPIPolygonRanking", () => SwiftObjectHelper<MPIPolygonRanking>.GetTypeMetadata()),
-            ("MPICategory", () => SwiftObjectHelper<MPICategory>.GetTypeMetadata()),
-            ("MPIPolygon", () => SwiftObjectHelper<MPIPolygon>.GetTypeMetadata()),
-            ("MPIVortex", () => SwiftObjectHelper<MPIVortex>.GetTypeMetadata()),
-            ("MPIDestinationSet", () => SwiftObjectHelper<MPIDestinationSet>.GetTypeMetadata()),
-            ("MPINode", () => SwiftObjectHelper<MPINode>.GetTypeMetadata()),
-            ("MPIPathNode", () => SwiftObjectHelper<MPIPathNode>.GetTypeMetadata()),
-            ("MPIDirections", () => SwiftObjectHelper<MPIDirections>.GetTypeMetadata()),
-            ("MPIInstruction", () => SwiftObjectHelper<MPIInstruction>.GetTypeMetadata()),
-            ("MPIAction", () => SwiftObjectHelper<MPIAction>.GetTypeMetadata()),
-            ("MPILocationState", () => SwiftObjectHelper<MPILocationState>.GetTypeMetadata()),
-            ("MPIVenue", () => SwiftObjectHelper<MPIVenue>.GetTypeMetadata()),
-            ("MPITinyObject", () => SwiftObjectHelper<MPITinyObject>.GetTypeMetadata()),
-            ("MPISocial", () => SwiftObjectHelper<MPISocial>.GetTypeMetadata()),
-            ("MPIOpeningHours", () => SwiftObjectHelper<MPIOpeningHours>.GetTypeMetadata()),
-            ("MPIMapClickEvent", () => SwiftObjectHelper<MPIMapClickEvent>.GetTypeMetadata()),
-            ("MPILocation", () => SwiftObjectHelper<MPILocation>.GetTypeMetadata()),
-            ("MPISearchMatch", () => SwiftObjectHelper<MPISearchMatch>.GetTypeMetadata()),
-            ("MPISearchResult", () => SwiftObjectHelper<MPISearchResult>.GetTypeMetadata()),
-            ("MPISearchSuggestion", () => SwiftObjectHelper<MPISearchSuggestion>.GetTypeMetadata()),
-            ("MPISearchSuggestions", () => SwiftObjectHelper<MPISearchSuggestions>.GetTypeMetadata()),
-            ("MPISuggestions", () => SwiftObjectHelper<MPISuggestions>.GetTypeMetadata()),
-            ("MPISearchResultLocation", () => SwiftObjectHelper<MPISearchResultLocation>.GetTypeMetadata()),
-            ("MPISearchResultCategory", () => SwiftObjectHelper<MPISearchResultCategory>.GetTypeMetadata()),
-            ("MPISearchResultCustom", () => SwiftObjectHelper<MPISearchResultCustom>.GetTypeMetadata()),
-            ("MPIIdBasedObject", () => SwiftObjectHelper<MPIIdBasedObject>.GetTypeMetadata()),
-            ("MPIColor", () => SwiftObjectHelper<MPIColor>.GetTypeMetadata()),
-            ("MPIHeader", () => SwiftObjectHelper<MPIHeader>.GetTypeMetadata()),
-            ("MPIRankings", () => SwiftObjectHelper<MPIRankings>.GetTypeMetadata()),
-            ("MPIPosition", () => SwiftObjectHelper<MPIPosition>.GetTypeMetadata()),
-            ("MPICoordinates", () => SwiftObjectHelper<MPICoordinates>.GetTypeMetadata()),
-            ("MPIOptions", () => SwiftObjectHelper<MPIOptions>.GetTypeMetadata()),
-            ("MPIPicture", () => SwiftObjectHelper<MPIPicture>.GetTypeMetadata()),
-            ("MPIImage", () => SwiftObjectHelper<MPIImage>.GetTypeMetadata()),
-            ("MappedinIdBasedObject", () => SwiftObjectHelper<MappedinIdBasedObject>.GetTypeMetadata()),
-            // Nested event structs
-            ("MPIMapClickEvent.FloatingLabelClicked", () => SwiftObjectHelper<MPIMapClickEvent.FloatingLabelClicked>.GetTypeMetadata()),
-            ("MPIMapClickEvent.ClickEventPayload", () => SwiftObjectHelper<MPIMapClickEvent.ClickEventPayload>.GetTypeMetadata()),
+            // Top-level classes
+            ("MapData", () => SwiftObjectHelper<MapData>.GetTypeMetadata()),
+            ("MapView", () => SwiftObjectHelper<MapView>.GetTypeMetadata()),
+            ("Query", () => SwiftObjectHelper<Query>.GetTypeMetadata()),
+            ("Search", () => SwiftObjectHelper<Search>.GetTypeMetadata()),
+            ("Analytics", () => SwiftObjectHelper<Analytics>.GetTypeMetadata()),
+            ("Coordinate", () => SwiftObjectHelper<Coordinate>.GetTypeMetadata()),
+            ("Annotation", () => SwiftObjectHelper<Annotation>.GetTypeMetadata()),
+            ("Area", () => SwiftObjectHelper<Area>.GetTypeMetadata()),
+            ("Door", () => SwiftObjectHelper<Door>.GetTypeMetadata()),
+            ("Floor", () => SwiftObjectHelper<Floor>.GetTypeMetadata()),
+            ("Connection", () => SwiftObjectHelper<Connection>.GetTypeMetadata()),
+            // Value-style structs
+            ("BinaryBundle", () => SwiftObjectHelper<BinaryBundle>.GetTypeMetadata()),
+            ("Directions", () => SwiftObjectHelper<Directions>.GetTypeMetadata()),
+            ("DirectionInstruction", () => SwiftObjectHelper<DirectionInstruction>.GetTypeMetadata()),
+            ("DirectionInstructionAction", () => SwiftObjectHelper<DirectionInstructionAction>.GetTypeMetadata()),
+            ("CameraTarget", () => SwiftObjectHelper<CameraTarget>.GetTypeMetadata()),
+            ("CameraTransform", () => SwiftObjectHelper<CameraTransform>.GetTypeMetadata()),
+            ("CameraAnimationOptions", () => SwiftObjectHelper<CameraAnimationOptions>.GetTypeMetadata()),
+            ("CameraInteractionsSetOptions", () => SwiftObjectHelper<CameraInteractionsSetOptions>.GetTypeMetadata()),
+            ("AddImageOptions", () => SwiftObjectHelper<AddImageOptions>.GetTypeMetadata()),
+            ("AddMarkerOptions", () => SwiftObjectHelper<AddMarkerOptions>.GetTypeMetadata()),
+            ("AddPathOptions", () => SwiftObjectHelper<AddPathOptions>.GetTypeMetadata()),
+            ("AnimationOptions", () => SwiftObjectHelper<AnimationOptions>.GetTypeMetadata()),
+            ("AntialiasingOptions", () => SwiftObjectHelper<AntialiasingOptions>.GetTypeMetadata()),
+            // Nested string-enum classes (covers nested-type metadata emission)
+            ("AntialiasingOptions.QualityType", () => SwiftObjectHelper<AntialiasingOptions.QualityType>.GetTypeMetadata()),
+            // String-enum value-style classes
+            ("ActionType", () => SwiftObjectHelper<ActionType>.GetTypeMetadata()),
+            ("BearingType", () => SwiftObjectHelper<BearingType>.GetTypeMetadata()),
+            ("BlueDotStatus", () => SwiftObjectHelper<BlueDotStatus>.GetTypeMetadata()),
+            ("CollisionRankingTier", () => SwiftObjectHelper<CollisionRankingTier>.GetTypeMetadata()),
+            ("ConnectionType", () => SwiftObjectHelper<ConnectionType>.GetTypeMetadata()),
+            ("EasingFunction", () => SwiftObjectHelper<EasingFunction>.GetTypeMetadata()),
+            ("Doors", () => SwiftObjectHelper<Doors>.GetTypeMetadata()),
+            // Payload structs
+            ("BlueDotPositionUpdate", () => SwiftObjectHelper<BlueDotPositionUpdate>.GetTypeMetadata()),
+            ("BlueDotPositionUpdatePayload", () => SwiftObjectHelper<BlueDotPositionUpdatePayload>.GetTypeMetadata()),
+            ("BlueDotDeviceOrientationUpdatePayload", () => SwiftObjectHelper<BlueDotDeviceOrientationUpdatePayload>.GetTypeMetadata()),
+            ("BlueDotStatusChangePayload", () => SwiftObjectHelper<BlueDotStatusChangePayload>.GetTypeMetadata()),
+            ("BlueDotErrorPayload", () => SwiftObjectHelper<BlueDotErrorPayload>.GetTypeMetadata()),
+            ("BlueDotUpdateOptions", () => SwiftObjectHelper<BlueDotUpdateOptions>.GetTypeMetadata()),
+            ("ClickPayload", () => SwiftObjectHelper<ClickPayload>.GetTypeMetadata()),
+            ("FloorChangePayload", () => SwiftObjectHelper<FloorChangePayload>.GetTypeMetadata()),
         };
 
         foreach (var (name, getMetadata) in metadataTests)
@@ -295,59 +293,16 @@ public class MainViewController : UIViewController
     // ──────────────────────────────────────────────
     // Section 2: Integer Enums
     // ──────────────────────────────────────────────
+    //
+    // Mappedin 6.2.0's only top-level integer enum is `EnvMapOptions`. Its case
+    // ordinals are pinned by the generator from the Swift declaration order.
 
     private void RunIntegerEnumTests(TestLogger logger, TestResults results)
     {
-        // --- MPIMarkerState ---
-        TestIntEnum(logger, results, "MPIMarkerState", new (string, int)[]
+        TestIntEnum(logger, results, "EnvMapOptions", new (string, int)[]
         {
-            ("Hidden", (int)MPIMarkerState.Hidden),
-            ("Ghost", (int)MPIMarkerState.Ghost),
-            ("Normal", (int)MPIMarkerState.Normal),
-            ("Uncertain", (int)MPIMarkerState.Uncertain),
-        });
-
-        // --- MPIBlueDotState ---
-        TestIntEnum(logger, results, "MPIBlueDotState", new (string, int)[]
-        {
-            ("NotListening", (int)MPIBlueDotState.NotListening),
-            ("Listening", (int)MPIBlueDotState.Listening),
-            ("HasPosition", (int)MPIBlueDotState.HasPosition),
-            ("HasIndoorPosition", (int)MPIBlueDotState.HasIndoorPosition),
-            ("LocationUncertain", (int)MPIBlueDotState.LocationUncertain),
-        });
-
-        // --- MPIBlueDotStateReason ---
-        TestIntEnum(logger, results, "MPIBlueDotStateReason", new (string, int)[]
-        {
-            ("OutsideMap", (int)MPIBlueDotStateReason.OutsideMap),
-            ("NoPositionsProvided", (int)MPIBlueDotStateReason.NoPositionsProvided),
-            ("GeolocationProviderError", (int)MPIBlueDotStateReason.GeolocationProviderError),
-            ("CustomGeolocationProviderError", (int)MPIBlueDotStateReason.CustomGeolocationProviderError),
-        });
-
-        // --- MPICameraManagerError ---
-        TestIntEnum(logger, results, "MPICameraManagerError", new (string, int)[]
-        {
-            ("SetMaxTiltOutOfBounds", (int)MPICameraManagerError.SetMaxTiltOutOfBounds),
-        });
-
-        // --- MPIOptions.MarkerAnchor ---
-        TestIntEnum(logger, results, "MarkerAnchor", new (string, int)[]
-        {
-            ("Center", (int)MPIOptions.MarkerAnchor.Center),
-            ("Top", (int)MPIOptions.MarkerAnchor.Top),
-            ("Bottom", (int)MPIOptions.MarkerAnchor.Bottom),
-            ("Left", (int)MPIOptions.MarkerAnchor.Left),
-            ("Right", (int)MPIOptions.MarkerAnchor.Right),
-        });
-
-        // --- MPIOptions.CollisionRankingTiers ---
-        TestIntEnum(logger, results, "CollisionRankingTiers", new (string, int)[]
-        {
-            ("Medium", (int)MPIOptions.CollisionRankingTiers.Medium),
-            ("High", (int)MPIOptions.CollisionRankingTiers.High),
-            ("AlwaysVisible", (int)MPIOptions.CollisionRankingTiers.AlwaysVisible),
+            ("Basic", (int)EnvMapOptions.Basic),
+            ("Disabled", (int)EnvMapOptions.Disabled),
         });
     }
 
@@ -358,7 +313,6 @@ public class MainViewController : UIViewController
             var (caseName, expectedValue) = cases[i];
             try
             {
-                // Verify case has expected ordinal value (sequential from 0)
                 if (expectedValue == i)
                 {
                     logger.Pass($"{enumName}.{caseName} = {expectedValue}");
@@ -381,43 +335,68 @@ public class MainViewController : UIViewController
     // ──────────────────────────────────────────────
     // Section 3: String-Based Enums (Singleton Cases)
     // ──────────────────────────────────────────────
+    //
+    // Swift string-backed enums are emitted as classes with cached singleton properties
+    // for each case. Loading a singleton exercises the `CaseByIndex` cdecl wrapper plus
+    // the cached-handle lifetime path.
 
     private void RunStringEnumTests(TestLogger logger, TestResults results)
     {
-        // --- MPIError static cases ---
-        TestStringEnumCase(logger, results, "MPIError", "Decode", () => MPIError.Decode);
-        TestStringEnumCase(logger, results, "MPIError", "Retrieve", () => MPIError.Retrieve);
-        TestStringEnumCase(logger, results, "MPIError", "ShowVenue", () => MPIError.ShowVenue);
-        TestStringEnumCase(logger, results, "MPIError", "LoadVenue", () => MPIError.LoadVenue);
-        TestStringEnumCase(logger, results, "MPIError", "PathNotFound", () => MPIError.PathNotFound);
+        // --- BearingType ---
+        TestStringEnumCase(logger, results, "BearingType", "Straight", () => BearingType.Straight);
+        TestStringEnumCase(logger, results, "BearingType", "Left", () => BearingType.Left);
+        TestStringEnumCase(logger, results, "BearingType", "Right", () => BearingType.Right);
+        TestStringEnumCase(logger, results, "BearingType", "SlightLeft", () => BearingType.SlightLeft);
+        TestStringEnumCase(logger, results, "BearingType", "SlightRight", () => BearingType.SlightRight);
+        TestStringEnumCase(logger, results, "BearingType", "Back", () => BearingType.Back);
 
-        // --- MPIVortexType static cases ---
-        TestStringEnumCase(logger, results, "MPIVortexType", "Stairs", () => MPIVortexType.Stairs);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Elevator", () => MPIVortexType.Elevator);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Escalator", () => MPIVortexType.Escalator);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Door", () => MPIVortexType.Door);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Slide", () => MPIVortexType.Slide);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Portal", () => MPIVortexType.Portal);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Ramp", () => MPIVortexType.Ramp);
-        TestStringEnumCase(logger, results, "MPIVortexType", "Other", () => MPIVortexType.Other);
+        // --- ActionType ---
+        TestStringEnumCase(logger, results, "ActionType", "Arrival", () => ActionType.Arrival);
+        TestStringEnumCase(logger, results, "ActionType", "Departure", () => ActionType.Departure);
+        TestStringEnumCase(logger, results, "ActionType", "Turn", () => ActionType.Turn);
+        TestStringEnumCase(logger, results, "ActionType", "TakeConnection", () => ActionType.TakeConnection);
+        TestStringEnumCase(logger, results, "ActionType", "ExitConnection", () => ActionType.ExitConnection);
 
-        // --- MPIActionType static cases ---
-        TestStringEnumCase(logger, results, "MPIActionType", "Departure", () => MPIActionType.Departure);
-        TestStringEnumCase(logger, results, "MPIActionType", "TakeVortex", () => MPIActionType.TakeVortex);
-        TestStringEnumCase(logger, results, "MPIActionType", "ExitVortex", () => MPIActionType.ExitVortex);
-        TestStringEnumCase(logger, results, "MPIActionType", "Turn", () => MPIActionType.Turn);
-        TestStringEnumCase(logger, results, "MPIActionType", "Arrival", () => MPIActionType.Arrival);
+        // --- ConnectionType ---
+        TestStringEnumCase(logger, results, "ConnectionType", "Stairs", () => ConnectionType.Stairs);
+        TestStringEnumCase(logger, results, "ConnectionType", "Elevator", () => ConnectionType.Elevator);
+        TestStringEnumCase(logger, results, "ConnectionType", "Escalator", () => ConnectionType.Escalator);
+        TestStringEnumCase(logger, results, "ConnectionType", "Door", () => ConnectionType.Door);
+        TestStringEnumCase(logger, results, "ConnectionType", "Portal", () => ConnectionType.Portal);
+        TestStringEnumCase(logger, results, "ConnectionType", "Ramp", () => ConnectionType.Ramp);
 
-        // --- MPIBearingType static cases ---
-        TestStringEnumCase(logger, results, "MPIBearingType", "Straight", () => MPIBearingType.Straight);
-        TestStringEnumCase(logger, results, "MPIBearingType", "Right", () => MPIBearingType.Right);
-        TestStringEnumCase(logger, results, "MPIBearingType", "SlightRight", () => MPIBearingType.SlightRight);
-        TestStringEnumCase(logger, results, "MPIBearingType", "Left", () => MPIBearingType.Left);
-        TestStringEnumCase(logger, results, "MPIBearingType", "SlightLeft", () => MPIBearingType.SlightLeft);
+        // --- EasingFunction ---
+        TestStringEnumCase(logger, results, "EasingFunction", "Linear", () => EasingFunction.Linear);
+        TestStringEnumCase(logger, results, "EasingFunction", "EaseIn", () => EasingFunction.EaseIn);
+        TestStringEnumCase(logger, results, "EasingFunction", "EaseOut", () => EasingFunction.EaseOut);
+        TestStringEnumCase(logger, results, "EasingFunction", "EaseInOut", () => EasingFunction.EaseInOut);
 
-        // --- MPIState static cases ---
-        TestStringEnumCase(logger, results, "MPIState", "Follow", () => MPIState.Follow);
-        TestStringEnumCase(logger, results, "MPIState", "Explore", () => MPIState.Explore);
+        // --- BlueDotStatus ---
+        TestStringEnumCase(logger, results, "BlueDotStatus", "Active", () => BlueDotStatus.Active);
+        TestStringEnumCase(logger, results, "BlueDotStatus", "Inactive", () => BlueDotStatus.Inactive);
+        TestStringEnumCase(logger, results, "BlueDotStatus", "Hidden", () => BlueDotStatus.Hidden);
+        TestStringEnumCase(logger, results, "BlueDotStatus", "Disabled", () => BlueDotStatus.Disabled);
+
+        // --- Doors ---
+        TestStringEnumCase(logger, results, "Doors", "Exterior", () => Doors.Exterior);
+        TestStringEnumCase(logger, results, "Doors", "Interior", () => Doors.Interior);
+
+        // --- CollisionRankingTier ---
+        TestStringEnumCase(logger, results, "CollisionRankingTier", "Low", () => CollisionRankingTier.Low);
+        TestStringEnumCase(logger, results, "CollisionRankingTier", "Medium", () => CollisionRankingTier.Medium);
+        TestStringEnumCase(logger, results, "CollisionRankingTier", "High", () => CollisionRankingTier.High);
+        TestStringEnumCase(logger, results, "CollisionRankingTier", "AlwaysVisible", () => CollisionRankingTier.AlwaysVisible);
+
+        // --- Nested string-enum: AntialiasingOptions.QualityType ---
+        // Exercises the nested-type singleton dispatch + cdecl wrapper layout.
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Low",
+            () => AntialiasingOptions.QualityType.Low);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Medium",
+            () => AntialiasingOptions.QualityType.Medium);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "High",
+            () => AntialiasingOptions.QualityType.High);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Ultra",
+            () => AntialiasingOptions.QualityType.Ultra);
     }
 
     private void TestStringEnumCase<T>(TestLogger logger, TestResults results,
@@ -445,333 +424,322 @@ public class MainViewController : UIViewController
     }
 
     // ──────────────────────────────────────────────
-    // Section 4: MPIOptions String-Based Enums
+    // Section 4: Constructors & Properties
     // ──────────────────────────────────────────────
-
-    private void RunOptionsEnumTests(TestLogger logger, TestResults results)
-    {
-        // --- CameraDirection ---
-        TestStringEnumCase(logger, results, "CameraDirection", "Up", () => MPIOptions.CameraDirection.Up);
-        TestStringEnumCase(logger, results, "CameraDirection", "Down", () => MPIOptions.CameraDirection.Down);
-        TestStringEnumCase(logger, results, "CameraDirection", "Left", () => MPIOptions.CameraDirection.Left);
-        TestStringEnumCase(logger, results, "CameraDirection", "Right", () => MPIOptions.CameraDirection.Right);
-
-        // --- EasingMode ---
-        TestStringEnumCase(logger, results, "EasingMode", "Linear", () => MPIOptions.EasingMode.Linear);
-        TestStringEnumCase(logger, results, "EasingMode", "EaseIn", () => MPIOptions.EasingMode.EaseIn);
-        TestStringEnumCase(logger, results, "EasingMode", "EaseOut", () => MPIOptions.EasingMode.EaseOut);
-        TestStringEnumCase(logger, results, "EasingMode", "EaseInOut", () => MPIOptions.EasingMode.EaseInOut);
-
-        // --- FloatingLabelRank ---
-        TestStringEnumCase(logger, results, "FloatingLabelRank", "Medium", () => MPIOptions.FloatingLabelRank.Medium);
-        TestStringEnumCase(logger, results, "FloatingLabelRank", "High", () => MPIOptions.FloatingLabelRank.High);
-        TestStringEnumCase(logger, results, "FloatingLabelRank", "AlwaysVisible", () => MPIOptions.FloatingLabelRank.AlwaysVisible);
-
-        // --- ThingKey ---
-        TestStringEnumCase(logger, results, "ThingKey", "Venue", () => MPIOptions.ThingKey.Venue);
-        TestStringEnumCase(logger, results, "ThingKey", "Nodes", () => MPIOptions.ThingKey.Nodes);
-        TestStringEnumCase(logger, results, "ThingKey", "Vortexes", () => MPIOptions.ThingKey.Vortexes);
-        TestStringEnumCase(logger, results, "ThingKey", "Polygons", () => MPIOptions.ThingKey.Polygons);
-        TestStringEnumCase(logger, results, "ThingKey", "Locations", () => MPIOptions.ThingKey.Locations);
-        TestStringEnumCase(logger, results, "ThingKey", "Categories", () => MPIOptions.ThingKey.Categories);
-        TestStringEnumCase(logger, results, "ThingKey", "Maps", () => MPIOptions.ThingKey.Maps);
-        TestStringEnumCase(logger, results, "ThingKey", "Mapgroups", () => MPIOptions.ThingKey.Mapgroups);
-        TestStringEnumCase(logger, results, "ThingKey", "Themes", () => MPIOptions.ThingKey.Themes);
-        TestStringEnumCase(logger, results, "ThingKey", "Rankings", () => MPIOptions.ThingKey.Rankings);
-
-        // --- FloatingLabelMarkerIconFit ---
-        TestStringEnumCase(logger, results, "FloatingLabelMarkerIconFit", "Fill", () => MPIOptions.FloatingLabelMarkerIconFit.Fill);
-        TestStringEnumCase(logger, results, "FloatingLabelMarkerIconFit", "Cover", () => MPIOptions.FloatingLabelMarkerIconFit.Cover);
-        TestStringEnumCase(logger, results, "FloatingLabelMarkerIconFit", "Contain", () => MPIOptions.FloatingLabelMarkerIconFit.Contain);
-
-        // --- TooltipAnchorType ---
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "Top", () => MPIOptions.TooltipAnchorType.Top);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "Left", () => MPIOptions.TooltipAnchorType.Left);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "TopLeft", () => MPIOptions.TooltipAnchorType.TopLeft);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "Right", () => MPIOptions.TooltipAnchorType.Right);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "TopRight", () => MPIOptions.TooltipAnchorType.TopRight);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "Bottom", () => MPIOptions.TooltipAnchorType.Bottom);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "BottomLeft", () => MPIOptions.TooltipAnchorType.BottomLeft);
-        TestStringEnumCase(logger, results, "TooltipAnchorType", "BottomRight", () => MPIOptions.TooltipAnchorType.BottomRight);
-
-        // --- AntiAliasQuality ---
-        TestStringEnumCase(logger, results, "AntiAliasQuality", "Low", () => MPIOptions.AntiAliasQuality.Low);
-        TestStringEnumCase(logger, results, "AntiAliasQuality", "Medium", () => MPIOptions.AntiAliasQuality.Medium);
-        TestStringEnumCase(logger, results, "AntiAliasQuality", "High", () => MPIOptions.AntiAliasQuality.High);
-        TestStringEnumCase(logger, results, "AntiAliasQuality", "Ultra", () => MPIOptions.AntiAliasQuality.Ultra);
-
-        // --- AmbientOcclusionQuality ---
-        TestStringEnumCase(logger, results, "AmbientOcclusionQuality", "Performance", () => MPIOptions.AmbientOcclusionQuality.Performance);
-        TestStringEnumCase(logger, results, "AmbientOcclusionQuality", "Low", () => MPIOptions.AmbientOcclusionQuality.Low);
-        TestStringEnumCase(logger, results, "AmbientOcclusionQuality", "Medium", () => MPIOptions.AmbientOcclusionQuality.Medium);
-        TestStringEnumCase(logger, results, "AmbientOcclusionQuality", "High", () => MPIOptions.AmbientOcclusionQuality.High);
-        TestStringEnumCase(logger, results, "AmbientOcclusionQuality", "Ultra", () => MPIOptions.AmbientOcclusionQuality.Ultra);
-
-        // --- AmbientOcclusionResolution ---
-        TestStringEnumCase(logger, results, "AmbientOcclusionResolution", "Half", () => MPIOptions.AmbientOcclusionResolution.Half);
-        TestStringEnumCase(logger, results, "AmbientOcclusionResolution", "Full", () => MPIOptions.AmbientOcclusionResolution.Full);
-
-        // --- OutdoorAttributionPosition ---
-        TestStringEnumCase(logger, results, "OutdoorAttributionPosition", "TopLeft", () => MPIOptions.OutdoorAttributionPosition.TopLeft);
-        TestStringEnumCase(logger, results, "OutdoorAttributionPosition", "TopRight", () => MPIOptions.OutdoorAttributionPosition.TopRight);
-        TestStringEnumCase(logger, results, "OutdoorAttributionPosition", "BottomLeft", () => MPIOptions.OutdoorAttributionPosition.BottomLeft);
-        TestStringEnumCase(logger, results, "OutdoorAttributionPosition", "BottomRight", () => MPIOptions.OutdoorAttributionPosition.BottomRight);
-    }
-
-    // ──────────────────────────────────────────────
-    // Section 5: Constructor Tests
-    // ──────────────────────────────────────────────
+    //
+    // Exercises generator-emitted constructors of varying shapes: required positional,
+    // optional defaults, primitive + nullable + enum-typed parameters. Each test
+    // round-trips at least one property back to verify field layout.
 
     private void RunConstructorTests(TestLogger logger, TestResults results)
     {
-        // --- MPIHeader (string, string) ---
+        // --- Coordinate(double, double) ---
         try
         {
-            var header = new MPIHeader("Authorization", "Bearer token123");
-            var name = header.Name;
-            var value = header.Value;
-            if (name == "Authorization" && value == "Bearer token123")
-            {
-                logger.Pass($"MPIHeader constructor + property access (name={name}, value={value})");
-                results.Pass("Constructor_MPIHeader");
-            }
-            else
-            {
-                logger.Fail($"MPIHeader: expected (Authorization, Bearer token123), got ({name}, {value})");
-                results.Fail("Constructor_MPIHeader", $"Wrong values: ({name}, {value})");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"MPIHeader constructor: {ex.Message}");
-            results.Fail("Constructor_MPIHeader", ex.Message);
-        }
-
-        // --- MPICoordinates (double, double, double, nint?) ---
-        try
-        {
-            var coords = new MPICoordinates(latitude: 43.6532, longitude: -79.3832, accuracy: 10.0, floorLevel: 2);
-            var lat = coords.Latitude;
-            var lon = coords.Longitude;
-            var acc = coords.Accuracy;
-            var floor = coords.FloorLevel;
+            using var coord = new Coordinate(latitude: 43.6532, longitude: -79.3832);
+            var lat = coord.Latitude;
+            var lon = coord.Longitude;
             if (Math.Abs(lat - 43.6532) < 0.001 && Math.Abs(lon - (-79.3832)) < 0.001)
             {
-                logger.Pass($"MPICoordinates constructor (lat={lat}, lon={lon}, acc={acc}, floor={floor})");
-                results.Pass("Constructor_MPICoordinates");
+                logger.Pass($"Coordinate(lat,lon) round-trip (lat={lat}, lon={lon})");
+                results.Pass("Constructor_Coordinate_2arg");
             }
             else
             {
-                logger.Fail($"MPICoordinates: unexpected values lat={lat}, lon={lon}");
-                results.Fail("Constructor_MPICoordinates", $"Wrong values: lat={lat}, lon={lon}");
+                logger.Fail($"Coordinate(lat,lon): expected (43.6532, -79.3832), got ({lat}, {lon})");
+                results.Fail("Constructor_Coordinate_2arg", $"Wrong values lat={lat}, lon={lon}");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPICoordinates constructor: {ex.Message}");
-            results.Fail("Constructor_MPICoordinates", ex.Message);
+            logger.Fail($"Coordinate(lat,lon) constructor: {ex.Message}");
+            results.Fail("Constructor_Coordinate_2arg", ex.Message);
         }
 
-        // --- MPICoordinates property: Accuracy ---
+        // --- Coordinate(double, double, string?, double, string) — full positional ---
         try
         {
-            var coords = new MPICoordinates(latitude: 0.0, longitude: 0.0, accuracy: 5.5, floorLevel: null);
-            var acc = coords.Accuracy;
-            if (Math.Abs(acc - 5.5) < 0.001)
+            using var coord = new Coordinate(
+                latitude: 43.6532,
+                longitude: -79.3832,
+                floorId: "floor-1",
+                verticalOffset: 1.5,
+                id: "test-id");
+            var floor = coord.FloorId;
+            var offset = coord.VerticalOffset;
+            var id = coord.Id;
+            if (floor == "floor-1" && Math.Abs(offset - 1.5) < 0.001 && id == "test-id")
             {
-                logger.Pass($"MPICoordinates.Accuracy = {acc}");
-                results.Pass("Property_MPICoordinates_Accuracy");
+                logger.Pass($"Coordinate full constructor (floorId={floor}, verticalOffset={offset}, id={id})");
+                results.Pass("Constructor_Coordinate_Full");
             }
             else
             {
-                logger.Fail($"MPICoordinates.Accuracy: expected 5.5, got {acc}");
-                results.Fail("Property_MPICoordinates_Accuracy", $"Expected 5.5, got {acc}");
+                logger.Fail($"Coordinate full ctor: floorId={floor}, verticalOffset={offset}, id={id}");
+                results.Fail("Constructor_Coordinate_Full",
+                    $"Wrong values: floorId={floor}, verticalOffset={offset}, id={id}");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPICoordinates.Accuracy: {ex.Message}");
-            results.Fail("Property_MPICoordinates_Accuracy", ex.Message);
+            logger.Fail($"Coordinate full constructor: {ex.Message}");
+            results.Fail("Constructor_Coordinate_Full", ex.Message);
         }
 
-        // --- MPICoordinates.FloorLevel with null ---
+        // --- Coordinate FloorId null path ---
         try
         {
-            var coords = new MPICoordinates(latitude: 0.0, longitude: 0.0, accuracy: 1.0, floorLevel: null);
-            var floor = coords.FloorLevel;
-            // Null floor level should be accessible
-            logger.Pass($"MPICoordinates.FloorLevel (null) = {(floor.HasValue ? floor.Value.ToString() : "null")}");
-            results.Pass("Property_MPICoordinates_FloorLevel_Null");
+            using var coord = new Coordinate(latitude: 0.0, longitude: 0.0);
+            var floor = coord.FloorId;
+            // No floorId argument → property should be reachable; value may be null or empty.
+            logger.Pass($"Coordinate.FloorId (no-arg ctor) = {(floor == null ? "null" : $"\"{floor}\"")}");
+            results.Pass("Property_Coordinate_FloorId_Null");
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPICoordinates.FloorLevel (null): {ex.Message}");
-            results.Fail("Property_MPICoordinates_FloorLevel_Null", ex.Message);
+            logger.Fail($"Coordinate.FloorId no-arg: {ex.Message}");
+            results.Fail("Property_Coordinate_FloorId_Null", ex.Message);
         }
 
-        // --- MPIPosition with defaults ---
+        // --- BlueDotErrorPayload(nint code, string message) ---
         try
         {
-            var pos = new MPIPosition();
-            var type = pos.Type;
-            logger.Pass($"MPIPosition default constructor (type={type})");
-            results.Pass("Constructor_MPIPosition_Default");
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"MPIPosition default constructor: {ex.Message}");
-            results.Fail("Constructor_MPIPosition_Default", ex.Message);
-        }
-
-        // --- MPIPosition with coords ---
-        try
-        {
-            var coords = new MPICoordinates(latitude: 43.6532, longitude: -79.3832, accuracy: 10.0, floorLevel: 1);
-            var pos = new MPIPosition(timestamp: 1000.0, coords: coords, type: "gps", annotation: "test", bearing: 90.0);
-            var ts = pos.Timestamp;
-            var t = pos.Type;
-            var ann = pos.Annotation;
-            var bear = pos.Bearing;
-            bool valid = t == "gps" && ann == "test";
-            if (valid)
+            using var payload = new BlueDotErrorPayload(code: 404, message: "not found");
+            var code = payload.Code;
+            var msg = payload.Message;
+            if (code == 404 && msg == "not found")
             {
-                logger.Pass($"MPIPosition full constructor (ts={ts}, type={t}, ann={ann}, bearing={bear})");
-                results.Pass("Constructor_MPIPosition_Full");
+                logger.Pass($"BlueDotErrorPayload round-trip (code={code}, message=\"{msg}\")");
+                results.Pass("Constructor_BlueDotErrorPayload");
             }
             else
             {
-                logger.Fail($"MPIPosition full constructor: type={t} (expected gps), ann={ann} (expected test)");
-                results.Fail("Constructor_MPIPosition_Full", $"Wrong values: type={t}, ann={ann}");
+                logger.Fail($"BlueDotErrorPayload: expected (404, \"not found\"), got ({code}, \"{msg}\")");
+                results.Fail("Constructor_BlueDotErrorPayload", $"Wrong values code={code}, msg={msg}");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPIPosition full constructor: {ex.Message}");
-            results.Fail("Constructor_MPIPosition_Full", ex.Message);
+            logger.Fail($"BlueDotErrorPayload constructor: {ex.Message}");
+            results.Fail("Constructor_BlueDotErrorPayload", ex.Message);
         }
 
-        // --- MPIPosition.Description ---
+        // --- BlueDotUpdateOptions(bool? animate, bool? silent) ---
         try
         {
-            var pos = new MPIPosition(type: "test");
-            var desc = pos.Description;
-            if (desc != null)
+            using var opts = new BlueDotUpdateOptions(animate: true, silent: false);
+            var animate = opts.Animate;
+            var silent = opts.Silent;
+            if (animate == true && silent == false)
             {
-                logger.Pass($"MPIPosition.Description = {desc.Substring(0, Math.Min(50, desc.Length))}...");
-                results.Pass("Property_MPIPosition_Description");
+                logger.Pass($"BlueDotUpdateOptions round-trip (animate={animate}, silent={silent})");
+                results.Pass("Constructor_BlueDotUpdateOptions");
             }
             else
             {
-                logger.Fail("MPIPosition.Description is null");
-                results.Fail("Property_MPIPosition_Description", "Description is null");
+                logger.Fail($"BlueDotUpdateOptions: expected (true, false), got ({animate}, {silent})");
+                results.Fail("Constructor_BlueDotUpdateOptions", $"Wrong values animate={animate}, silent={silent}");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPIPosition.Description: {ex.Message}");
-            results.Fail("Property_MPIPosition_Description", ex.Message);
+            logger.Fail($"BlueDotUpdateOptions constructor: {ex.Message}");
+            results.Fail("Constructor_BlueDotUpdateOptions", ex.Message);
         }
 
-        // --- MPICoordinates equality ---
+        // --- BlueDotUpdateOptions() with all defaults (null) ---
         try
         {
-            var a = new MPICoordinates(latitude: 43.6532, longitude: -79.3832, accuracy: 10.0, floorLevel: 1);
-            var b = new MPICoordinates(latitude: 43.6532, longitude: -79.3832, accuracy: 10.0, floorLevel: 1);
+            using var opts = new BlueDotUpdateOptions();
+            // Both properties should be null when defaults are used.
+            var animate = opts.Animate;
+            var silent = opts.Silent;
+            if (animate == null && silent == null)
+            {
+                logger.Pass("BlueDotUpdateOptions default constructor (animate=null, silent=null)");
+                results.Pass("Constructor_BlueDotUpdateOptions_Defaults");
+            }
+            else
+            {
+                logger.Fail($"BlueDotUpdateOptions defaults: expected (null, null), got ({animate}, {silent})");
+                results.Fail("Constructor_BlueDotUpdateOptions_Defaults",
+                    $"Wrong defaults animate={animate}, silent={silent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"BlueDotUpdateOptions defaults: {ex.Message}");
+            results.Fail("Constructor_BlueDotUpdateOptions_Defaults", ex.Message);
+        }
+
+        // --- CameraInteractionsSetOptions(bool?, bool?, bool?) ---
+        try
+        {
+            using var opts = new CameraInteractionsSetOptions(pan: true, zoom: false, bearingAndPitch: null);
+            var pan = opts.Pan;
+            var zoom = opts.Zoom;
+            var bp = opts.BearingAndPitch;
+            if (pan == true && zoom == false && bp == null)
+            {
+                logger.Pass($"CameraInteractionsSetOptions round-trip (pan={pan}, zoom={zoom}, bearingAndPitch={bp})");
+                results.Pass("Constructor_CameraInteractionsSetOptions");
+            }
+            else
+            {
+                logger.Fail($"CameraInteractionsSetOptions: expected (true, false, null), got ({pan}, {zoom}, {bp})");
+                results.Fail("Constructor_CameraInteractionsSetOptions",
+                    $"Wrong values pan={pan}, zoom={zoom}, bp={bp}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"CameraInteractionsSetOptions constructor: {ex.Message}");
+            results.Fail("Constructor_CameraInteractionsSetOptions", ex.Message);
+        }
+
+        // --- BlueDotDeviceOrientationUpdatePayload(double?) ---
+        try
+        {
+            using var payload = new BlueDotDeviceOrientationUpdatePayload(heading: 42.5);
+            var heading = payload.Heading;
+            if (heading.HasValue && Math.Abs(heading.Value - 42.5) < 0.001)
+            {
+                logger.Pass($"BlueDotDeviceOrientationUpdatePayload.Heading = {heading}");
+                results.Pass("Constructor_BlueDotDeviceOrientationUpdatePayload");
+            }
+            else
+            {
+                logger.Fail($"BlueDotDeviceOrientationUpdatePayload.Heading: expected 42.5, got {heading}");
+                results.Fail("Constructor_BlueDotDeviceOrientationUpdatePayload",
+                    $"Wrong heading {heading}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"BlueDotDeviceOrientationUpdatePayload: {ex.Message}");
+            results.Fail("Constructor_BlueDotDeviceOrientationUpdatePayload", ex.Message);
+        }
+
+        // --- AntialiasingOptions(bool?, QualityType?) — non-null nested-enum marshaling ---
+        // Passing a non-null nested string-enum singleton and reading it back through
+        // the Quality getter exercises the full Optional<nested-enum-class> round-trip,
+        // not just the constructor call path.
+        try
+        {
+            using var opts = new AntialiasingOptions(
+                enabled: true,
+                quality: AntialiasingOptions.QualityType.High);
+            var readBack = opts.Quality;
+            var readBackRaw = readBack?.RawValue;
+            var expectedRaw = AntialiasingOptions.QualityType.High.RawValue;
+            if (readBack is not null && readBackRaw == expectedRaw)
+            {
+                logger.Pass($"AntialiasingOptions.Quality round-trip = {readBackRaw}");
+                results.Pass("Constructor_AntialiasingOptions");
+            }
+            else
+            {
+                logger.Fail(
+                    $"AntialiasingOptions.Quality: expected {expectedRaw}, got {readBackRaw ?? "<null>"}");
+                results.Fail("Constructor_AntialiasingOptions",
+                    $"Quality round-trip mismatch (expected {expectedRaw}, got {readBackRaw ?? "<null>"})");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"AntialiasingOptions constructor: {ex.Message}");
+            results.Fail("Constructor_AntialiasingOptions", ex.Message);
+        }
+
+        // --- AnimationOptions(nint? duration, EasingFunction? easing) ---
+        try
+        {
+            using var opts = new AnimationOptions(duration: (nint)250, easing: EasingFunction.EaseInOut);
+            logger.Pass("AnimationOptions constructor with duration + easing");
+            results.Pass("Constructor_AnimationOptions");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"AnimationOptions constructor: {ex.Message}");
+            results.Fail("Constructor_AnimationOptions", ex.Message);
+        }
+
+        // --- Coordinate equality (IEquatable<Coordinate>) ---
+        try
+        {
+            using var a = new Coordinate(latitude: 43.6532, longitude: -79.3832, floorId: "f-1", verticalOffset: 0.0, id: "id-1");
+            using var b = new Coordinate(latitude: 43.6532, longitude: -79.3832, floorId: "f-1", verticalOffset: 0.0, id: "id-1");
             var eq = a.Equals(b);
             if (eq)
             {
-                logger.Pass($"MPICoordinates.Equals = {eq}");
-                results.Pass("Method_MPICoordinates_Equals");
+                logger.Pass($"Coordinate.Equals matches identical inputs ({eq})");
+                results.Pass("Method_Coordinate_Equals");
             }
             else
             {
-                // BUG: Equals returns false for identical constructor inputs
-                logger.Fail($"MPICoordinates.Equals: expected true for identical values, got false");
-                results.Fail("Method_MPICoordinates_Equals", "Expected true for identical values, got false");
+                logger.Fail("Coordinate.Equals returned false for identical inputs");
+                results.Fail("Method_Coordinate_Equals", "Equals returned false for identical inputs");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"MPICoordinates.Equals: {ex.Message}");
-            results.Fail("Method_MPICoordinates_Equals", ex.Message);
-        }
-
-        // --- MPIMapView constructor ---
-        try
-        {
-            var frame = new CoreGraphics.CGRect(0, 0, 375, 667);
-            var mapView = new MPIMapView(frame);
-            logger.Pass("MPIMapView constructor with CGRect");
-            results.Pass("Constructor_MPIMapView");
-        }
-        catch (Exception ex)
-        {
-            // BUG: MPIMapView constructor may crash if WebKit isn't available in test context
-            logger.Fail($"MPIMapView constructor: {ex.Message}");
-            results.Fail("Constructor_MPIMapView", ex.Message);
+            logger.Fail($"Coordinate.Equals: {ex.Message}");
+            results.Fail("Method_Coordinate_Equals", ex.Message);
         }
     }
 
     // ──────────────────────────────────────────────
-    // Section 6: String-Enum RawValue & FromRawValue
+    // Section 5: String-Enum RawValue & FromRawValue
     // ──────────────────────────────────────────────
+    //
+    // Singleton cases expose `.RawValue` (Swift-side String) and `static FromRawValue(string)`
+    // for round-trip parsing. Round-tripping a singleton through FromRawValue exercises
+    // both the failable-init wrapper and the cdecl/Optional-payload path.
 
     private void RunRawValueTests(TestLogger logger, TestResults results)
     {
-        // --- MPIError.RawValue ---
-        TestRawValue(logger, results, "MPIError", "Decode", () => MPIError.Decode.RawValue);
-        TestRawValue(logger, results, "MPIError", "Retrieve", () => MPIError.Retrieve.RawValue);
-        TestRawValue(logger, results, "MPIError", "ShowVenue", () => MPIError.ShowVenue.RawValue);
-        TestRawValue(logger, results, "MPIError", "LoadVenue", () => MPIError.LoadVenue.RawValue);
-        TestRawValue(logger, results, "MPIError", "PathNotFound", () => MPIError.PathNotFound.RawValue);
+        // --- RawValue access ---
+        TestRawValue(logger, results, "BearingType", "Straight", () => BearingType.Straight.RawValue);
+        TestRawValue(logger, results, "BearingType", "Right", () => BearingType.Right.RawValue);
+        TestRawValue(logger, results, "BearingType", "Left", () => BearingType.Left.RawValue);
+        TestRawValue(logger, results, "ActionType", "Departure", () => ActionType.Departure.RawValue);
+        TestRawValue(logger, results, "ActionType", "Arrival", () => ActionType.Arrival.RawValue);
+        TestRawValue(logger, results, "ConnectionType", "Stairs", () => ConnectionType.Stairs.RawValue);
+        TestRawValue(logger, results, "ConnectionType", "Elevator", () => ConnectionType.Elevator.RawValue);
+        TestRawValue(logger, results, "EasingFunction", "Linear", () => EasingFunction.Linear.RawValue);
+        TestRawValue(logger, results, "EasingFunction", "EaseInOut", () => EasingFunction.EaseInOut.RawValue);
+        TestRawValue(logger, results, "BlueDotStatus", "Active", () => BlueDotStatus.Active.RawValue);
+        TestRawValue(logger, results, "CollisionRankingTier", "Medium", () => CollisionRankingTier.Medium.RawValue);
+        // Nested-enum RawValue access:
+        TestRawValue(logger, results, "AntialiasingOptions.QualityType", "Medium",
+            () => AntialiasingOptions.QualityType.Medium.RawValue);
+        TestRawValue(logger, results, "AntialiasingOptions.QualityType", "Ultra",
+            () => AntialiasingOptions.QualityType.Ultra.RawValue);
 
-        // --- MPIVortexType.RawValue ---
-        TestRawValue(logger, results, "MPIVortexType", "Stairs", () => MPIVortexType.Stairs.RawValue);
-        TestRawValue(logger, results, "MPIVortexType", "Elevator", () => MPIVortexType.Elevator.RawValue);
-        TestRawValue(logger, results, "MPIVortexType", "Escalator", () => MPIVortexType.Escalator.RawValue);
-        TestRawValue(logger, results, "MPIVortexType", "Door", () => MPIVortexType.Door.RawValue);
-
-        // --- MPIActionType.RawValue ---
-        TestRawValue(logger, results, "MPIActionType", "Departure", () => MPIActionType.Departure.RawValue);
-        TestRawValue(logger, results, "MPIActionType", "Turn", () => MPIActionType.Turn.RawValue);
-        TestRawValue(logger, results, "MPIActionType", "Arrival", () => MPIActionType.Arrival.RawValue);
-
-        // --- MPIBearingType.RawValue ---
-        TestRawValue(logger, results, "MPIBearingType", "Straight", () => MPIBearingType.Straight.RawValue);
-        TestRawValue(logger, results, "MPIBearingType", "Right", () => MPIBearingType.Right.RawValue);
-        TestRawValue(logger, results, "MPIBearingType", "Left", () => MPIBearingType.Left.RawValue);
-
-        // --- MPIState.RawValue ---
-        TestRawValue(logger, results, "MPIState", "Follow", () => MPIState.Follow.RawValue);
-        TestRawValue(logger, results, "MPIState", "Explore", () => MPIState.Explore.RawValue);
-
-        // --- MPIOptions.CameraDirection.RawValue ---
-        TestRawValue(logger, results, "CameraDirection", "Up", () => MPIOptions.CameraDirection.Up.RawValue);
-        TestRawValue(logger, results, "CameraDirection", "Down", () => MPIOptions.CameraDirection.Down.RawValue);
-
-        // --- MPIOptions.EasingMode.RawValue ---
-        TestRawValue(logger, results, "EasingMode", "Linear", () => MPIOptions.EasingMode.Linear.RawValue);
-        TestRawValue(logger, results, "EasingMode", "EaseInOut", () => MPIOptions.EasingMode.EaseInOut.RawValue);
-
-        // --- FromRawValue round-trip tests ---
-        TestFromRawValueRoundTrip(logger, results, "MPIError", "decode",
-            MPIError.Decode.RawValue, () => MPIError.FromRawValue(MPIError.Decode.RawValue)?.RawValue);
-        TestFromRawValueRoundTrip(logger, results, "MPIVortexType", "stairs",
-            MPIVortexType.Stairs.RawValue, () => MPIVortexType.FromRawValue(MPIVortexType.Stairs.RawValue)?.RawValue);
-        TestFromRawValueRoundTrip(logger, results, "MPIActionType", "departure",
-            MPIActionType.Departure.RawValue, () => MPIActionType.FromRawValue(MPIActionType.Departure.RawValue)?.RawValue);
-        TestFromRawValueRoundTrip(logger, results, "MPIBearingType", "straight",
-            MPIBearingType.Straight.RawValue, () => MPIBearingType.FromRawValue(MPIBearingType.Straight.RawValue)?.RawValue);
-        TestFromRawValueRoundTrip(logger, results, "MPIState", "follow",
-            MPIState.Follow.RawValue, () => MPIState.FromRawValue(MPIState.Follow.RawValue)?.RawValue);
+        // --- FromRawValue round-trip ---
+        TestFromRawValueRoundTrip(logger, results, "BearingType", "straight",
+            BearingType.Straight.RawValue, () => BearingType.FromRawValue(BearingType.Straight.RawValue)?.RawValue);
+        TestFromRawValueRoundTrip(logger, results, "ActionType", "departure",
+            ActionType.Departure.RawValue, () => ActionType.FromRawValue(ActionType.Departure.RawValue)?.RawValue);
+        TestFromRawValueRoundTrip(logger, results, "ConnectionType", "stairs",
+            ConnectionType.Stairs.RawValue, () => ConnectionType.FromRawValue(ConnectionType.Stairs.RawValue)?.RawValue);
+        TestFromRawValueRoundTrip(logger, results, "EasingFunction", "linear",
+            EasingFunction.Linear.RawValue, () => EasingFunction.FromRawValue(EasingFunction.Linear.RawValue)?.RawValue);
+        TestFromRawValueRoundTrip(logger, results, "BlueDotStatus", "active",
+            BlueDotStatus.Active.RawValue, () => BlueDotStatus.FromRawValue(BlueDotStatus.Active.RawValue)?.RawValue);
+        // Nested-enum FromRawValue round-trip:
+        TestFromRawValueRoundTrip(logger, results, "AntialiasingOptions.QualityType", "medium",
+            AntialiasingOptions.QualityType.Medium.RawValue,
+            () => AntialiasingOptions.QualityType.FromRawValue(
+                AntialiasingOptions.QualityType.Medium.RawValue)?.RawValue);
 
         // --- FromRawValue with invalid input ---
-        TestFromRawValueInvalid(logger, results, "MPIError",
-            () => MPIError.FromRawValue("invalid_raw_value_xyz"));
-        TestFromRawValueInvalid(logger, results, "MPIVortexType",
-            () => MPIVortexType.FromRawValue("not_a_vortex_type"));
-        TestFromRawValueInvalid(logger, results, "MPIActionType",
-            () => MPIActionType.FromRawValue("not_an_action_type"));
+        TestFromRawValueInvalid(logger, results, "BearingType",
+            () => BearingType.FromRawValue("not_a_bearing_type"));
+        TestFromRawValueInvalid(logger, results, "ActionType",
+            () => ActionType.FromRawValue("not_an_action_type"));
+        TestFromRawValueInvalid(logger, results, "ConnectionType",
+            () => ConnectionType.FromRawValue("not_a_connection_type"));
     }
 
     private void TestRawValue(TestLogger logger, TestResults results,
@@ -840,191 +808,60 @@ public class MainViewController : UIViewController
             }
             else
             {
-                // Ambiguous: Swift may return a default case for unknown raw values
-                logger.Skip($"{enumName}.FromRawValue(invalid): expected null but got non-null (Swift behavior)");
-                results.Skip($"FromRawValue_{enumName}_Invalid", "Non-null for invalid input — Swift behavior ambiguous");
+                // Some Swift enums fall back to a default case for unknown raw values.
+                // Either behavior is acceptable here as long as it doesn't crash.
+                logger.Skip($"{enumName}.FromRawValue(invalid): non-null result (Swift may return default)");
+                results.Skip($"FromRawValue_{enumName}_Invalid", "Non-null result — Swift may use default case");
             }
         }
         catch (Exception ex)
         {
-            // BUG: FromRawValue with invalid input may crash instead of returning null
             logger.Fail($"{enumName}.FromRawValue(invalid): {ex.Message}");
             results.Fail($"FromRawValue_{enumName}_Invalid", ex.Message);
         }
     }
 
     // ──────────────────────────────────────────────
-    // Section 7: Protocol Interface Tests
+    // Section 6: Protocol & Interface Conformance
     // ──────────────────────────────────────────────
+    //
+    // Swift protocols are projected as C# interfaces (prefixed with `I`). Any class
+    // that conforms in Swift must satisfy `IsAssignableFrom` in C#.
 
     private void RunProtocolTests(TestLogger logger, TestResults results)
     {
-        // Test that IMPINavigatable interface is correctly implemented by types
-        // MPIPolygon, MPINode, MPIVortex, MPILocation all implement IMPINavigatable
+        // --- IAnchorable conformers ---
+        TestInterfaceImpl(logger, results, "Coordinate", typeof(IAnchorable), typeof(Coordinate));
+        TestInterfaceImpl(logger, results, "Annotation", typeof(IAnchorable), typeof(Annotation));
+        TestInterfaceImpl(logger, results, "Area", typeof(IAnchorable), typeof(Area));
+        TestInterfaceImpl(logger, results, "Door", typeof(IAnchorable), typeof(Door));
+        TestInterfaceImpl(logger, results, "Facade", typeof(IAnchorable), typeof(Facade));
 
-        // We can't construct these types directly (no public constructors),
-        // but we can verify the interface type exists and is assignable
-        try
-        {
-            var polygonType = typeof(MPIPolygon);
-            var isNavigatable = typeof(IMPINavigatable).IsAssignableFrom(polygonType);
-            if (isNavigatable)
-            {
-                logger.Pass("MPIPolygon implements IMPINavigatable");
-                results.Pass("Protocol_MPIPolygon_IMPINavigatable");
-            }
-            else
-            {
-                logger.Fail("MPIPolygon does not implement IMPINavigatable");
-                results.Fail("Protocol_MPIPolygon_IMPINavigatable", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPIPolygon: {ex.Message}");
-            results.Fail("Protocol_MPIPolygon_IMPINavigatable", ex.Message);
-        }
+        // --- IGeoJSONData conformers ---
+        TestInterfaceImpl(logger, results, "Annotation", typeof(IGeoJSONData), typeof(Annotation));
+        TestInterfaceImpl(logger, results, "Area", typeof(IGeoJSONData), typeof(Area));
+        TestInterfaceImpl(logger, results, "Door", typeof(IGeoJSONData), typeof(Door));
+        TestInterfaceImpl(logger, results, "Floor", typeof(IGeoJSONData), typeof(Floor));
+        TestInterfaceImpl(logger, results, "Connection", typeof(IGeoJSONData), typeof(Connection));
 
-        try
-        {
-            var nodeType = typeof(MPINode);
-            var isNavigatable = typeof(IMPINavigatable).IsAssignableFrom(nodeType);
-            if (isNavigatable)
-            {
-                logger.Pass("MPINode implements IMPINavigatable");
-                results.Pass("Protocol_MPINode_IMPINavigatable");
-            }
-            else
-            {
-                logger.Fail("MPINode does not implement IMPINavigatable");
-                results.Fail("Protocol_MPINode_IMPINavigatable", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPINode: {ex.Message}");
-            results.Fail("Protocol_MPINode_IMPINavigatable", ex.Message);
-        }
+        // --- IQueryOrigin conformers ---
+        TestInterfaceImpl(logger, results, "Coordinate", typeof(IQueryOrigin), typeof(Coordinate));
+        TestInterfaceImpl(logger, results, "Annotation", typeof(IQueryOrigin), typeof(Annotation));
+        TestInterfaceImpl(logger, results, "Door", typeof(IQueryOrigin), typeof(Door));
 
-        try
-        {
-            var vortexType = typeof(MPIVortex);
-            var isNavigatable = typeof(IMPINavigatable).IsAssignableFrom(vortexType);
-            if (isNavigatable)
-            {
-                logger.Pass("MPIVortex implements IMPINavigatable");
-                results.Pass("Protocol_MPIVortex_IMPINavigatable");
-            }
-            else
-            {
-                logger.Fail("MPIVortex does not implement IMPINavigatable");
-                results.Fail("Protocol_MPIVortex_IMPINavigatable", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPIVortex: {ex.Message}");
-            results.Fail("Protocol_MPIVortex_IMPINavigatable", ex.Message);
-        }
-
-        try
-        {
-            var locationType = typeof(MPILocation);
-            var isNavigatable = typeof(IMPINavigatable).IsAssignableFrom(locationType);
-            if (isNavigatable)
-            {
-                logger.Pass("MPILocation implements IMPINavigatable");
-                results.Pass("Protocol_MPILocation_IMPINavigatable");
-            }
-            else
-            {
-                logger.Fail("MPILocation does not implement IMPINavigatable");
-                results.Fail("Protocol_MPILocation_IMPINavigatable", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPILocation: {ex.Message}");
-            results.Fail("Protocol_MPILocation_IMPINavigatable", ex.Message);
-        }
-
-        // Test IMPISearchResultCommon implementations
-        try
-        {
-            var isImpl = typeof(IMPISearchResultCommon).IsAssignableFrom(typeof(MPISearchResultLocation));
-            if (isImpl)
-            {
-                logger.Pass("MPISearchResultLocation implements IMPISearchResultCommon");
-                results.Pass("Protocol_MPISearchResultLocation_IMPISearchResultCommon");
-            }
-            else
-            {
-                logger.Fail("MPISearchResultLocation does not implement IMPISearchResultCommon");
-                results.Fail("Protocol_MPISearchResultLocation_IMPISearchResultCommon", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPISearchResultLocation: {ex.Message}");
-            results.Fail("Protocol_MPISearchResultLocation_IMPISearchResultCommon", ex.Message);
-        }
-
-        try
-        {
-            var isImpl = typeof(IMPISearchResultCommon).IsAssignableFrom(typeof(MPISearchResultCategory));
-            if (isImpl)
-            {
-                logger.Pass("MPISearchResultCategory implements IMPISearchResultCommon");
-                results.Pass("Protocol_MPISearchResultCategory_IMPISearchResultCommon");
-            }
-            else
-            {
-                logger.Fail("MPISearchResultCategory does not implement IMPISearchResultCommon");
-                results.Fail("Protocol_MPISearchResultCategory_IMPISearchResultCommon", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPISearchResultCategory: {ex.Message}");
-            results.Fail("Protocol_MPISearchResultCategory_IMPISearchResultCommon", ex.Message);
-        }
-
-        try
-        {
-            var isImpl = typeof(IMPISearchResultCommon).IsAssignableFrom(typeof(MPISearchResultCustom));
-            if (isImpl)
-            {
-                logger.Pass("MPISearchResultCustom implements IMPISearchResultCommon");
-                results.Pass("Protocol_MPISearchResultCustom_IMPISearchResultCommon");
-            }
-            else
-            {
-                logger.Fail("MPISearchResultCustom does not implement IMPISearchResultCommon");
-                results.Fail("Protocol_MPISearchResultCustom_IMPISearchResultCommon", "Interface not implemented");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPISearchResultCustom: {ex.Message}");
-            results.Fail("Protocol_MPISearchResultCustom_IMPISearchResultCommon", ex.Message);
-        }
-
-        // Test ISwiftObject implementations
+        // --- ISwiftObject + IDisposable on top-level classes ---
         var swiftObjectTypes = new (string Name, Type Type)[]
         {
-            ("MPIData", typeof(MPIData)),
-            ("MPIMap", typeof(MPIMap)),
-            ("MPIMapGroup", typeof(MPIMapGroup)),
-            ("MPISearchManager", typeof(MPISearchManager)),
-            ("MPIPayload", typeof(MPIPayload)),
-            ("MPIFloatingLabelManager", typeof(MPIFloatingLabelManager)),
-            ("MPIBlueDotManager", typeof(MPIBlueDotManager)),
-            ("MPIMarkerManager", typeof(MPIMarkerManager)),
-            ("MPIFlatLabelManager", typeof(MPIFlatLabelManager)),
-            ("MPICameraTransform", typeof(MPICameraTransform)),
-            ("MPIJourneyManager", typeof(MPIJourneyManager)),
-            ("MPIPathManager", typeof(MPIPathManager)),
-            ("MPICameraManager", typeof(MPICameraManager)),
+            ("MapData", typeof(MapData)),
+            ("MapView", typeof(MapView)),
+            ("Query", typeof(Query)),
+            ("Search", typeof(Search)),
+            ("Analytics", typeof(Analytics)),
+            ("Annotation", typeof(Annotation)),
+            ("Coordinate", typeof(Coordinate)),
+            ("Floor", typeof(Floor)),
+            ("Door", typeof(Door)),
+            ("Connection", typeof(Connection)),
         };
 
         foreach (var (name, type) in swiftObjectTypes)
@@ -1051,31 +888,25 @@ public class MainViewController : UIViewController
             }
         }
 
-        // Test ISwiftStruct implementations
+        // --- ISwiftStruct on value-style classes ---
         var swiftStructTypes = new (string Name, Type Type)[]
         {
-            ("MPIPolygon", typeof(MPIPolygon)),
-            ("MPINode", typeof(MPINode)),
-            ("MPIVortex", typeof(MPIVortex)),
-            ("MPICategory", typeof(MPICategory)),
-            ("MPIPath", typeof(MPIPath)),
-            ("MPIDirections", typeof(MPIDirections)),
-            ("MPIInstruction", typeof(MPIInstruction)),
-            ("MPIAction", typeof(MPIAction)),
-            ("MPILanguage", typeof(MPILanguage)),
-            ("MPIBlueDotPositionUpdate", typeof(MPIBlueDotPositionUpdate)),
-            ("MPIBlueDotStateChange", typeof(MPIBlueDotStateChange)),
-            ("MPIVenue", typeof(MPIVenue)),
-            ("MPISocial", typeof(MPISocial)),
-            ("MPIPhone", typeof(MPIPhone)),
-            ("MPIOpeningHours", typeof(MPIOpeningHours)),
-            ("MPILocation", typeof(MPILocation)),
-            ("MPIColor", typeof(MPIColor)),
-            ("MPIPosition", typeof(MPIPosition)),
-            ("MPICoordinates", typeof(MPICoordinates)),
-            ("MPIHeader", typeof(MPIHeader)),
-            ("MPIImage", typeof(MPIImage)),
-            ("MPIPicture", typeof(MPIPicture)),
+            ("BinaryBundle", typeof(BinaryBundle)),
+            ("Directions", typeof(Directions)),
+            ("DirectionInstruction", typeof(DirectionInstruction)),
+            ("CameraTransform", typeof(CameraTransform)),
+            ("CameraTarget", typeof(CameraTarget)),
+            ("CameraAnimationOptions", typeof(CameraAnimationOptions)),
+            ("AnimationOptions", typeof(AnimationOptions)),
+            ("AntialiasingOptions", typeof(AntialiasingOptions)),
+            ("BlueDotPositionUpdate", typeof(BlueDotPositionUpdate)),
+            ("BlueDotPositionUpdatePayload", typeof(BlueDotPositionUpdatePayload)),
+            ("BlueDotErrorPayload", typeof(BlueDotErrorPayload)),
+            ("BlueDotUpdateOptions", typeof(BlueDotUpdateOptions)),
+            ("BearingType", typeof(BearingType)),
+            ("ActionType", typeof(ActionType)),
+            ("ConnectionType", typeof(ConnectionType)),
+            ("EasingFunction", typeof(EasingFunction)),
         };
 
         foreach (var (name, type) in swiftStructTypes)
@@ -1101,127 +932,65 @@ public class MainViewController : UIViewController
             }
         }
 
-        // Test IEquatable implementations
-        try
-        {
-            var isEq = typeof(IEquatable<MPIPosition>).IsAssignableFrom(typeof(MPIPosition));
-            if (isEq)
-            {
-                logger.Pass("MPIPosition implements IEquatable<MPIPosition>");
-                results.Pass("Protocol_MPIPosition_IEquatable");
-            }
-            else
-            {
-                logger.Fail("MPIPosition does not implement IEquatable<MPIPosition>");
-                results.Fail("Protocol_MPIPosition_IEquatable", "Missing IEquatable");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPIPosition IEquatable: {ex.Message}");
-            results.Fail("Protocol_MPIPosition_IEquatable", ex.Message);
-        }
+        // --- IEquatable<T> on Equatable conformers ---
+        TestInterfaceImpl(logger, results, "Coordinate", typeof(IEquatable<Coordinate>), typeof(Coordinate));
+        TestInterfaceImpl(logger, results, "BlueDotErrorPayload", typeof(IEquatable<BlueDotErrorPayload>), typeof(BlueDotErrorPayload));
+        TestInterfaceImpl(logger, results, "BlueDotUpdateOptions", typeof(IEquatable<BlueDotUpdateOptions>), typeof(BlueDotUpdateOptions));
+        TestInterfaceImpl(logger, results, "BearingType", typeof(IEquatable<BearingType>), typeof(BearingType));
+        TestInterfaceImpl(logger, results, "AntialiasingOptions", typeof(IEquatable<AntialiasingOptions>), typeof(AntialiasingOptions));
+    }
 
+    private void TestInterfaceImpl(TestLogger logger, TestResults results,
+        string typeName, Type iface, Type implType)
+    {
         try
         {
-            var isEq = typeof(IEquatable<MPICoordinates>).IsAssignableFrom(typeof(MPICoordinates));
-            if (isEq)
+            var ok = iface.IsAssignableFrom(implType);
+            if (ok)
             {
-                logger.Pass("MPICoordinates implements IEquatable<MPICoordinates>");
-                results.Pass("Protocol_MPICoordinates_IEquatable");
+                logger.Pass($"{typeName} implements {iface.Name}");
+                results.Pass($"Protocol_{typeName}_{iface.Name}");
             }
             else
             {
-                logger.Fail("MPICoordinates does not implement IEquatable<MPICoordinates>");
-                results.Fail("Protocol_MPICoordinates_IEquatable", "Missing IEquatable");
+                logger.Fail($"{typeName} does not implement {iface.Name}");
+                results.Fail($"Protocol_{typeName}_{iface.Name}", "Interface not implemented");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"Protocol check MPICoordinates IEquatable: {ex.Message}");
-            results.Fail("Protocol_MPICoordinates_IEquatable", ex.Message);
-        }
-
-        // Test MPIMapView inherits from WKWebView
-        try
-        {
-            var isWebView = typeof(WebKit.WKWebView).IsAssignableFrom(typeof(MPIMapView));
-            if (isWebView)
-            {
-                logger.Pass("MPIMapView inherits from WKWebView");
-                results.Pass("Protocol_MPIMapView_WKWebView");
-            }
-            else
-            {
-                logger.Fail("MPIMapView does not inherit from WKWebView");
-                results.Fail("Protocol_MPIMapView_WKWebView", "Not a WKWebView subclass");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Protocol check MPIMapView WKWebView: {ex.Message}");
-            results.Fail("Protocol_MPIMapView_WKWebView", ex.Message);
+            logger.Fail($"Protocol check {typeName} / {iface.Name}: {ex.Message}");
+            results.Fail($"Protocol_{typeName}_{iface.Name}", ex.Message);
         }
     }
 
     // ──────────────────────────────────────────────
-    // Section 8: MPIOptions Nested Struct Metadata
+    // Section 7: WKWebView Inheritance
     // ──────────────────────────────────────────────
+    //
+    // `MapViewController` is a Swift class declared `class MapViewController: WKWebView`,
+    // so the generated C# class must inherit from `WebKit.WKWebView`.
 
-    private void RunOptionsStructMetadataTests(TestLogger logger, TestResults results)
+    private void RunInheritanceTests(TestLogger logger, TestResults results)
     {
-        var optionsMetadataTests = new (string Name, Func<TypeMetadata> GetMetadata)[]
+        try
         {
-            ("CameraTargets", () => SwiftObjectHelper<MPIOptions.CameraTargets>.GetTypeMetadata()),
-            ("CameraConfiguration", () => SwiftObjectHelper<MPIOptions.CameraConfiguration>.GetTypeMetadata()),
-            ("CameraTransformNode", () => SwiftObjectHelper<MPIOptions.CameraTransformNode>.GetTypeMetadata()),
-            ("CameraAnimation", () => SwiftObjectHelper<MPIOptions.CameraAnimation>.GetTypeMetadata()),
-            ("CameraSetSafeAreaInsets", () => SwiftObjectHelper<MPIOptions.CameraSetSafeAreaInsets>.GetTypeMetadata()),
-            ("CameraInteractionsSetOptions", () => SwiftObjectHelper<MPIOptions.CameraInteractionsSetOptions>.GetTypeMetadata()),
-            ("FocusOnOptions", () => SwiftObjectHelper<MPIOptions.FocusOnOptions>.GetTypeMetadata()),
-            ("Init", () => SwiftObjectHelper<MPIOptions.Init>.GetTypeMetadata()),
-            ("ShowVenue", () => SwiftObjectHelper<MPIOptions.ShowVenue>.GetTypeMetadata()),
-            ("BlueDot", () => SwiftObjectHelper<MPIOptions.BlueDot>.GetTypeMetadata()),
-            ("CameraPadding", () => SwiftObjectHelper<MPIOptions.CameraPadding>.GetTypeMetadata()),
-            ("Path", () => SwiftObjectHelper<MPIOptions.Path>.GetTypeMetadata()),
-            ("GetPolygonsAtCoordinateOptions", () => SwiftObjectHelper<MPIOptions.GetPolygonsAtCoordinateOptions>.GetTypeMetadata()),
-            ("ConnectionPath", () => SwiftObjectHelper<MPIOptions.ConnectionPath>.GetTypeMetadata()),
-            ("FlatLabelOptions", () => SwiftObjectHelper<MPIOptions.FlatLabelOptions>.GetTypeMetadata()),
-            ("FloatingLabelOptions", () => SwiftObjectHelper<MPIOptions.FloatingLabelOptions>.GetTypeMetadata()),
-            ("FloatingLabel", () => SwiftObjectHelper<MPIOptions.FloatingLabel>.GetTypeMetadata()),
-            ("FlatLabel", () => SwiftObjectHelper<MPIOptions.FlatLabel>.GetTypeMetadata()),
-            ("FloatingLabelAppearance", () => SwiftObjectHelper<MPIOptions.FloatingLabelAppearance>.GetTypeMetadata()),
-            ("FloatingLabelAppearance.TextType", () => SwiftObjectHelper<MPIOptions.FloatingLabelAppearance.TextType>.GetTypeMetadata()),
-            ("FloatingLabelAppearance.MarkerType", () => SwiftObjectHelper<MPIOptions.FloatingLabelAppearance.MarkerType>.GetTypeMetadata()),
-            ("FloatingLabelAppearance.Color", () => SwiftObjectHelper<MPIOptions.FloatingLabelAppearance.Color>.GetTypeMetadata()),
-            ("SearchOptions", () => SwiftObjectHelper<MPIOptions.SearchOptions>.GetTypeMetadata()),
-            ("FloatingLabelAllLocations", () => SwiftObjectHelper<MPIOptions.FloatingLabelAllLocations>.GetTypeMetadata()),
-            ("FlatLabelAppearance", () => SwiftObjectHelper<MPIOptions.FlatLabelAppearance>.GetTypeMetadata()),
-            ("FlatLabelAllLocations", () => SwiftObjectHelper<MPIOptions.FlatLabelAllLocations>.GetTypeMetadata()),
-            ("Journey", () => SwiftObjectHelper<MPIOptions.Journey>.GetTypeMetadata()),
-            ("Marker", () => SwiftObjectHelper<MPIOptions.Marker>.GetTypeMetadata()),
-            ("MarkerAnimationOptions", () => SwiftObjectHelper<MPIOptions.MarkerAnimationOptions>.GetTypeMetadata()),
-            ("TooltipAnchor", () => SwiftObjectHelper<MPIOptions.TooltipAnchor>.GetTypeMetadata()),
-            ("Tooltip", () => SwiftObjectHelper<MPIOptions.Tooltip>.GetTypeMetadata()),
-            ("CustomTooltip", () => SwiftObjectHelper<MPIOptions.CustomTooltip>.GetTypeMetadata()),
-            ("AntialiasConfiguration", () => SwiftObjectHelper<MPIOptions.AntialiasConfiguration>.GetTypeMetadata()),
-            ("AmbientOcclusionConfiguration", () => SwiftObjectHelper<MPIOptions.AmbientOcclusionConfiguration>.GetTypeMetadata()),
-            ("OutdoorView", () => SwiftObjectHelper<MPIOptions.OutdoorView>.GetTypeMetadata()),
-        };
-
-        foreach (var (name, getMetadata) in optionsMetadataTests)
+            var isWebView = typeof(WebKit.WKWebView).IsAssignableFrom(typeof(MapViewController));
+            if (isWebView)
+            {
+                logger.Pass("MapViewController inherits from WKWebView");
+                results.Pass("Inheritance_MapViewController_WKWebView");
+            }
+            else
+            {
+                logger.Fail("MapViewController does not inherit from WKWebView");
+                results.Fail("Inheritance_MapViewController_WKWebView", "Not a WKWebView subclass");
+            }
+        }
+        catch (Exception ex)
         {
-            try
-            {
-                var metadata = getMetadata();
-                logger.Pass($"MPIOptions.{name} metadata (size={metadata.Size})");
-                results.Pass($"OptionsMetadata_{name}");
-            }
-            catch (Exception ex)
-            {
-                logger.Fail($"MPIOptions.{name} metadata: {ex.Message}");
-                results.Fail($"OptionsMetadata_{name}", ex.Message);
-            }
+            logger.Fail($"Inheritance check MapViewController / WKWebView: {ex.Message}");
+            results.Fail("Inheritance_MapViewController_WKWebView", ex.Message);
         }
     }
 }

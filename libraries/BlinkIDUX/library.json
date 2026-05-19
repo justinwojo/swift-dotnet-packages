@@ -1,8 +1,9 @@
 {
-  "repository": "https://github.com/BlinkID/blinkid-ios.git",
-  "version": "7.6.2",
-  "mode": "source",
+  "repository": "https://github.com/microblink/blinkid-ios.git",
+  "version": "7.7.0",
+  "mode": "zip",
   "minIOS": "16.0",
+  "zipUrl": "https://github.com/microblink/blinkid-ios/releases/download/v{version}/BlinkIDUX.xcframework.zip",
   "products": [
     { "framework": "BlinkIDUX" }
   ]

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <None Include="Info.plist" />
+    <BundleResource Include="Resources/test_image.png" />
   </ItemGroup>
 
   <!-- Reference the library project — NativeReference items (source + wrapper xcframeworks)

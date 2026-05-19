@@ -1,11 +1,10 @@
 {
-  "repository": "https://github.com/BlinkID/blinkid-swift-package.git",
-  "version": "7.6.2",
-  "mode": "binary",
+  "repository": "https://github.com/microblink/blinkid-ios.git",
+  "version": "7.7.0",
+  "mode": "zip",
   "minIOS": "15.0",
+  "zipUrl": "https://github.com/microblink/blinkid-ios/releases/download/v{version}/BlinkID.xcframework.zip",
   "products": [
-    {
-      "framework": "BlinkID"
-    }
+    { "framework": "BlinkID" }
   ]
 }
