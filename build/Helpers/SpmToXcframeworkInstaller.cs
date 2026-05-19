@@ -19,8 +19,8 @@ namespace SwiftBindings.Build.Helpers;
 public static class SpmToXcframeworkInstaller
 {
     // ── Pinning (bump these two constants together) ─────────────────────────
-    public const string Ref = "494d6672fc1705e74f4bc3ef34d95193ffd259e5";
-    public const string Sha256 = "4c337596c16f21e061c466492eba2f8b7e95c90ac5ed0c989dfbce11631cb758";
+    public const string Ref = "3ee0109f6599bc598e073db5b2f368c028117d20";
+    public const string Sha256 = "0cfff27d338495464baf0198a216ce9cb35f1fcd06a14e73ebafef3672c31c97";
     public static readonly string Url =
         $"https://raw.githubusercontent.com/justinwojo/spm-to-xcframework/{Ref}/spm-to-xcframework";
 

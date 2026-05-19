@@ -57,6 +57,41 @@ public sealed class LibraryConfig
     public string MinIOS { get; init; } = "15.0";
 
     /// <summary>
+    /// Minimum macOS deployment target. Absent ⇒ no macOS slice. Setting this
+    /// adds <c>--min-macos</c> to the spm-to-xcframework invocation and a
+    /// macOS slice to the resulting xcframework.
+    /// </summary>
+    [JsonPropertyName("minMacOS")]
+    public string? MinMacOS { get; init; }
+
+    /// <summary>
+    /// Minimum Mac Catalyst deployment target. Absent ⇒ no Mac Catalyst slice.
+    /// Setting this adds <c>--min-maccatalyst</c> to the tool invocation.
+    /// </summary>
+    [JsonPropertyName("minMacCatalyst")]
+    public string? MinMacCatalyst { get; init; }
+
+    /// <summary>
+    /// Minimum tvOS deployment target. Absent ⇒ no tvOS slices. Setting this
+    /// adds <c>--min-tvos</c> to the tool invocation and tvOS device +
+    /// simulator slices to the resulting xcframework.
+    /// </summary>
+    [JsonPropertyName("minTvOS")]
+    public string? MinTvOS { get; init; }
+
+    /// <summary>
+    /// Minimum watchOS deployment target. Absent ⇒ no watchOS slices.
+    /// </summary>
+    [JsonPropertyName("minWatchOS")]
+    public string? MinWatchOS { get; init; }
+
+    /// <summary>
+    /// Minimum visionOS deployment target. Absent ⇒ no visionOS slices.
+    /// </summary>
+    [JsonPropertyName("minVisionOS")]
+    public string? MinVisionOS { get; init; }
+
+    /// <summary>
     /// Release-zip URL for <see cref="BuildMode.Zip"/>. Supports <c>{version}</c> substitution
     /// (e.g. <c>https://github.com/stripe/stripe-ios/releases/download/{version}/Stripe.xcframework.zip</c>).
     /// Required for Zip mode; ignored otherwise.

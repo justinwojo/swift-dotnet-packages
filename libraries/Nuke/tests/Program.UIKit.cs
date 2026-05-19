@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Justin Wojciechowski.
 // Licensed under the MIT License.
 
+#if IOS || TVOS
 using System.Diagnostics;
 using System.Text;
 using Foundation;
@@ -169,7 +170,11 @@ public class MainViewController : UIViewController
     {
         base.ViewDidLoad();
 
+#if IOS
         View!.BackgroundColor = UIColor.SystemBackground;
+#else
+        View!.BackgroundColor = UIColor.White;
+#endif
 
         _titleLabel = new UILabel
         {
@@ -1781,3 +1786,4 @@ public class MainViewController : UIViewController
 }
 
 #endregion
+#endif

@@ -115,6 +115,7 @@ partial class Build
             "--output", outputDir,
             "--min-ios", config.MinIOS,
         };
+        AppendExtraPlatformFlags(args, config);
         foreach (var product in selected)
         {
             args.Add(product.UseTarget ? "--target" : "--product");
@@ -132,6 +133,19 @@ partial class Build
         InstallProducts(libraryDir, outputDir, selected);
 
         workspace.DeleteDirectory();
+    }
+
+    // Append --min-<platform> flags for every non-iOS platform the library
+    // opts into. Mirrors the per-platform fields on LibraryConfig — when a
+    // field is absent the corresponding flag is omitted and the tool produces
+    // no slice for that platform.
+    static void AppendExtraPlatformFlags(List<string> args, LibraryConfig config)
+    {
+        if (!string.IsNullOrEmpty(config.MinMacOS))       { args.Add("--min-macos");       args.Add(config.MinMacOS); }
+        if (!string.IsNullOrEmpty(config.MinMacCatalyst)) { args.Add("--min-maccatalyst"); args.Add(config.MinMacCatalyst); }
+        if (!string.IsNullOrEmpty(config.MinTvOS))        { args.Add("--min-tvos");        args.Add(config.MinTvOS); }
+        if (!string.IsNullOrEmpty(config.MinWatchOS))     { args.Add("--min-watchos");     args.Add(config.MinWatchOS); }
+        if (!string.IsNullOrEmpty(config.MinVisionOS))    { args.Add("--min-visionos");    args.Add(config.MinVisionOS); }
     }
 
     // ── Binary mode ─────────────────────────────────────────────────────────
@@ -168,6 +182,7 @@ partial class Build
             "--output", outputDir,
             "--min-ios", config.MinIOS,
         };
+        AppendExtraPlatformFlags(args, config);
         foreach (var product in selected)
         {
             if (!string.IsNullOrEmpty(product.ArtifactPath))

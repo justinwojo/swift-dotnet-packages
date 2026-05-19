@@ -3,6 +3,8 @@
   "version": "13.0.6",
   "mode": "source",
   "minIOS": "15.0",
+  "minMacOS": "12.0",
+  "minTvOS": "15.0",
   "products": [
     { "framework": "Nuke" }
   ]
