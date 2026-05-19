@@ -13,6 +13,8 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 | [`SwiftBindings.Apple.CryptoKit`](apple-frameworks/CryptoKit/README.md) | Hashing, symmetric/authenticated encryption, key agreement, signatures | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.CryptoKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.CryptoKit) |
 | [`SwiftBindings.Apple.FamilyControls`](apple-frameworks/FamilyControls/README.md) | Screen Time authorization for parental-control apps | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.FamilyControls.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.FamilyControls) |
 | [`SwiftBindings.Apple.LiveCommunicationKit`](apple-frameworks/LiveCommunicationKit/README.md) | VoIP and Live Communication conversations | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.LiveCommunicationKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.LiveCommunicationKit) |
+| [`SwiftBindings.Apple.Matter`](apple-frameworks/Matter/README.md) | Apple's Matter smart-home protocol client surface (`MTRSetupPayload`, `MTRDeviceController`) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.Matter.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.Matter) |
+| [`SwiftBindings.Apple.MatterSupport`](apple-frameworks/MatterSupport/README.md) | `MatterAddDeviceRequest` flow layered on top of Matter | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.MatterSupport.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.MatterSupport) |
 | [`SwiftBindings.Apple.MusicKit`](apple-frameworks/MusicKit/README.md) | Apple Music catalog, library access, and playback | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.MusicKit.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.MusicKit) |
 | [`SwiftBindings.Apple.ProximityReader`](apple-frameworks/ProximityReader/README.md) | Tap to Pay on iPhone, contactless payment-card and NFC reads | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.ProximityReader.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.ProximityReader) |
 | [`SwiftBindings.Apple.RealityFoundation`](apple-frameworks/RealityFoundation/README.md) | Entity / component / scene foundation re-exported by RealityKit (`Entity`, `ModelEntity`, transforms, materials) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Apple.RealityFoundation.svg)](https://www.nuget.org/packages/SwiftBindings.Apple.RealityFoundation) |
@@ -32,11 +34,11 @@ Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](htt
 
 | Package | Description | Version |
 |---|---|---|
-| [`SwiftBindings.Nuke`](libraries/Nuke/README.md) | High-performance image loading and caching | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Nuke.svg)](https://www.nuget.org/packages/SwiftBindings.Nuke) |
+| [`SwiftBindings.Nuke`](libraries/Nuke/README.md) | High-performance image loading and caching (multi-TFM: iOS, macOS, tvOS) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Nuke.svg)](https://www.nuget.org/packages/SwiftBindings.Nuke) |
 | [`SwiftBindings.Lottie`](libraries/Lottie/README.md) | Lottie animation rendering | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Lottie.svg)](https://www.nuget.org/packages/SwiftBindings.Lottie) |
-| [`SwiftBindings.BlinkID`](libraries/BlinkID/README.md) | Microblink ID document scanning | _Coming soon_ |
-| [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | _Coming soon_ |
-| [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | _Coming soon_ |
+| [`SwiftBindings.BlinkID`](libraries/BlinkID/README.md) | Microblink ID document scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkID.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkID) |
+| [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkIDUX.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) |
+| [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Mappedin.svg)](https://www.nuget.org/packages/SwiftBindings.Mappedin) |
 
 ## Stripe
 
