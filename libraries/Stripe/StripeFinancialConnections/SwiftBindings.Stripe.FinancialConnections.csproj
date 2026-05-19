@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.FinancialConnections</PackageId>
-    <Version>25.11.0</Version>
+    <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeFinancialConnections Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripefinancialconnections;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,8 +19,8 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.15.0" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="25.15.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

@@ -7,7 +7,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.BlinkID</PackageId>
-    <Version>7.7.0</Version>
+    <Version>7.8.0</Version>
     <Description>.NET bindings for the BlinkID Swift library</Description>
     <PackageTags>swift;dotnet;interop;blinkid;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

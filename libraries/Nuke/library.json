@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/kean/Nuke.git",
-  "version": "13.0.5",
+  "version": "13.0.6",
   "mode": "source",
   "minIOS": "15.0",
   "products": [

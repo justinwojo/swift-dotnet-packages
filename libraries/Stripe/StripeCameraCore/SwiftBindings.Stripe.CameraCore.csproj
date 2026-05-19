@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.CameraCore</PackageId>
-    <Version>25.11.0</Version>
+    <Version>25.15.0</Version>
     <Description>Transitive support package for SwiftBindings.Stripe.* — pulled in automatically by sibling Stripe packages that need camera-based scanning support (StripeCardScan, StripeIdentity). Not an entry point; do not install directly. Wraps Stripe's StripeCameraCore.xcframework.</Description>
     <PackageTags>swift;dotnet;interop;stripe;stripecameracore;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.15.0" />
   </ItemGroup>
 
 </Project>

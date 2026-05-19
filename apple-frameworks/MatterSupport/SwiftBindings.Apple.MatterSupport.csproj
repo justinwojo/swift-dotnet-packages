@@ -18,4 +18,10 @@
     </SwiftAppleFrameworkTarget>
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- MatterAddDeviceRequest.setupPayload returns Matter.MTRSetupPayload, so
+         consumers need the sibling package on restore. -->
+    <PackageReference Include="SwiftBindings.Apple.Matter" Version="26.2.3" />
+  </ItemGroup>
 </Project>

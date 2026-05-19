@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.ApplePay</PackageId>
-    <Version>25.11.0</Version>
+    <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeApplePay Swift library</Description>
     <PackageTags>swift;dotnet;interop;stripeapplepay;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,7 +19,7 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.15.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

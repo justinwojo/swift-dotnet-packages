@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.ThreeDS2</PackageId>
-    <Version>25.11.0</Version>
+    <Version>25.15.0</Version>
     <Description>Transitive support package for SwiftBindings.Stripe.* — pulled in automatically by sibling Stripe packages that need 3-D Secure 2 support. Not an entry point; do not install directly. Wraps Stripe's ObjC-only Stripe3DS2.xcframework.</Description>
     <PackageTags>swift;dotnet;interop;stripe;stripe3ds2;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

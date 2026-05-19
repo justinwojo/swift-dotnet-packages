@@ -929,15 +929,15 @@ public class MainViewController : UIViewController
         try
         {
             var allCases = FieldType.AllCases;
-            if (allCases != null && allCases.Count == 74)
+            if (allCases != null && allCases.Count == 72)
             {
                 logger.Pass($"FieldType.AllCases count={allCases.Count}");
                 results.Pass("FieldType_AllCases");
             }
             else
             {
-                logger.Fail($"FieldType.AllCases: expected 74, got {allCases?.Count}");
-                results.Fail("FieldType_AllCases", $"Expected 74, got {allCases?.Count}");
+                logger.Fail($"FieldType.AllCases: expected 72, got {allCases?.Count}");
+                results.Fail("FieldType_AllCases", $"Expected 72, got {allCases?.Count}");
             }
         }
         catch (Exception ex)

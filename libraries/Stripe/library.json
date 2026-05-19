@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/stripe/stripe-ios.git",
-  "version": "25.11.0",
+  "version": "25.15.0",
   "mode": "zip",
   "zipUrl": "https://github.com/stripe/stripe-ios/releases/download/{version}/Stripe.xcframework.zip",
   "minIOS": "15.0",

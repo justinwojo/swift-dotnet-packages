@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Lottie</PackageId>
-    <Version>4.6.0</Version>
+    <Version>4.6.2</Version>
     <Description>.NET bindings for the Lottie Swift library</Description>
     <PackageTags>swift;dotnet;interop;lottie;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

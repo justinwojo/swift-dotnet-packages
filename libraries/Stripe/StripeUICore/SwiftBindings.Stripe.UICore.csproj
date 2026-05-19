@@ -6,14 +6,14 @@
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.UICore</PackageId>
-    <Version>25.11.0</Version>
+    <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeUICore Swift library (internal Stripe dependency)</Description>
     <PackageTags>swift;dotnet;interop;stripeuicore;ios</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.11.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.15.0" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
