@@ -17,13 +17,12 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
-  <!-- BlinkIDUX depends on BlinkID — ProjectReference for local builds,
-       PackageReference for nuspec capture. ProjectReference does NOT
-       propagate to nuspec <dependencies> at pack time, so downstream
-       NuGet consumers need the explicit PackageReference. -->
+  <!-- BlinkIDUX depends on BlinkID. dotnet pack auto-emits the nuspec
+       <dependency> from this ProjectReference (the target is a packable
+       csproj with PackageId+Version), so no explicit PackageReference
+       is needed — adding one would duplicate the nuspec entry. -->
   <ItemGroup>
     <ProjectReference Include="../BlinkID/SwiftBindings.BlinkID.csproj" />
-    <PackageReference Include="SwiftBindings.BlinkID" Version="7.8.0" />
   </ItemGroup>
 
   <!-- BlinkID xcframework needed during binding generation -->
