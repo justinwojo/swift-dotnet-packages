@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework />
+    <TargetFrameworks>net10.0-ios;net10.0-macos;net10.0-maccatalyst</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationId>com.swiftbindings.mattersupport.tests</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios'))">26.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">26.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">26.0</SupportedOSPlatformVersion>
+    <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios'))">true</IncludeSwiftBindingsRuntimeNative>
+    <!-- macOS console apps don't need provisioning -->
+    <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>
+  </PropertyGroup>
+
+  <!-- iOS and MacCatalyst are UIKit app targets — they need an Info.plist.
+       macOS (console) does not. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst'))">
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+  <!-- ProjectReference, not PackageReference — validates against the local
+       sibling builds, including the cross-module Matter ↔ MatterSupport edge
+       that is the issue #38 cornerstone scenario. -->
+  <ItemGroup>
+    <ProjectReference Include="../SwiftBindings.Apple.MatterSupport.csproj" />
+    <ProjectReference Include="../../Matter/SwiftBindings.Apple.Matter.csproj" />
+  </ItemGroup>
+
+</Project>
