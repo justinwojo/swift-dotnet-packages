@@ -137,7 +137,10 @@ jobs:
       # rebuilds. Optimizing this is tracked as a follow-up; for now,
       # the Release artifacts and the simulator validation are independent.
       - name: Build and validate on iOS Simulator
-        timeout-minutes: 20
+        # 30 min total gives Nuke's --step-timeout 1140 (19 min) headroom for
+        # cleanup, diagnostics collection, and binlog upload; the prior 20 min
+        # left <1 min after Nuke exits.
+        timeout-minutes: 30
         run: |
           dotnet nuke RunCiSimTest \
             --library "${{ steps.parse.outputs.library }}" \
@@ -155,13 +158,15 @@ jobs:
           if-no-files-found: ignore
 
       # Summarize + upload run whenever the pack step succeeded, even if a
-      # later step (e.g. the sim test) failed. Without the explicit if:
-      # gate, GHA's default skip-on-failure behavior strands the .nupkg
-      # on the runner and we can't grab it for inspection — particularly
+      # later step (e.g. the sim test) failed. `if: steps.pack.outcome ==
+      # 'success'` ALONE is implicitly `success() && ...`, so GHA still
+      # short-circuits when an earlier step failed. The explicit
+      # `always() && ...` guard is required to actually run after a sim
+      # failure and recover the .nupkg for inspection — particularly
       # frustrating during dry-runs where flaky sim infrastructure
       # shouldn't block artifact retrieval.
       - name: Summarize packed packages
-        if: steps.pack.outcome == 'success'
+        if: ${{ always() && steps.pack.outcome == 'success' }}
         run: |
           {
             echo ""
@@ -173,7 +178,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload package artifacts
-        if: steps.pack.outcome == 'success'
+        if: ${{ always() && steps.pack.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: nuget-packages-${{ steps.parse.outputs.library }}-${{ steps.parse.outputs.version }}

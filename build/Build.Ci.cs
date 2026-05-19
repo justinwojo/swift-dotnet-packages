@@ -305,6 +305,11 @@ partial class Build
         "unable to lookup in current state",
         "CoreSimulatorService connection interrupted",
         "timed out waiting",
+        // SimctlCommandError emits "timed out after Ns" when a single simctl
+        // invocation exceeds CommandTimeout. On busy macos-26 runners cold
+        // `simctl list devices -j` legitimately needs >60s, so classify these
+        // as retryable infra rather than terminal release failures.
+        "timed out after",
         "launchd",
         "bootstrap",
         "SimulatorBootTimeout",
@@ -367,120 +372,22 @@ partial class Build
 
                 try
                 {
-                    // ── Phase 1: Parallel boot + build ─────────────────────
+                    // ── Phase 1: Prepare simulator (sequential) ────────────
+                    // The previous parallel boot+build pattern (mirror of
+                    // ci_ios_test.py:354–384) starved both sides on macos-26's
+                    // 3-vCPU Apple Silicon runners when shipping heavy ObjC
+                    // bindings like Matter (~92k LoC of generated C#). simctl
+                    // would time out at 60s on `list devices -j` while the
+                    // SDK generator was saturating CPU. Serializing costs
+                    // ~one sim boot of wall-clock (60s) and removes the flake.
                     if (deviceUdid is null)
                     {
-                        if (skipBuild)
-                        {
-                            // Sequential prepare-only path (rare — only after the
-                            // build half of a previous parallel attempt succeeded
-                            // before the sim half failed).
-                            GhaGroup("Prepare iOS Simulator");
-                            createdUdid = ReuseSim
-                                ? fleet.EnsureReusable()
-                                : PrepareFreshSimulator(fleet);
-                            deviceUdid = createdUdid;
-                            GhaEndGroup();
-                        }
-                        else
-                        {
-                            // Parallel: ci_ios_test.py:354–384.
-                            GhaGroup("Parallel: Boot Simulator + Build Test App");
-                            using var cts = new CancellationTokenSource();
-                            var simTask = Task.Run(() =>
-                            {
-                                return ReuseSim
-                                    ? fleet.EnsureReusable()
-                                    : PrepareFreshSimulator(fleet);
-                            }, cts.Token);
-
-                            var buildTask = Task.Run(() =>
-                            {
-                                BuildTestAppForRunCi(library, testDir);
-                            }, cts.Token);
-
-                            // Block until both finish so we can match the Python
-                            // collect-then-prioritize-error semantics.
-                            try
-                            {
-                                Task.WaitAll(new Task[] { simTask, buildTask }, TimeSpan.FromSeconds(InstallOverheadSeconds + 60));
-                            }
-                            catch
-                            {
-                                // Swallow — inspected per-task below.
-                            }
-
-                            // Match Python: prefer simulator error (potentially retryable)
-                            // over build error.
-                            if (simTask.IsFaulted)
-                            {
-                                cts.Cancel();
-                                throw UnwrapAggregate(simTask.Exception);
-                            }
-
-                            // CRITICAL: if simTask is still running here (because
-                            // buildTask faulted early or WaitAll's bounded budget
-                            // expired while sim was still booting), we MUST give it
-                            // a bounded final wait so we can capture its UDID for
-                            // cleanup. cts.Token does NOT actually interrupt
-                            // in-progress simctl invocations — once `simctl create`
-                            // / `boot` / `bootstatus` are running, they will run
-                            // to completion regardless of cancellation. Throwing
-                            // now would leave the fresh sim alive with `createdUdid`
-                            // still null, and the finally block would never see it.
-                            // Mirrors ci_ios_test.py:354–384 which collects BOTH
-                            // futures before deciding which error to surface.
-                            if (!simTask.IsCompleted)
-                            {
-                                Log.Information(
-                                    "Parallel phase: simulator boot still in progress after WaitAll budget expired — waiting bounded extra time to capture UDID for cleanup");
-                                try
-                                {
-                                    simTask.Wait(TimeSpan.FromSeconds(InstallOverheadSeconds + 60));
-                                }
-                                catch
-                                {
-                                    // Inspected via task state below.
-                                }
-                                if (simTask.IsFaulted)
-                                {
-                                    cts.Cancel();
-                                    throw UnwrapAggregate(simTask.Exception);
-                                }
-                            }
-
-                            // Record the fresh simulator's UDID as SOON as simTask is
-                            // known to have produced one — BEFORE we inspect buildTask
-                            // for failures or the overall wait for timeout. Without
-                            // this, a "sim boot succeeded, test-app build failed"
-                            // outcome would throw with `createdUdid` still null and
-                            // the finally block would never clean up the fresh sim.
-                            if (simTask.IsCompletedSuccessfully)
-                            {
-                                createdUdid = simTask.Result;
-                                deviceUdid = createdUdid;
-                            }
-
-                            if (buildTask.IsFaulted)
-                            {
-                                cts.Cancel();
-                                throw UnwrapAggregate(buildTask.Exception);
-                            }
-                            if (!simTask.IsCompleted || !buildTask.IsCompleted)
-                            {
-                                // Sim still hasn't completed even after the second
-                                // bounded wait — we can't clean it up. Surface the
-                                // timeout so the run fails loudly; an orphan sim
-                                // here is unavoidable because we have no way to
-                                // interrupt simctl.
-                                throw new TimeoutException("Parallel boot+build did not complete within budget");
-                            }
-
-                            // createdUdid / deviceUdid were already assigned above in
-                            // the IsCompletedSuccessfully branch.
-                            skipBuild = true;
-                            GhaEndGroup();
-                        }
+                        GhaGroup("Prepare iOS Simulator");
+                        createdUdid = ReuseSim
+                            ? fleet.EnsureReusable()
+                            : PrepareFreshSimulator(fleet);
+                        deviceUdid = createdUdid;
+                        GhaEndGroup();
                         Log.Information("Simulator UDID: {Udid}", deviceUdid);
                     }
                     else
@@ -488,7 +395,7 @@ partial class Build
                         Log.Information("Using provided simulator: {Udid}", deviceUdid);
                     }
 
-                    // ── Phase 2: Build (sequential fallback) ──────────────
+                    // ── Phase 2: Build test app ───────────────────────────
                     if (!skipBuild)
                     {
                         GhaGroup("Build Test App");
@@ -723,9 +630,17 @@ partial class Build
         // to locate the built .app agrees with the one dotnet build produces.
         if (!string.IsNullOrEmpty(RuntimeIdentifier))
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
+        // Emit a binary log so SDK generator failures (e.g. `Swift.Bindings.dll
+        // exit 1` with no stderr) are diagnosable post-hoc. DiagDir is
+        // /tmp/sim-diagnostics by default and is uploaded as an artifact on
+        // failure via the workflow's `Upload simulator diagnostics` step.
+        Directory.CreateDirectory(DiagDir);
+        var binlogPath = Path.Combine(DiagDir, $"testapp-build-{library}.binlog");
+        args.Add($"-bl:{binlogPath}");
         var exit = RunDotnet(args.ToArray());
         if (exit != 0)
-            throw new InvalidOperationException($"dotnet build (sim) failed with exit {exit}");
+            throw new InvalidOperationException(
+                $"dotnet build (sim) failed with exit {exit} — see binlog at {binlogPath}");
     }
 
     void CollectDiagnosticsBestEffort(SimulatorFleet fleet, string udid, string appName)
@@ -781,13 +696,6 @@ partial class Build
         // WaitUntilResponsive chain, so the caller gets a live sim back.
         fleet.BootAndWaitForReady(udid);
         return udid;
-    }
-
-    static Exception UnwrapAggregate(AggregateException? ae)
-    {
-        if (ae is null) return new InvalidOperationException("unknown error");
-        var inner = ae.InnerException;
-        return inner ?? ae;
     }
 
     // ── GitHub Actions log helpers ───────────────────────────────────────────
