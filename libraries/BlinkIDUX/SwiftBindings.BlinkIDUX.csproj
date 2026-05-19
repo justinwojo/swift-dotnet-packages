@@ -25,9 +25,15 @@
     <ProjectReference Include="../BlinkID/SwiftBindings.BlinkID.csproj" />
   </ItemGroup>
 
-  <!-- BlinkID xcframework needed during binding generation -->
+  <!-- BlinkID xcframework needed during binding generation. PackageId +
+       PackageVersion satisfy the SDK's pack-time SFD validation (SWIFTBIND040);
+       they describe the NuGet package consumers will need to install at runtime,
+       which is the sibling BlinkID package shipped from this repo. Microblink
+       ships BlinkID and BlinkIDUX in lockstep, so the version tracks BlinkIDUX's. -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../BlinkID/BlinkID.xcframework" />
+    <SwiftFrameworkDependency Include="../BlinkID/BlinkID.xcframework"
+                              PackageId="SwiftBindings.BlinkID"
+                              PackageVersion="7.8.0" />
   </ItemGroup>
 
 </Project>
