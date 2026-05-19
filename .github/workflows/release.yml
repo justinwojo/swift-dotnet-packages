@@ -212,6 +212,15 @@ jobs:
           dotnet-version: 10.0.x
           dotnet-quality: preview
 
+      # `dotnet nuke PublishRelease` evaluates build/_build.csproj, which
+      # transitively triggers MSBuild's workload SDK resolver. global.json
+      # pins workloadVersion 10.0.107, so MSBuild errors out unless that
+      # manifest set is installed. The publish job doesn't actually build
+      # any iOS code — it just pushes nupkgs — but the workload manifests
+      # need to exist for _build.csproj evaluation to succeed.
+      - name: Install workloads
+        run: dotnet workload install ios macos maccatalyst tvos
+
       # Cache must come BEFORE `dotnet tool restore` so the restored
       # ~/.nuget/packages already contains nuke.globaltool on cache-hit
       # runs — otherwise tool restore re-downloads the tool every time
