@@ -198,50 +198,39 @@ jobs:
           name: nuget-packages-${{ needs.build.outputs.library }}-${{ needs.build.outputs.version }}
           path: packages/
 
-      # NuGet.config declares a `local` source pointing at ./local-packages/.
-      # `dotnet tool restore` (and any subsequent `dotnet nuke` invocation that
-      # restores _build.csproj) fails with NU1301 when that directory is
-      # missing. The build job has the same step; without it here, the
-      # publish job dies before PublishRelease runs.
-      - name: Ensure local NuGet source exists
-        run: mkdir -p local-packages
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
           dotnet-quality: preview
 
-      # `dotnet nuke PublishRelease` evaluates build/_build.csproj, which
-      # transitively triggers MSBuild's workload SDK resolver. global.json
-      # pins workloadVersion 10.0.107, so MSBuild errors out unless that
-      # manifest set is installed. The publish job doesn't actually build
-      # any iOS code — it just pushes nupkgs — but the workload manifests
-      # need to exist for _build.csproj evaluation to succeed.
-      - name: Install workloads
-        run: dotnet workload install ios macos maccatalyst tvos
-
-      # Cache must come BEFORE `dotnet tool restore` so the restored
-      # ~/.nuget/packages already contains nuke.globaltool on cache-hit
-      # runs — otherwise tool restore re-downloads the tool every time
-      # and only the post-restore steps benefit from the cache.
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
-          restore-keys: nuget-${{ runner.os }}-
-
-      - name: Restore Nuke tool
-        run: dotnet tool restore
-
+      # Push .nupkg files directly via `dotnet nuget push`. We deliberately
+      # avoid `dotnet nuke PublishRelease` here: invoking nuke would trigger
+      # MSBuild evaluation of build/_build.csproj, which (because global.json
+      # pins workloadVersion) requires the iOS/macOS/MacCatalyst workload
+      # manifests to be installed — wasted work on a Linux runner that only
+      # needs to push prebuilt artifacts. Mirrors the PublishRelease target
+      # logic: parallel push, --skip-duplicate, deterministic ordering.
       - name: Publish to NuGet
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          dotnet nuke PublishRelease \
-            --packages-dir packages \
-            --nuget-api-key "$NUGET_API_KEY"
+          set -e
+          shopt -s nullglob
+          pkgs=(packages/*.nupkg)
+          if [ ${#pkgs[@]} -eq 0 ]; then
+            echo "::error::No .nupkg files found in packages/"
+            exit 1
+          fi
+          echo "=== Publishing ${#pkgs[@]} package(s) (parallelism=5) ==="
+          printf '  - %s\n' "${pkgs[@]}"
+          # NUL-delimit so any filename quirks are safe end-to-end; xargs -P5
+          # runs up to 5 pushes in parallel.
+          printf '%s\0' "${pkgs[@]}" | LC_ALL=C sort -z | xargs -0 -P5 -I{} \
+            dotnet nuget push "{}" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
 
           {
             echo ""
