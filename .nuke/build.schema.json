@@ -32,6 +32,7 @@
         "BuildLibrary",
         "BuildTestApp",
         "BuildXcframework",
+        "BumpSdkVersion",
         "Clean",
         "CleanSwiftBindingOutput",
         "Compile",

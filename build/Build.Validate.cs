@@ -51,6 +51,7 @@ partial class Build
         var beforeCrashCount = CountCrashLogs(crashDir, appName);
 
         sim.InstallApp(appPath);
+        sim.CleanStaleConsoleFifos();
 
         Log.Information("Launching {App} on {Device} (timeout: {Timeout}s)", appName, sim.Device, timeoutSeconds);
         var psi = sim.BuildLaunchPsi(bundleId);

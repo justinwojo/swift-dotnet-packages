@@ -188,9 +188,23 @@ partial class Build
 
         using var process = System.Diagnostics.Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start git");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        // Sequential ReadToEnd on stdout then stderr can deadlock when git
+        // fills the stderr pipe while we block on stdout. Drain both async
+        // and bound the wait so a hung git can't freeze CI.
+        var stdoutSb = new System.Text.StringBuilder();
+        var stderrSb = new System.Text.StringBuilder();
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (stdoutSb) stdoutSb.AppendLine(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) lock (stderrSb) stderrSb.AppendLine(e.Data); };
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        if (!process.WaitForExit(30_000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException("git diff --name-only timed out after 30s");
+        }
         process.WaitForExit();
+        var stdout = stdoutSb.ToString();
+        var stderr = stderrSb.ToString();
         if (process.ExitCode != 0)
             throw new InvalidOperationException(
                 $"git diff exited with {process.ExitCode}: {stderr}");

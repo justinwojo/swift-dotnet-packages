@@ -185,6 +185,14 @@ partial class Build
     {
         Log.Information("--- pre-flight ---");
 
+        // Run every read-only validation FIRST so a typo or missing
+        // precondition (e.g. wrong version, no booted sim, missing codesign
+        // config) fails fast without dirtying the working tree. The csproj
+        // stamp + obj wipe at the end is the only side-effecting step, and
+        // BumpSdkVersionInternal writes 34 csprojs and rm -rfs sibling obj/
+        // directories — running it before validating the nupkg meant a bad
+        // --version argument left the repo dirty before pre-flight failed.
+
         // 1. SDK nupkg present
         var nupkg = LocalPackagesDir / $"SwiftBindings.Sdk.{version}.nupkg";
         if (!File.Exists(nupkg))
@@ -228,6 +236,12 @@ partial class Build
             Log.Information("  Codesign: {Source}", hasEnv ? "env vars" : "Directory.Build.tests.props.local");
         }
 
+        // 5. (Side-effecting) Stamp every package csproj to the target SDK
+        //    version. Without this, csprojs may still pin the previous SDK
+        //    and silently resolve the OLD package from cache or nuget.org —
+        //    the matrix then validates the wrong version.
+        BumpSdkVersionInternal(version);
+
         Log.Information("--- pre-flight OK ---");
     }
 
@@ -244,10 +258,21 @@ partial class Build
         psi.ArgumentList.Add("devices");
         psi.ArgumentList.Add("booted");
         using var p = Process.Start(psi)!;
-        var stdout = p.StandardOutput.ReadToEnd();
+        // Drain stdout async + bound WaitForExit so a wedged CoreSimulator
+        // can't hang the regression preflight on the way in.
+        var sb = new System.Text.StringBuilder();
+        p.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (sb) sb.AppendLine(e.Data); };
+        p.ErrorDataReceived += (_, e) => { /* discard stderr */ };
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+        if (!p.WaitForExit(10_000))
+        {
+            try { p.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException("xcrun simctl list devices booted timed out after 10s during preflight");
+        }
         p.WaitForExit();
         var booted = new List<string>();
-        foreach (var line in stdout.Split('\n'))
+        foreach (var line in sb.ToString().Split('\n'))
         {
             var m = System.Text.RegularExpressions.Regex.Match(line, @"\(([0-9A-F-]{36})\) \(Booted\)");
             if (m.Success) booted.Add(m.Groups[1].Value);

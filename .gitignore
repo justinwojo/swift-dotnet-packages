@@ -58,3 +58,10 @@ local-packages/
 .idea/
 *.swp
 *~
+
+# MSBuild binary logs
+*.binlog
+
+# Per-library nuget.config overrides (root NuGet.config is intentional)
+**/nuget.config
+!/NuGet.config

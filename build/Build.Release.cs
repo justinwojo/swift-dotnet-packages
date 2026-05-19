@@ -383,8 +383,22 @@ partial class Build
                     UseShellExecute = false,
                 };
                 using var p = System.Diagnostics.Process.Start(psi);
-                gitSha = p?.StandardOutput.ReadToEnd().Trim() ?? "";
-                p?.WaitForExit();
+                // Bound wait BEFORE reading; a synchronous ReadToEnd on a
+                // wedged git would itself block past the timeout. Output is a
+                // single ~41-byte SHA so a post-wait ReadToEnd cannot block.
+                if (p is null)
+                {
+                    gitSha = "";
+                }
+                else if (!p.WaitForExit(5_000))
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                    gitSha = "";
+                }
+                else
+                {
+                    gitSha = p.StandardOutput.ReadToEnd().Trim();
+                }
             }
             catch { gitSha = ""; }
         }

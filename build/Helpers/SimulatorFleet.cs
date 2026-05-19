@@ -273,8 +273,23 @@ public sealed class SimulatorFleet
             using var p = Process.Start(psi);
             if (p is not null)
             {
-                var stdout = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(5000);
+                // ps aux output can exceed the pipe buffer on busy systems;
+                // drain async so a wedged child blocked on write can't defeat
+                // the bounded WaitForExit.
+                var stdoutSb = new System.Text.StringBuilder();
+                p.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (stdoutSb) stdoutSb.AppendLine(e.Data); };
+                p.BeginOutputReadLine();
+                if (!p.WaitForExit(5000))
+                {
+                    // If Kill failed to terminate, an unconditional flush
+                    // WaitForExit() would itself hang unbounded — skip it.
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                }
+                else
+                {
+                    p.WaitForExit(); // flush async events on the success path
+                }
+                var stdout = stdoutSb.ToString();
                 var lines = stdout.Split('\n')
                     .Where(l => l.Contains("simulator", StringComparison.OrdinalIgnoreCase)
                               || l.Contains("coresim", StringComparison.OrdinalIgnoreCase)
@@ -327,11 +342,20 @@ public sealed class SimulatorFleet
             using var p = Process.Start(psi);
             if (p is not null)
             {
-                var stdout = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(5000);
-                var path = Path.Combine(outputDir, "xcode-version.txt");
-                File.WriteAllText(path, stdout);
-                collected.Add(path);
+                // Wait first so a wedged xcodebuild can't defeat the timeout
+                // via a blocking ReadToEnd. Output is small (< 200 bytes) so
+                // a post-wait ReadToEnd cannot block.
+                if (!p.WaitForExit(5000))
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                }
+                else
+                {
+                    var stdout = p.StandardOutput.ReadToEnd();
+                    var path = Path.Combine(outputDir, "xcode-version.txt");
+                    File.WriteAllText(path, stdout);
+                    collected.Add(path);
+                }
             }
         }
         catch { /* ignore */ }

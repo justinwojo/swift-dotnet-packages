@@ -400,14 +400,24 @@ partial class Build
 
         using var process = System.Diagnostics.Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start git");
-        // Drain BOTH pipes — bash uses 2>/dev/null, but we redirected stderr
-        // so we have to actively read it or git will block on a full stderr
-        // pipe. Read stderr async; read stdout sync (it's the data we need).
+        // Drain BOTH pipes async — bash uses 2>/dev/null, but we redirected
+        // stderr so we have to actively read it or git will block on a full
+        // stderr pipe. Reading stdout synchronously before WaitForExit defeats
+        // the bounded wait, since ReadToEnd itself blocks on a wedged child.
         // Discard stderr to match the bash `2>/dev/null` semantics.
+        var stdoutSb = new System.Text.StringBuilder();
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (stdoutSb) stdoutSb.AppendLine(e.Data); };
         process.ErrorDataReceived += (_, _) => { /* drain & discard */ };
+        process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        var stdout = process.StandardOutput.ReadToEnd();
+        // Bound wait so a hung git can't freeze the release verifier.
+        if (!process.WaitForExit(30_000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"git ls-remote tag lookup for '{version}' timed out after 30s");
+        }
         process.WaitForExit();
+        var stdout = stdoutSb.ToString();
         // Exit code intentionally ignored — bash uses `2>/dev/null` and only
         // checks the captured output.
 
