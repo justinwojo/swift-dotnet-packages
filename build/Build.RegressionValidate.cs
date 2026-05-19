@@ -19,22 +19,24 @@ partial class Build
     /// <c>BUILD-ONLY</c>.
     /// </summary>
     Target RegressionValidate => _ => _
-        .Description("Build + validate every package across every declared TFM (--version X.Y.Z [--filter Foo] [--platforms ios-sim,macos])")
+        .Description("Build + validate every package across every declared TFM (--version X.Y.Z --apple-version NN.N.N [--filter Foo] [--platforms ios-sim,macos])")
         .Requires(() => Version)
+        .Requires(() => AppleVersion)
         .Executes(() =>
         {
             var version = Version!;
+            var appleVersion = AppleVersion!;
             var requestedPlatforms = ParsePlatformsParam(Platforms);
             var packages = ResolvePackages(Filter);
 
-            Log.Information("=== regression-validate {Version} ===", version);
+            Log.Information("=== regression-validate SDK={Version} Apple={AppleVersion} ===", version, appleVersion);
             Log.Information("Packages: {Count} ({Names})", packages.Count, string.Join(", ", packages));
             Log.Information("Platforms: {Platforms}", string.Join(", ", requestedPlatforms.Select(PlatformLabel)));
 
             var cells = EnumerateCells(packages, requestedPlatforms);
             Log.Information("Cells to run: {Count}", cells.Count);
 
-            Preflight(version, cells);
+            Preflight(version, appleVersion, cells);
 
             // Cache resolved device UDID once so each device cell doesn't re-detect.
             string? deviceUdid = cells.Any(c => c.Platform == CellPlatform.IosDevice)
@@ -181,7 +183,7 @@ partial class Build
         return cells;
     }
 
-    void Preflight(string version, IReadOnlyList<Cell> cells)
+    void Preflight(string version, string appleVersion, IReadOnlyList<Cell> cells)
     {
         Log.Information("--- pre-flight ---");
 
@@ -241,6 +243,16 @@ partial class Build
         //    and silently resolve the OLD package from cache or nuget.org —
         //    the matrix then validates the wrong version.
         BumpSdkVersionInternal(version);
+
+        // 6. (Side-effecting) Stamp every apple-framework csproj's own
+        //    <Version> to the Apple train (e.g. 26.2.3). The Apple
+        //    supplement is versioned independently of the SDK lane and
+        //    isn't covered by step 5. The package version doesn't gate
+        //    resolution during the matrix itself, but skipping it leaves
+        //    the repo with stale apple-framework versions after a
+        //    successful run — exactly the cleanup workflow this pre-flight
+        //    is meant to eliminate.
+        BumpAppleVersionInternal(appleVersion);
 
         Log.Information("--- pre-flight OK ---");
     }

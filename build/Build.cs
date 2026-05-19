@@ -65,6 +65,9 @@ partial class Build : NukeBuild
     [Parameter("Package version override")]
     readonly string? Version;
 
+    [Parameter("Apple package version (separate train from SDK, e.g. 26.2.3)")]
+    readonly string? AppleVersion;
+
     [Parameter, Secret]
     readonly string? NuGetApiKey;
 

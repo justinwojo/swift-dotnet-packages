@@ -104,4 +104,97 @@ partial class Build
             updated, alreadyPinned, objWiped, inspected);
         return updated;
     }
+
+    /// <summary>
+    /// Sweep every csproj under <c>apple-frameworks/</c> and pin its
+    /// <c>&lt;Version&gt;NN.N.N&lt;/Version&gt;</c> element to the requested
+    /// <c>--apple-version</c>. The Apple supplement train (e.g. 26.2.3) is
+    /// versioned independently of the SDK lane and isn't covered by
+    /// <see cref="BumpSdkVersion"/>, which only rewrites the
+    /// <c>Sdk="SwiftBindings.Sdk/X.Y.Z"</c> attribute.
+    ///
+    /// Idempotent: files already at the target version are left untouched.
+    /// Only csprojs that import <c>SwiftBindings.Sdk</c> are touched — test
+    /// csprojs use <c>Microsoft.NET.Sdk</c> and don't carry the train
+    /// <c>&lt;Version&gt;</c> element.
+    /// </summary>
+    Target BumpAppleVersion => _ => _
+        .Description("Pin every apple-framework csproj's <Version> to <--apple-version>")
+        .Requires(() => AppleVersion)
+        .Executes(() => BumpAppleVersionInternal(AppleVersion!));
+
+    /// <summary>
+    /// Walk every <c>*.csproj</c> under <c>apple-frameworks/</c> and replace
+    /// the apple-train package version (digit-and-dot content only — e.g.
+    /// <c>26.2.1</c> → <c>26.2.3</c>) with <paramref name="targetVersion"/>.
+    /// Returns the number of files rewritten. Throws if a csproj imports
+    /// the SDK but has no recognizable <c>&lt;Version&gt;</c> element — the
+    /// apple-framework convention requires one, so a missing match almost
+    /// always means a malformed csproj.
+    ///
+    /// The digit-and-dot guard on the content keeps this from matching
+    /// non-numeric <c>&lt;Version&gt;</c> elements (e.g. third-party
+    /// libraries using prerelease tags), but is paired with the
+    /// apple-frameworks/ root constraint as defense in depth — third-party
+    /// libraries are versioned per upstream release and must not be touched
+    /// by an SDK/Apple release sweep.
+    ///
+    /// Unlike <see cref="BumpSdkVersionInternal"/>, this does NOT wipe
+    /// sibling obj/ directories: the package version doesn't feed the
+    /// generator's input fingerprint, so stale generated source is fine.
+    /// When called from RegressionValidate, BumpSdkVersionInternal has
+    /// already wiped obj/ in the same pre-flight, so doing it again here
+    /// would be redundant.
+    /// </summary>
+    int BumpAppleVersionInternal(string targetVersion)
+    {
+        Log.Information("--- bump Apple csproj versions → {Version} ---", targetVersion);
+
+        var pattern = new Regex(@"<Version>[\d.]+</Version>", RegexOptions.Compiled);
+        var replacement = $"<Version>{targetVersion}</Version>";
+
+        var updated = 0;
+        var alreadyPinned = 0;
+        var inspected = 0;
+
+        if (!Directory.Exists(AppleFrameworksDir))
+        {
+            Log.Information("--- no apple-frameworks/ directory, skipping ---");
+            return 0;
+        }
+
+        foreach (var csproj in Directory.EnumerateFiles(AppleFrameworksDir, "*.csproj", SearchOption.AllDirectories))
+        {
+            var content = File.ReadAllText(csproj);
+            if (!content.Contains("SwiftBindings.Sdk/", StringComparison.Ordinal))
+                continue;
+
+            inspected++;
+            var rewritten = pattern.Replace(content, _ => replacement);
+            if (rewritten == content)
+            {
+                if (content.Contains(replacement, StringComparison.Ordinal))
+                {
+                    alreadyPinned++;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"BumpAppleVersion: {csproj} has no <Version>NN.N.N</Version> element matching the apple-framework convention. " +
+                        "Check the file's <Version> formatting.");
+                }
+            }
+            else
+            {
+                File.WriteAllText(csproj, rewritten);
+                updated++;
+                Log.Information("  bumped: {Path}", csproj);
+            }
+        }
+
+        Log.Information(
+            "--- Apple bump complete: {Updated} updated, {Already} already pinned ({Inspected} apple-framework csproj(s) total) ---",
+            updated, alreadyPinned, inspected);
+        return updated;
+    }
 }

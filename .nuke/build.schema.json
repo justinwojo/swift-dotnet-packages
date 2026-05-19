@@ -32,6 +32,7 @@
         "BuildLibrary",
         "BuildTestApp",
         "BuildXcframework",
+        "BumpAppleVersion",
         "BumpSdkVersion",
         "Clean",
         "CleanSwiftBindingOutput",
@@ -140,6 +141,10 @@
         "Aot": {
           "type": "boolean",
           "description": "Use NativeAOT publish for the test app (requires --device + codesign env vars)"
+        },
+        "AppleVersion": {
+          "type": "string",
+          "description": "Apple package version (separate train from SDK, e.g. 26.2.3)"
         },
         "BaseSha": {
           "type": "string",
