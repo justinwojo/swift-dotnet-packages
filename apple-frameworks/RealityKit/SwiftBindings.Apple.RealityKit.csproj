@@ -12,4 +12,11 @@
     <SwiftAppleFrameworkTarget Include="RealityKit" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Generated bindings reference RealityFoundation.Entity, so consumers
+         need the sibling package on restore. ProjectReference alone would
+         not propagate to nuspec <dependencies>. -->
+    <PackageReference Include="SwiftBindings.Apple.RealityFoundation" Version="26.2.3" />
+  </ItemGroup>
 </Project>
