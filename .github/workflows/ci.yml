@@ -118,7 +118,10 @@ jobs:
 
       - name: Install workloads
         if: matrix.kind == 'third-party'
-        run: dotnet workload restore
+        # `dotnet workload restore` needs a project in cwd to read TFMs from;
+        # the repo root has none. Explicit install honors the workloadVersion
+        # pin in global.json.
+        run: dotnet workload install ios macos maccatalyst tvos
 
       - name: Cache NuGet packages
         if: matrix.kind == 'third-party'
@@ -194,7 +197,10 @@ jobs:
 
       - name: Install workloads
         if: matrix.kind == 'apple-framework'
-        run: dotnet workload restore
+        # `dotnet workload restore` needs a project in cwd to read TFMs from;
+        # the repo root has none. Explicit install honors the workloadVersion
+        # pin in global.json.
+        run: dotnet workload install ios macos maccatalyst tvos
 
       - name: Cache NuGet packages
         if: matrix.kind == 'apple-framework'

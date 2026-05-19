@@ -99,7 +99,10 @@ jobs:
           dotnet-quality: preview
 
       - name: Install workloads
-        run: dotnet workload restore
+        # `dotnet workload restore` needs a project in cwd to read TFMs from;
+        # the repo root has none. Explicit install honors the workloadVersion
+        # pin in global.json.
+        run: dotnet workload install ios macos maccatalyst tvos
 
       # Cache must come BEFORE `dotnet tool restore` so the restored
       # ~/.nuget/packages already contains nuke.globaltool on cache-hit
