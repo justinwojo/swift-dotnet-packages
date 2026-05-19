@@ -4,6 +4,22 @@ name: Release
 # Tag-based runs build, test, pack, and publish to NuGet.
 # Manual dispatch supports dry-run mode (build + pack without publish).
 
+# Per-run title in the Actions UI. Tag-push events resolve `github.ref_name` to
+# the tag (e.g. `MatterSupport/26.2.3`); workflow_dispatch uses `inputs.tag`.
+# Without this, the Actions list shows every run as "Release" — unusable when
+# kicking off many libraries at once.
+#
+# Release-wave gotcha: pushing >3 tags in a single `git push origin ...` call
+# silently skips workflow_dispatch for the surplus tags (GHA throttle on tag-
+# push event delivery; no error, no warning). For a multi-package wave, use
+# `workflow_dispatch` instead:
+#   for t in Lib1/1.2.3 Lib2/4.5.6 ...; do
+#     gh workflow run release.yml -f tag="$t" -f dry_run=false
+#   done
+# Single tag pushes still trigger reliably — the throttle only hits bulk pushes.
+run-name: >-
+  Release ${{ inputs.tag || github.ref_name }}${{ inputs.dry_run == true && ' (dry run)' || '' }}
+
 on:
   push:
     tags:

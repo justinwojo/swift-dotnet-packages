@@ -282,3 +282,12 @@ Bumping Stripe's version is a single edit to `version` in `libraries/Stripe/libr
 - Do not pin `SwiftBindings.Runtime` in csproj — it's resolved transitively via the SDK
 - Wrapper xcframework names follow `{ModuleName}SwiftBindings.xcframework` convention
 - See `CONTRIBUTING.md` for library structure patterns (single-package, multi-package vendor, dependent packages)
+
+## Do not ship to nuget.org
+
+Some packages live in this repo for build/test purposes but **must not be published to nuget.org**. Before tagging or dispatching a release for any package, confirm it is not on this list:
+
+- **`apple-frameworks/ActivityKit`** — structural limitation. `Activity<Attributes>` requires user types to conform to `Codable` + `Hashable`, which are compiler-synthesized in Swift; C# can't supply working conformance witnesses for types the Swift compiler never saw. See `apple-frameworks/ActivityKit/README.md` for the full explanation and the source-generator path forward.
+- **`libraries/Kingfisher`** — not planned for ship.
+
+GRDB previously lived here and is no longer in this repo (moved out 2026-04-25). If a do-not-ship package is ever included in a release wave by mistake (tag pushed or `gh workflow run` dispatched), unlist the resulting package on nuget.org (`dotnet nuget delete <id> <version>`) — hard delete is not available via API.
