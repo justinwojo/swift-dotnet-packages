@@ -5,6 +5,16 @@ using System.Text;
 using CryptoKit;
 using Swift.Runtime;
 
+// Caseless Swift enums in CryptoKit (HPKE, AES, Insecure, P256, P384, P521) emit
+// as C# child namespaces of CryptoKit, not as static types. `using CryptoKit;`
+// imports types but not child namespaces, so reference them via aliases.
+using HPKE = CryptoKit.HPKE;
+using AES = CryptoKit.AES;
+using Insecure = CryptoKit.Insecure;
+using P256 = CryptoKit.P256;
+using P384 = CryptoKit.P384;
+using P521 = CryptoKit.P521;
+
 namespace SwiftBindings.CryptoKit.Tests;
 
 internal static class Tests
