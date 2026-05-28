@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [LiveCommunicationKit](https://developer.apple.com/documentation/livecommunicationkit) framework — VoIP and Live Communication conversations on iOS. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/LiveCommunicationKit)** — Swift→C# naming, the conversation manager, the action types, handles & capabilities, and the delegate integration point.
+
 ## Installation
 
 ```

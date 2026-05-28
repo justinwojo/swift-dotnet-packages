@@ -1,0 +1,87 @@
+# {{MODULE_NAME}} for .NET — Usage Guide
+
+<!--
+  This is a scaffolded stub. Fill in the sections below, then delete these
+  comments. The fixed "frame" (opener, Contents, Requirements, Naming
+  conventions, Quick start, Memory & threading, Reference links) should stay;
+  the middle is freeform — add as many domain sections as the API needs.
+  apple-frameworks/StoreKit2/STOREKIT2-GUIDE.md is a fully worked example.
+
+  This file auto-publishes to the wiki page "{{WIKI_PAGE}}" on push to main
+  (scripts/mirror-docs-to-wiki.py). Edit it here, never on the wiki.
+-->
+
+`{{PACKAGE_ID}}` exposes {{MODULE_LINK}} to C# through .NET 10's native Swift
+interop — direct Swift calls, not Objective-C proxy wrappers. This guide maps
+the Swift workflow to the generated C# surface.
+<!-- ↑ Replace with a real one-paragraph opener describing what this binds. -->
+
+## Contents
+
+- [Requirements & install](#requirements--install)
+- [Naming conventions](#naming-conventions)
+- [Quick start](#quick-start)
+<!-- Add your domain sections here as you write them. -->
+- [Memory & threading](#memory--threading)
+- [Reference links](#reference-links)
+
+## Requirements & install
+
+- .NET 10.0+
+- iOS {{MIN_IOS}}+
+<!-- Add the other platforms this package targets (macOS / Mac Catalyst / tvOS). -->
+- macOS host for development
+
+```
+dotnet add package {{PACKAGE_ID}}
+```
+
+```csharp
+using {{MODULE_NAME}};
+```
+
+## Naming conventions
+
+The generator applies a few consistent transforms over the Swift names. This is
+the highest-value section of the guide — it's the one thing users can't get
+from the native/third-party docs. Fill in the deltas that matter here:
+
+| Swift | C# | Rule |
+|---|---|---|
+| `func load(...) async` | `LoadAsync(...)` | `async` methods gain an `Async` suffix and return `Task`/`Task<T>` |
+| `obj.someValue` | `obj.SomeValue` | properties are PascalCase |
+| `enum Foo { case bar(...) }` | `Foo` class with `.Tag` + `TryGetBar(out …)` | Swift enums-with-payload project to a class with a tag + `TryGet*` accessors |
+<!-- Add package-specific transforms: optionals, closures, result projections, etc. -->
+
+## Quick start
+
+<!-- One complete, copy-pasteable example that actually runs. -->
+
+```csharp
+using {{MODULE_NAME}};
+
+// ...
+```
+
+<!--
+  Domain sections go here — fully app-dependent. Lifecycle walkthroughs,
+  feature areas, gotchas. Mirror the API's natural workflow.
+-->
+
+## Memory & threading
+
+Generated types implement `ISwiftObject` / `IDisposable`. For short-lived
+locals the finalizer cleans up, but `using var` is the recommended pattern for
+deterministic cleanup — `Dispose` is safe on every generated type and
+double-Dispose is a no-op.
+
+```csharp
+using var thing = new SomeType();
+```
+
+<!-- Note any @MainActor hops, cold async sequences, or other threading caveats. -->
+
+## Reference links
+
+<!-- Defer to native / third-party docs for full API semantics — these are bindings. -->
+- {{MODULE_LINK}} — upstream source / documentation

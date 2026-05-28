@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [RealityKit](https://developer.apple.com/documentation/realitykit) framework — Apple's high-level 3D rendering, simulation, and AR composition framework. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/RealityKit)** — Swift→C# naming, ARView, hit-testing, entity gestures, render/debug options, and the runtime gaps to avoid.
+
 Most of the entity / component / scene / transform surface lives in the underlying [RealityFoundation](https://developer.apple.com/documentation/realityfoundation) framework and is shipped as a separate `SwiftBindings.Apple.RealityFoundation` package. This package adds the RealityKit-specific surface (`ARView`, gesture recognizers, render and debug options) and depends on `SwiftBindings.Apple.RealityFoundation`.
 
 ## Installation

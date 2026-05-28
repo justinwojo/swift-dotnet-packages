@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [CryptoKit](https://developer.apple.com/documentation/cryptokit) framework — hashing, symmetric and authenticated encryption, key agreement, and signatures. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/CryptoKit)** — Swift→C# naming, authenticated encryption (AES-GCM/ChaChaPoly), hashing, HMAC, key agreement, ECDSA signatures, and the generic-overload caveats that decide which APIs are callable.
+
 ## Installation
 
 ```

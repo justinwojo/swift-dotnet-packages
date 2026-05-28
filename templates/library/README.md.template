@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for {{MODULE_LINK}} on .NET.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/{{WIKI_PAGE}})** — Swift→C# naming, quick start, and the full binding surface.
+
 ## Installation
 
 ```

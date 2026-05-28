@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [Translation](https://developer.apple.com/documentation/translation) framework — on-device language translation and language-availability queries. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Translation)** — requests/responses, sessions, batch translation, language availability, and error handling, with the exact C# names emitted by the generator.
+
 ## Installation
 
 ```

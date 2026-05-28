@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [Matter](https://developer.apple.com/documentation/matter) framework — the Apple-provided client surface for the Matter smart-home protocol (`MTRSetupPayload`, `MTRDeviceController`, cluster types, etc.). Matter is a pure Objective-C framework; these bindings are generated through the SDK's ObjC pipeline so that the full Matter type surface is reachable from C# alongside the Swift-bridged frameworks.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Matter)** — ObjC→C# naming, setup-payload parsing, the device-controller surface, and how the huge cluster catalog maps to C#.
+
 Most production code reaches Matter via [MatterSupport](https://developer.apple.com/documentation/mattersupport), which exposes the `MatterAddDeviceRequest` flow on top of the Matter types declared here. If you need that flow, install `SwiftBindings.Apple.MatterSupport` and this package will be pulled in transitively.
 
 ## Installation

@@ -439,6 +439,14 @@ for product_name in "${PRODUCT_LIST[@]}"; do
         PRODUCT_DIR="$LIB_DIR"
     fi
 
+    # The wiki page name is the package directory's basename — the same value
+    # scripts/mirror-docs-to-wiki.py derives from the guide's parent dir. For a
+    # single-product library that's the library name; for multi-product it's
+    # the per-product subdirectory.
+    WIKI_PAGE="$(basename "$PRODUCT_DIR")"
+    # Guide filename follows the screaming-case convention (STOREKIT2-GUIDE.md).
+    GUIDE_NAME="$(echo "$MODULE_NAME" | tr '[:lower:]' '[:upper:]')-GUIDE.md"
+
     # Skip csproj/README for internal products
     if is_internal "$product_name"; then
         continue
@@ -462,7 +470,18 @@ for product_name in "${PRODUCT_LIST[@]}"; do
     sed -e "s|{{PACKAGE_ID}}|$PACKAGE_ID|g" \
         -e "s|{{MODULE_NAME}}|$MODULE_NAME|g" \
         -e "s|{{MODULE_LINK}}|$MODULE_LINK|g" \
+        -e "s|{{WIKI_PAGE}}|$WIKI_PAGE|g" \
         "$TEMPLATE_DIR/README.md.template" > "$PRODUCT_DIR/README.md"
+
+    # <NAME>-GUIDE.md — usage-guide stub. Auto-publishes to the wiki on merge
+    # to main (scripts/mirror-docs-to-wiki.py). Authors fill in the body; the
+    # README links here. Drop the file if a package doesn't warrant a guide.
+    sed -e "s|{{PACKAGE_ID}}|$PACKAGE_ID|g" \
+        -e "s|{{MODULE_NAME}}|$MODULE_NAME|g" \
+        -e "s|{{MODULE_LINK}}|$MODULE_LINK|g" \
+        -e "s|{{WIKI_PAGE}}|$WIKI_PAGE|g" \
+        -e "s|{{MIN_IOS}}|$MIN_IOS|g" \
+        "$TEMPLATE_DIR/__MODULE_NAME__-GUIDE.md.template" > "$PRODUCT_DIR/$GUIDE_NAME"
 done
 
 # ── Summary ──────────────────────────────────────────────────────────────────
@@ -479,12 +498,16 @@ for product_name in "${PRODUCT_LIST[@]}"; do
             echo "  - $product_name/ (internal — no bindings)"
         fi
     elif [ "$IS_MULTI" = true ]; then
+        guide_name="$(echo "$product_name" | tr '[:lower:]' '[:upper:]')-GUIDE.md"
         echo "  - $product_name/"
         echo "    - $csproj_name"
         echo "    - README.md"
+        echo "    - $guide_name (usage-guide stub — fill in & it auto-syncs to the wiki)"
     else
+        guide_name="$(echo "$product_name" | tr '[:lower:]' '[:upper:]')-GUIDE.md"
         echo "  - $csproj_name"
         echo "  - README.md"
+        echo "  - $guide_name (usage-guide stub — fill in & it auto-syncs to the wiki)"
     fi
 done
 echo ""

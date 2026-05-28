@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [RealityFoundation](https://developer.apple.com/documentation/realityfoundation) framework — the entity/component/scene foundation that RealityKit re-exports. Most of the RealityKit type surface (`Entity`, `Component`, `Scene`, `ModelEntity`, materials, transforms, animation) lives here. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/RealityFoundation)** — Swift→C# naming, entity hierarchies, transforms, components, meshes/materials, and the runtime gaps to avoid.
+
 ## Installation
 
 ```

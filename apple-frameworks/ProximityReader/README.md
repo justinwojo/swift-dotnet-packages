@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [ProximityReader](https://developer.apple.com/documentation/proximityreader) framework — Tap to Pay on iPhone, contactless payment-card reads, and mobile-document NFC reads. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/ProximityReader)** — Swift→C# naming, the reader/session lifecycle, payment & VAS reads, mobile documents, and error handling.
+
 ## Installation
 
 ```

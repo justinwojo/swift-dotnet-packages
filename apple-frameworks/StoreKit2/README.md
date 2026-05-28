@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's StoreKit 2 — the Swift-first In-App Purchase API on top of [StoreKit](https://developer.apple.com/documentation/storekit). These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/StoreKit2)** — Swift→C# naming, the complete purchase lifecycle, subscriptions, transaction verification, and error handling.
+
 ## Installation
 
 ```
@@ -59,6 +61,7 @@ var refundDesc = Transaction.RefundRequestError.DuplicateRequest.GetErrorDescrip
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/StoreKit2) — full C# walkthrough of the binding surface
 - [Apple StoreKit framework](https://developer.apple.com/documentation/storekit)
 - [In-App Purchase](https://developer.apple.com/in-app-purchase/)
 

@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [MusicKit](https://developer.apple.com/documentation/musickit) framework — Apple Music catalog access, library access, and playback. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/MusicKit)** — authorization, subscription status, catalog search, recommendations, library editing, and playback, mapped to the generated C# surface.
+
 ## Installation
 
 ```

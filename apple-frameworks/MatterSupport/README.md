@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [MatterSupport](https://developer.apple.com/documentation/mattersupport) framework — the Swift-level `MatterAddDeviceRequest` flow that drives Apple's system commissioning UI for Matter accessories.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/MatterSupport)** — Swift→C# naming, the add-device request flow, device criteria, and the cross-module `Matter.MTRSetupPayload` reference.
+
 `MatterAddDeviceRequest.setupPayload` returns `Matter.MTRSetupPayload`, so this package takes a NuGet dependency on [`SwiftBindings.Apple.Matter`](https://www.nuget.org/packages/SwiftBindings.Apple.Matter). `dotnet add package SwiftBindings.Apple.MatterSupport` pulls both in.
 
 ## Installation

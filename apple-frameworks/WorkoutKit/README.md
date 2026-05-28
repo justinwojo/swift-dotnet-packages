@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [WorkoutKit](https://developer.apple.com/documentation/workoutkit) framework — building custom workouts, single-goal and pacer workouts, interval blocks, and scheduling them to Apple Watch. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/WorkoutKit)** — goals, steps, interval blocks, alerts, the four workout types, plans, and scheduling, with the exact emitted C# signatures.
+
 ## Installation
 
 ```

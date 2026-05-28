@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [RoomPlan](https://developer.apple.com/documentation/roomplan) framework — LiDAR-based 3D room capture and structured-floorplan reconstruction. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/RoomPlan)** — Swift→C# naming, the capture/build/result workflow, inspecting a CapturedRoom, and USDZ export.
+
 ## Installation
 
 ```

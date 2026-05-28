@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [WeatherKit](https://developer.apple.com/documentation/weatherkit) framework — current conditions, hourly and daily forecasts, severe-weather alerts, and historical data. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/WeatherKit)** — the complete fetch path (`WeatherService` → `Weather` → current/hourly/daily forecasts), reading `Measurement<T>` values, conditions/precipitation/wind/UV/moon enums, alerts, attribution, and the APIs that aren't bound yet.
+
 ## Installation
 
 ```

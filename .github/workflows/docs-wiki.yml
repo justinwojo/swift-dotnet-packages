@@ -1,0 +1,51 @@
+name: Publish guides to wiki
+
+# Mirrors per-package usage guides (*-GUIDE.md) into the repo's GitHub wiki.
+#
+# Deliberately decoupled from releases: guides are docs on `main`, not shipped
+# artifacts, so this runs whenever a guide changes — independent of the
+# per-binding tag cadence in release.yml (one tag, a bulk wave, or none).
+# scripts/mirror-docs-to-wiki.py only commits/pushes when the rendered wiki
+# content actually changed, so a no-op run produces no wiki commit.
+#
+# First-run prerequisite: a GitHub wiki only has a backing `<repo>.wiki.git`
+# repository once at least one page has been created. Create any page once via
+# the repo's Wiki tab; thereafter this workflow keeps it in sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apple-frameworks/**/*-GUIDE.md'
+      - 'libraries/**/*-GUIDE.md'
+      - 'scripts/mirror-docs-to-wiki.py'
+      - '.github/workflows/docs-wiki.yml'
+  workflow_dispatch:
+
+# Push to the wiki repo over HTTPS using the run's GITHUB_TOKEN.
+permissions:
+  contents: write
+
+# Serialize wiki syncs so two quick merges can't race on `git push`.
+concurrency:
+  group: docs-wiki
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone wiki
+        run: |
+          git clone \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" \
+            wiki
+
+      - name: Mirror guides into wiki
+        run: |
+          python3 scripts/mirror-docs-to-wiki.py \
+            --wiki-dir "$GITHUB_WORKSPACE/wiki" \
+            --repo-url "${{ github.server_url }}/${{ github.repository }}"

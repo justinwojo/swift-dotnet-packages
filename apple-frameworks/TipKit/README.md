@@ -2,6 +2,8 @@
 
 Native .NET bindings for Apple's [TipKit](https://developer.apple.com/documentation/tipkit) framework — in-app tips for surfacing app features. These are not Objective-C proxy wrappers; they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/TipKit)** — the tip/rule/event/status model in C#, datastore configuration, display-frequency options, UIKit presentation, and why tips must be authored in a Swift companion.
+
 ## Installation
 
 ```

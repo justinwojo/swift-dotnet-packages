@@ -2,8 +2,6 @@
 
 `SwiftBindings.Apple.StoreKit2` exposes Apple's [StoreKit 2](https://developer.apple.com/documentation/storekit) In-App Purchase API to C# through .NET 10's native Swift interop. The API mirrors Swift's StoreKit closely; this guide maps the Swift workflow to the generated C# surface and walks the full purchase lifecycle end to end.
 
-> **Looking for `purchase()`?** Swift's `product.purchase()` is exposed as **`product.PurchaseAsync()`**. Every `async` Swift method gets an `Async` suffix in C# — see [Naming conventions](#naming-conventions).
-
 ## Contents
 
 - [Requirements & install](#requirements--install)
