@@ -222,6 +222,38 @@ internal static class Tests
             Fail("AuthorizationCenter.AuthorizationStatus", ex.Message);
         }
 
+        // Test 16: FamilyActivityPicker SwiftUI bridge. The SDK generates both sides of
+        // the bridge — the C# P/Invokes ([LibraryImport("FamilyControlsBridge", ...)]) and
+        // the Swift @_cdecl trampolines (SBW_FamilyControls_FamilyActivityPicker_*) — and
+        // now also builds and bundles the native FamilyControlsBridge library as a separate
+        // xcframework. Creating the session exercises that the native library is loadable
+        // (no DllNotFoundException) and that the picker is constructed on the main thread;
+        // ReadSelection round-trips the selection through the Swift JSON encode/decode path.
+        try
+        {
+            var selection = new FamilyActivitySelection(includeEntireCategory: true);
+            using var session = FamilyActivityPickerSession.Create(selection);
+            if (session.Handle == IntPtr.Zero)
+                throw new InvalidOperationException("FamilyActivityPickerSession.Create returned a null handle");
+
+            var vc = session.ViewController;
+            if (vc is null)
+                throw new InvalidOperationException("FamilyActivityPickerSession.ViewController was null");
+
+            var roundTripped = session.ReadSelection();
+            if (roundTripped is null)
+                throw new InvalidOperationException("ReadSelection returned null");
+            if (roundTripped.IncludeEntireCategory != selection.IncludeEntireCategory)
+                throw new InvalidOperationException(
+                    $"selection round-trip mismatch: expected IncludeEntireCategory={selection.IncludeEntireCategory}, got {roundTripped.IncludeEntireCategory}");
+
+            Pass("FamilyActivityPicker bridge create + selection JSON round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("FamilyActivityPicker bridge create + selection JSON round-trip", ex.Message);
+        }
+
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
         if (failed == 0)

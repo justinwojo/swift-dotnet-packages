@@ -187,9 +187,17 @@ string? text = FamilyControlsError.Restricted.GetErrorDescription();   // may be
 
 ## The picker (SwiftUI)
 
-Apple's `FamilyActivityPicker` — the system UI a user taps through to choose apps/categories — is a **SwiftUI `View`**. SwiftUI views are not bound as ordinary callable C# types; the generator emits a SwiftUI bridge instead (`FamilyControls.SwiftUIBridge`). What the bindings expose for embedding in a hosted SwiftUI surface are the session bridge types `FamilyActivityTitleViewSession` and `FamilyActivityIconViewSession` (each with a `Create(Action? onAppear, Action? onDisappear)` factory and `Dispose()`), used to render the title/icon for a selected activity.
+Apple's `FamilyActivityPicker` — the system UI a user taps through to choose apps/categories — is a **SwiftUI `View`**. SwiftUI views are not bound as ordinary callable C# types; the generator emits a SwiftUI bridge instead (`FamilyControls.SwiftUIBridge`) that hosts the view in a `UIHostingController` reachable from C#. The bindings expose three session bridge types — `FamilyActivityPickerSession`, `FamilyActivityTitleViewSession`, and `FamilyActivityIconViewSession` — each with a `Create(...)` factory and `Dispose()`. The picker session takes a `FamilyActivitySelection`, surfaces its `ViewController` for presentation, and exposes `ReadSelection()` to round-trip the user's choice back through the bridge.
 
-> **Limitation:** there is no direct C# call that pops the picker and hands you back a `FamilyActivitySelection`. Presenting the picker requires the SwiftUI hosting path. From plain C# you can still construct, read, persist, compare, and apply a `FamilyActivitySelection` you obtained elsewhere — you just can't drive the picker UI imperatively.
+```csharp
+using var selection = new FamilyActivitySelection(includeEntireCategory: true);
+using var session = FamilyActivityPickerSession.Create(selection);
+var viewController = session.ViewController;          // present this from your host
+// ...after the user dismisses the picker:
+var updated = session.ReadSelection();
+```
+
+The native `FamilyControlsBridge` library that backs these P/Invokes is built and bundled as a separate xcframework inside the package — no host-side wiring required.
 
 ## Memory & threading
 
