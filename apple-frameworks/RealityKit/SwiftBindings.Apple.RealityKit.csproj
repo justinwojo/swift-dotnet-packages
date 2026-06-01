@@ -1,10 +1,10 @@
-<Project Sdk="SwiftBindings.Sdk/0.12.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.1">
   <PropertyGroup>
     <!-- Override single-TFM default from Directory.Build.props -->
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2</TargetFrameworks>
     <PackageId>SwiftBindings.Apple.RealityKit</PackageId>
-    <Version>26.2.4</Version>
+    <Version>26.2.5</Version>
     <Description>Native Swift interop bindings for Apple RealityKit</Description>
     <PackageTags>$(CommonPackageTags);realitykit;ar;augmented-reality;3d</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -18,6 +18,6 @@
     <!-- Generated bindings reference RealityFoundation.Entity, so consumers
          need the sibling package on restore. ProjectReference alone would
          not propagate to nuspec <dependencies>. -->
-    <PackageReference Include="SwiftBindings.Apple.RealityFoundation" Version="26.2.4" />
+    <PackageReference Include="SwiftBindings.Apple.RealityFoundation" Version="26.2.5" />
   </ItemGroup>
 </Project>
