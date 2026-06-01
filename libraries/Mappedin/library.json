@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/MappedIn/ios.git",
-  "version": "6.2.0",
+  "version": "6.3.0",
   "mode": "zip",
   "minIOS": "15.0",
   "zipUrl": "https://github.com/MappedIn/ios/releases/download/{version}/Mappedin.xcframework.zip",
