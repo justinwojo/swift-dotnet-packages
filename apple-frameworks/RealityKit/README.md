@@ -32,6 +32,7 @@ using RealityFoundation;   // Entity, Component, Scene, Transform, ModelEntityâ€
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/RealityKit) â€” full C# walkthrough of the binding surface
 - [Apple RealityKit framework](https://developer.apple.com/documentation/realitykit)
 
 ## How It Works

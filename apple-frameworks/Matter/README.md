@@ -31,6 +31,7 @@ var payload = parser.PopulatePayload(out error);
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Matter) — full C# walkthrough of the binding surface
 - [Apple Matter framework](https://developer.apple.com/documentation/matter)
 
 ## How It Works

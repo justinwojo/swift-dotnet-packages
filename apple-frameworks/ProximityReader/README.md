@@ -42,6 +42,7 @@ The `PaymentCardReader`, `MobileDocumentReader`, `StoreAndForwardBatch`, and sup
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/ProximityReader) — full C# walkthrough of the binding surface
 - [Apple ProximityReader framework](https://developer.apple.com/documentation/proximityreader)
 - [Tap to Pay on iPhone](https://developer.apple.com/tap-to-pay-on-iphone/)
 

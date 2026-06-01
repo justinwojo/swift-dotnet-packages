@@ -59,6 +59,7 @@ var sealedBox = AES.GCM.Seal(plaintext, key, aad);
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/CryptoKit) — full C# walkthrough of the binding surface
 - [Apple CryptoKit framework](https://developer.apple.com/documentation/cryptokit)
 
 ## Caveats

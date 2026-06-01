@@ -35,6 +35,7 @@ var step = new IntervalStep(IntervalStep.PurposeType.Work);
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/WorkoutKit) — full C# walkthrough of the binding surface
 - [Apple WorkoutKit framework](https://developer.apple.com/documentation/workoutkit)
 
 ## Caveats

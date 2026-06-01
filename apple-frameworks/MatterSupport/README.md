@@ -36,6 +36,7 @@ The `MatterAddDeviceRequest.perform()` flow drives Apple's system UI for adding 
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/MatterSupport) — full C# walkthrough of the binding surface
 - [Apple MatterSupport framework](https://developer.apple.com/documentation/mattersupport)
 - [Apple Matter framework](https://developer.apple.com/documentation/matter)
 

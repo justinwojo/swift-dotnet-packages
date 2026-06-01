@@ -35,6 +35,7 @@ var engine = SetTranslatingAction.TranslationEngine.Default;
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/LiveCommunicationKit) — full C# walkthrough of the binding surface
 - [Apple LiveCommunicationKit framework](https://developer.apple.com/documentation/livecommunicationkit)
 
 ## How It Works

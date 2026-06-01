@@ -41,6 +41,7 @@ var description = FamilyControlsError.AuthenticationMethodUnavailable.GetErrorDe
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/FamilyControls) — full C# walkthrough of the binding surface
 - [Apple FamilyControls framework](https://developer.apple.com/documentation/familycontrols)
 
 ## How It Works

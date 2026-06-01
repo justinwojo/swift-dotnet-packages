@@ -36,6 +36,7 @@ Tips.ResetDatastore();
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/TipKit) — full C# walkthrough of the binding surface
 - [Apple TipKit framework](https://developer.apple.com/documentation/tipkit)
 
 ## Caveats

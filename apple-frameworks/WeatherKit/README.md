@@ -49,6 +49,7 @@ var dayCount = weather.DailyForecast.Count;
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/WeatherKit) — full C# walkthrough of the binding surface
 - [Apple WeatherKit framework](https://developer.apple.com/documentation/weatherkit)
 
 ## How It Works

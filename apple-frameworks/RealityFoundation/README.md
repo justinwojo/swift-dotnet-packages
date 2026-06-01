@@ -27,6 +27,7 @@ using RealityFoundation;
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/RealityFoundation) — full C# walkthrough of the binding surface
 - [Apple RealityFoundation framework](https://developer.apple.com/documentation/realityfoundation)
 
 ## How It Works

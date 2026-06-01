@@ -46,6 +46,7 @@ var dolby = AudioVariant.DolbyAtmos.GetDescription();
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/MusicKit) — full C# walkthrough of the binding surface
 - [Apple MusicKit framework](https://developer.apple.com/documentation/musickit)
 
 ## How It Works

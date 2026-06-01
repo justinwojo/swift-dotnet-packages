@@ -38,6 +38,7 @@ var description = RoomCaptureSessionCaptureErrorExtensions.GetErrorDescription(
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/RoomPlan) — full C# walkthrough of the binding surface
 - [Apple RoomPlan framework](https://developer.apple.com/documentation/roomplan)
 
 ## How It Works

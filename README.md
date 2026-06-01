@@ -32,7 +32,7 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 
 ## Third-party libraries
 
-Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/swift-dotnet-bindings).
+Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/spm-to-xcframework).
 
 | Package | Description | Version |
 |---|---|---|

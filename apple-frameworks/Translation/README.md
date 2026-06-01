@@ -39,6 +39,7 @@ var reason = error.FailureReason;
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Translation) — full C# walkthrough of the binding surface
 - [Apple Translation framework](https://developer.apple.com/documentation/translation)
 
 ## How It Works
