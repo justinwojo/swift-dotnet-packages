@@ -7,7 +7,9 @@
     <PackageId>{{PACKAGE_ID}}</PackageId>
     <Version>{{VERSION}}</Version>
     <Description>Native Swift interop bindings for the {{MODULE_NAME}} library</Description>
-    <PackageTags>swift;dotnet;interop;{{MODULE_NAME_LOWER}};ios</PackageTags>
+    <!-- $(CommonPackageTags) is the shared baseline (swift, dotnet, interop, bindings, ios, maui, apple, ...) from Directory.Build.props.
+         Append the library name plus any domain keywords, e.g. $(CommonPackageTags);{{MODULE_NAME_LOWER}};image-loading -->
+    <PackageTags>$(CommonPackageTags);{{MODULE_NAME_LOWER}}</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

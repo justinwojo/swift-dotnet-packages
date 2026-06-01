@@ -10,7 +10,11 @@
     <PackageProjectUrl>https://github.com/justinwojo/swift-dotnet-packages</PackageProjectUrl>
     <RepositoryUrl>https://github.com/justinwojo/swift-dotnet-packages</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>swift;dotnet;interop;bindings</PackageTags>
+    <!-- Universal baseline tags applied to every package. Per-package csprojs
+         extend this with platform tags (macos/tvos/maccatalyst per their TFMs)
+         and domain keywords, e.g. <PackageTags>$(CommonPackageTags);macos;storekit</PackageTags>. -->
+    <CommonPackageTags>swift;dotnet;interop;bindings;ios;maui;apple;xamarin;dotnet-ios</CommonPackageTags>
+    <PackageTags>$(CommonPackageTags)</PackageTags>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
