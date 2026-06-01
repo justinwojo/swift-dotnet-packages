@@ -58,7 +58,7 @@ The generator applies a few consistent transforms over the Swift names. Knowing 
 
 ## Quick start
 
-A complete authorization → catalog search flow. Note: `MusicCatalogSearchRequest` is **not** directly constructible from C# (see [What you can and can't construct](#what-you-can-and-cant-construct)); the runnable end-to-end search entry point is `MusicCatalogSearchSuggestionsRequest`, shown here with the authorization gate.
+A complete authorization → catalog search flow using `MusicCatalogSearchSuggestionsRequest`. Both `MusicCatalogSearchRequest` and `MusicCatalogSearchSuggestionsRequest` are constructible from C# via array-shim factories (see [What you can and can't construct](#what-you-can-and-cant-construct)); this example uses the suggestions request as the more ergonomic entry point for a term-based query.
 
 ```csharp
 using MusicKit;
@@ -433,19 +433,25 @@ string atmos = AudioVariant.DolbyAtmos.GetDescription();
 
 ## What you can and can't construct
 
-This is the most important practical caveat for MusicKit's request types. Swift constructs most requests with an `init` that takes a search term and result kinds; **the generator did not emit public constructors for several of them**, so you can't `new` them up directly:
+This is the most important practical caveat for MusicKit's request types. Swift constructs most requests with an `init` that takes a search term and an array of result-kind metatypes (`[any MusicCatalogSearchable.Type]`). The generator can't emit those metatype-array initializers directly, so the package ships hand-authored **`Create(term, types)` factory shims** (in `Shims/MusicKitShims.cs`, backed by `@_cdecl` trampolines) that take a `[Flags]` bitmask instead of the Swift metatype array:
 
 | Request type | Constructible from C#? | How |
 |---|---|---|
-| `MusicCatalogSearchSuggestionsRequest` | ✅ | `MusicCatalogSearchSuggestionsRequest.Create_C11D4260(term)` |
+| `MusicCatalogSearchSuggestionsRequest` | ✅ | `MusicCatalogSearchSuggestionsRequest.Create_C11D4260(term)` or `.Create(term, MusicCatalogSearchTypes)` |
 | `MusicPersonalRecommendationsRequest` | ✅ | `new MusicPersonalRecommendationsRequest()` |
 | `MusicRecentlyPlayedRequest<T>` | ✅ | `new MusicRecentlyPlayedRequest<T>()` |
 | `MusicCatalogResourceRequest<T>` | ✅ | `new MusicCatalogResourceRequest<T>()` |
-| `MusicCatalogSearchRequest` | ❌ | **no public constructor emitted** — you can configure (`Limit`/`Offset`/`IncludeTopResults`) and call `ResponseAsync()` on an instance you already hold, but you cannot create one |
-| `MusicLibrarySearchRequest` | ❌ | **no public constructor emitted** |
-| `MusicCatalogChartsRequest` | ❌ | **no public constructor emitted** |
+| `MusicCatalogSearchRequest` | ✅ | `MusicCatalogSearchRequest.Create(term, MusicCatalogSearchTypes)` (array-shim factory) |
+| `MusicLibrarySearchRequest` | ✅ | `MusicLibrarySearchRequest.Create(term, MusicLibrarySearchTypes)` (array-shim factory) |
+| `MusicCatalogChartsRequest` | ❌ | **no public constructor emitted, and no shim** — configure (`Limit`/`Offset`/`IncludeTopResults`) and call `ResponseAsync()` only on an instance you already hold |
 
-For catalog *term* search from C# today, prefer `MusicCatalogSearchSuggestionsRequest`. The `MusicCatalogSearchRequest`/`MusicLibrarySearchRequest` *response* surface (`Songs`, `Albums`, …) and their `ResponseAsync()` are fully usable once you obtain an instance — only the constructor is missing.
+```csharp
+// Catalog term search — construct via the array-shim factory:
+using var req = MusicCatalogSearchRequest.Create("daft punk",
+    MusicCatalogSearchTypes.Album | MusicCatalogSearchTypes.Artist);
+```
+
+The bitmask is validated: a value carrying bits outside the corresponding `MusicCatalogSearchTypes` / `MusicLibrarySearchTypes` enum throws `ArgumentException` with a diagnostic stray-bit hex string. The response surface (`Songs`, `Albums`, …) and `ResponseAsync()` are usable once you hold an instance. Only `MusicCatalogChartsRequest` still lacks any construction path.
 
 > **What's validated.** The test app exercises authorization status + singletons, `MusicSubscription.GetCurrentAsync()` and its property reads, the player singletons (`ApplicationMusicPlayer.Shared`, `SystemMusicPlayer.Shared` on iOS), `MusicLibrary.Shared`, all the plain/projected enum tags and `GetDescription()` round-trips, `MusicItemCollection<Song>`'s index ergonomics, and type-metadata loads for the core item and request types. Live catalog/library *content* (running an actual search, reading real `Song`/`Album` data, mutating the library, playing audio) requires the MusicKit entitlement + an authorized, subscribed device and is **not** exercised by the test app — those code paths are accurate to the generated signatures but unverified at runtime here.
 

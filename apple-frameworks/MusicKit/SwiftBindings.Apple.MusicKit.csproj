@@ -1,15 +1,65 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
   <PropertyGroup>
     <!-- Override single-TFM default from Directory.Build.props -->
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2;net10.0-macos26.2;net10.0-maccatalyst26.2;net10.0-tvos26.2</TargetFrameworks>
     <PackageId>SwiftBindings.Apple.MusicKit</PackageId>
-    <Version>26.2.3</Version>
+    <Version>26.2.4</Version>
     <Description>Native Swift interop bindings for Apple MusicKit</Description>
+    <PackageTags>$(CommonPackageTags);macos;tvos;maccatalyst;musickit;apple-music;music</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <SwiftAppleFrameworkTarget Include="MusicKit" />
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="Shims/MusicKitShims.swift" />
   </ItemGroup>
+
+  <!-- Stage hand-rolled @_cdecl shims into the per-framework wrapper Swift
+       directory so the generator's wrapper compile (CollectSwiftFiles) and
+       the SDK's second-slice find pick them up alongside the auto-emitted
+       MusicKit.Wrapper.swift. Naming the staged file *.Wrapper.swift is
+       what makes the second-slice find recognise it.
+
+       The SDK's fingerprint stamp (swift-binding.stamp) does NOT include
+       these user-provided shim sources, so an unchanged staged file would
+       leave the fingerprint up-to-date and the generator would skip even
+       though the shim changed. The target maintains a sidecar SHA file
+       next to the staged copy; when the source hash differs from the
+       sidecar we delete the stamp to force the generator to re-run.
+       Ordering: this target runs before _ComputeSwiftFingerprint so the
+       stamp deletion takes effect for the same build's freshness check. -->
+  <Target Name="_StageMusicKitShims"
+          BeforeTargets="_ComputeSwiftFingerprint">
+    <PropertyGroup>
+      <_MusicKitShimSrc>$(MSBuildThisFileDirectory)Shims/MusicKitShims.swift</_MusicKitShimSrc>
+      <_MusicKitShimStaged>$(_SwiftBindingIntermediateDir)MusicKitShims.Wrapper.swift</_MusicKitShimStaged>
+      <_MusicKitShimHashFile>$(_SwiftBindingIntermediateDir)MusicKitShims.Wrapper.swift.sha256</_MusicKitShimHashFile>
+      <_MusicKitShimStamp>$(_SwiftBindingIntermediateDir)swift-binding.stamp</_MusicKitShimStamp>
+    </PropertyGroup>
+    <MakeDir Directories="$(_SwiftBindingIntermediateDir)"
+             Condition="Exists('$(_MusicKitShimSrc)')" />
+    <Hash ItemsToHash="$(_MusicKitShimSrc)"
+          Condition="Exists('$(_MusicKitShimSrc)')">
+      <Output TaskParameter="HashResult" PropertyName="_MusicKitShimNewHash" />
+    </Hash>
+    <ReadLinesFromFile File="$(_MusicKitShimHashFile)"
+                       Condition="Exists('$(_MusicKitShimHashFile)')">
+      <Output TaskParameter="Lines" PropertyName="_MusicKitShimOldHash" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_MusicKitShimNeedsStage Condition="Exists('$(_MusicKitShimSrc)')
+                                          AND ('$(_MusicKitShimNewHash)' != '$(_MusicKitShimOldHash)'
+                                               OR !Exists('$(_MusicKitShimStaged)'))">true</_MusicKitShimNeedsStage>
+    </PropertyGroup>
+    <Delete Files="$(_MusicKitShimStamp)"
+            Condition="'$(_MusicKitShimNeedsStage)' == 'true' AND Exists('$(_MusicKitShimStamp)')" />
+    <Copy SourceFiles="$(_MusicKitShimSrc)"
+          DestinationFiles="$(_MusicKitShimStaged)"
+          Condition="'$(_MusicKitShimNeedsStage)' == 'true'" />
+    <WriteLinesToFile File="$(_MusicKitShimHashFile)"
+                      Lines="$(_MusicKitShimNewHash)"
+                      Overwrite="true"
+                      Condition="'$(_MusicKitShimNeedsStage)' == 'true'" />
+  </Target>
 </Project>

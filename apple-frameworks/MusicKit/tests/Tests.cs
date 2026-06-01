@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Justin Wojciechowski.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using MusicKit;
 using Swift.Runtime;
 
@@ -452,37 +453,119 @@ internal static class Tests
             Fail("RecentlyPlayedMusicItem.CaseTag values", ex.Message);
         }
 
-        // Test 37a: MusicItemCollection<Song> ergonomic methods (Index/FormIndex/Distance) are concrete,
-        // not SB0001 stubs. Constructing a real MusicItemCollection<Song> requires Apple Music
-        // entitlement + authorization, so we verify the API surface by reflection. These were the
-        // 4 SB0001 from Round 5 that Session 6 cleared via the DoesPairingSatisfyAssociatedTypeConstraints
-        // relaxation — the Round 6 grep gate confirms 0 SB0001, this test enforces the shape.
+        // Test 37a: MusicItemCollection<Song> ergonomic Collection members (Index/FormIndex/Distance)
+        // are concrete (callable), not SB0001 direct-CallConvSwift stubs. Constructing a real
+        // MusicItemCollection<Song> requires Apple Music entitlement + authorization, so we can't call
+        // them with live data — but the surface is proven two complementary ways:
+        //
+        //   (1) Compile-time shape proof — ALL platforms, including the NativeAOT device. The local
+        //       function below references every ergonomic member exactly as a consumer would: instance
+        //       index(after:)/formIndex(after:) (int overloads) and the CSM concrete-specialization
+        //       extensions index(_:offsetBy:)/distance(from:to:) ((nint, nint), callable as
+        //       collection.Index(i, n) / collection.Distance(a, b)). If the generator dropped or renamed
+        //       any of them the test app would not COMPILE for any TFM, so this is a platform-invariant
+        //       guarantee the callable surface exists. It also roots the *CsmExtensions class so the
+        //       NativeAOT trimmer keeps it (a reflection-only probe is not a "use" — without a real
+        //       call-site the trimmer strips the whole static class and Assembly.GetTypes() omits it on
+        //       device). The CSM static-dispatch shape is deliberate: it avoids the Mono `!ji->async`
+        //       crash an open-generic instance method with 2+ type-metadata arguments trips.
+        //
+        //   (2) Runtime [Obsolete]/metadata probe — JIT/full-metadata runtimes only. Asserts none of the
+        //       members carry [Obsolete] (the SB0001 marker the CSM shape exists to avoid). [Obsolete] is
+        //       a custom attribute; under NativeAOT trimming, custom-attribute and uncalled-member
+        //       metadata are stripped, so this probe on device would pass VACUOUSLY (no attribute found
+        //       != attribute absent) — false confidence, not coverage. The generated MusicKit.cs is
+        //       byte-identical across TFMs, so verifying the non-stub property on the JIT runtime fully
+        //       establishes it for the shipped code; the generator's own MusicItemBagTests /
+        //       GenericIndexableCollectionTests additionally call bag.Index(0, 2) / bag.Distance(0, 3) /
+        //       coll.Index(0, 2) for real on both Mono-sim and NativeAOT-device.
+
+        // (1) Compile-time shape proof + NativeAOT trimmer root. Never invoked — we cannot build a
+        // MusicItemCollection<Song> without an Apple Music entitlement — but its body must compile,
+        // which proves the ergonomic surface exists, and the ldftn below roots it for the trimmer.
+        static void RootMusicItemCollectionErgonomics(MusicItemCollection<Song> c)
+        {
+            c.Index((int)0);                   // index(after:) instance overload
+            c.FormIndex((int)0);               // formIndex(after:) instance overload
+            _ = c.Index((nint)0, (nint)0);     // index(_:offsetBy:) CSM extension
+            _ = c.Distance((nint)0, (nint)0);  // distance(from:to:) CSM extension
+        }
+        GC.KeepAlive((Action<MusicItemCollection<Song>>)RootMusicItemCollectionErgonomics);
+
+        // Type.GetMethod cannot see extension methods, so the CSM members are looked up on the
+        // *CsmExtensions classes (JIT-only branch below).
+        static MethodInfo? FindCsmExtension(Type receiver, string name, params Type[] tailArgs)
+        {
+            foreach (var ext in receiver.Assembly.GetTypes())
+            {
+                if (!(ext.IsAbstract && ext.IsSealed)) continue; // static class
+                if (!ext.Name.EndsWith("CsmExtensions", StringComparison.Ordinal)) continue;
+                foreach (var m in ext.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                {
+                    if (m.Name != name) continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length != tailArgs.Length + 1) continue;
+                    if (ps[0].ParameterType != receiver) continue;
+                    var match = true;
+                    for (var i = 0; i < tailArgs.Length; i++)
+                        if (ps[i + 1].ParameterType != tailArgs[i]) { match = false; break; }
+                    if (match) return m;
+                }
+            }
+            return null;
+        }
+
         try
         {
             var t = typeof(MusicItemCollection<Song>);
             if (!typeof(System.Collections.Generic.IReadOnlyList<Song>).IsAssignableFrom(t))
                 throw new InvalidOperationException("MusicItemCollection<Song> does not implement IReadOnlyList<Song>");
 
-            // Two arities each — int and nint overloads.
-            if (t.GetMethod("Index", new[] { typeof(int) }) is null)
-                throw new InvalidOperationException("Index(int) missing");
-            if (t.GetMethod("FormIndex", new[] { typeof(int) }) is null)
-                throw new InvalidOperationException("FormIndex(int) missing");
-            if (t.GetMethod("Index", new[] { typeof(int), typeof(int) }) is null)
-                throw new InvalidOperationException("Index(int, int) missing");
-            if (t.GetMethod("Distance", new[] { typeof(int), typeof(int) }) is null)
-                throw new InvalidOperationException("Distance(int, int) missing");
-
-            // Index methods must NOT be marked [Obsolete] (Session 6 promoted them out of SB0001).
-            foreach (var m in t.GetMethods())
+            // (2) [Obsolete]/metadata probe needs complete reflection metadata. Under NativeAOT
+            // trimming that metadata (custom attributes + uncalled members) is stripped, which would
+            // make the [Obsolete] check pass vacuously — so run it only where full metadata is
+            // guaranteed. The compile-time proof above already covers the callable surface on device,
+            // and the non-stub property is platform-invariant (same generated MusicKit.cs everywhere).
+            if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
             {
-                if (m.Name is "Index" or "FormIndex" or "Distance"
-                    && m.GetCustomAttributes(typeof(ObsoleteAttribute), false).Length > 0)
-                {
-                    throw new InvalidOperationException($"{m.Name}({string.Join(",", Array.ConvertAll(m.GetParameters(), p => p.ParameterType.Name))}) is still [Obsolete] — Session 6 SB0001 cleanup regressed");
-                }
+                Log("MusicItemCollection<Song> ergonomics: callable surface proven at compile time; " +
+                    "[Obsolete]/metadata probe skipped under NativeAOT (trimmed metadata would pass " +
+                    "vacuously) — covered on Mono-sim + generator MusicItemBagTests.");
+                Pass("MusicItemCollection<Song> ergonomics shape");
             }
-            Pass("MusicItemCollection<Song> ergonomics shape");
+            else
+            {
+                // index(after:)/formIndex(after:) — instance methods with int convenience overloads.
+                if (t.GetMethod("Index", new[] { typeof(int) }) is null)
+                    throw new InvalidOperationException("Index(int) missing");
+                if (t.GetMethod("FormIndex", new[] { typeof(int) }) is null)
+                    throw new InvalidOperationException("FormIndex(int) missing");
+
+                // index(_:offsetBy:)/distance(from:to:) — CSM concrete-specialization extension methods
+                // (nint, nint). Callable as collection.Index(i, distance) / collection.Distance(start, end).
+                var indexOffsetBy = FindCsmExtension(t, "Index", typeof(nint), typeof(nint));
+                if (indexOffsetBy is null)
+                    throw new InvalidOperationException("Index(offsetBy:) CSM extension missing");
+                var distance = FindCsmExtension(t, "Distance", typeof(nint), typeof(nint));
+                if (distance is null)
+                    throw new InvalidOperationException("Distance(from:to:) CSM extension missing");
+
+                // None of these members may be [Obsolete] — that's the SB0001-stub marker.
+                foreach (var m in t.GetMethods())
+                {
+                    if (m.Name is "Index" or "FormIndex" or "Distance"
+                        && m.GetCustomAttributes(typeof(ObsoleteAttribute), false).Length > 0)
+                    {
+                        throw new InvalidOperationException($"{m.Name}({string.Join(",", Array.ConvertAll(m.GetParameters(), p => p.ParameterType.Name))}) is still [Obsolete] — SB0001 cleanup regressed");
+                    }
+                }
+                foreach (var m in new[] { indexOffsetBy, distance })
+                {
+                    if (m.GetCustomAttributes(typeof(ObsoleteAttribute), false).Length > 0)
+                        throw new InvalidOperationException($"{m.Name}(nint, nint) CSM extension is [Obsolete] — SB0001 cleanup regressed");
+                }
+                Pass("MusicItemCollection<Song> ergonomics shape");
+            }
         }
         catch (Exception ex)
         {
@@ -513,6 +596,82 @@ internal static class Tests
             // Framework error (no entitlement, no auth) counts as pass — marshalling worked.
             Log($"MusicSubscription.GetCurrentAsync threw as expected: {ex.Message}");
             Pass("MusicSubscription property reads (framework error accepted)");
+        }
+
+        // Test 38: MusicCatalogSearchRequest.Create — array-shim factory for
+        // init(term: String, types: [any MusicCatalogSearchable.Type]).
+        // Marshalling-only: no auth/entitlement required. Framework errors on
+        // hypothetical .Response calls would count as pass; this test stops at
+        // construction since that's what the shim covers.
+        try
+        {
+            var req = MusicCatalogSearchRequest.Create("rush",
+                MusicCatalogSearchTypes.Album | MusicCatalogSearchTypes.Artist);
+            if (req is null)
+                throw new InvalidOperationException("Create returned null");
+            req.Dispose();
+            Pass("MusicCatalogSearchRequest.Create (array-shim factory)");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Fail("MusicCatalogSearchRequest.Create", ex.Message);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Fail("MusicCatalogSearchRequest.Create", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicCatalogSearchRequest.Create", ex.Message);
+        }
+
+        // Test 39: MusicCatalogSearchRequest.Create with unknown bits throws.
+        // Validates the shim's bit-validation contract: the @_cdecl returns
+        // non-zero and the partial wraps it as ArgumentException with a
+        // diagnostic stray-bit hex string.
+        try
+        {
+            const MusicCatalogSearchTypes badMask = (MusicCatalogSearchTypes)0x10000u; // unused bit
+            try
+            {
+                var req = MusicCatalogSearchRequest.Create("rush", badMask);
+                Fail("MusicCatalogSearchRequest.Create unknown-bits guard",
+                    "expected ArgumentException, got success");
+                req.Dispose();
+            }
+            catch (ArgumentException)
+            {
+                Pass("MusicCatalogSearchRequest.Create unknown-bits guard");
+            }
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicCatalogSearchRequest.Create unknown-bits guard", ex.Message);
+        }
+
+        // Test 40: MusicCatalogSearchSuggestionsRequest.Create — sibling shim
+        // for init(term:includingTopResultsOfTypes:). Same mask convention, zero
+        // mask legal (Apple's default is []).
+        try
+        {
+            var req = MusicCatalogSearchSuggestionsRequest.Create("rush",
+                MusicCatalogSearchTypes.Song);
+            if (req is null)
+                throw new InvalidOperationException("Create returned null");
+            req.Dispose();
+            Pass("MusicCatalogSearchSuggestionsRequest.Create (array-shim factory)");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
         }
 
         // Summary
