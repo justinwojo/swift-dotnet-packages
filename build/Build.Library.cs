@@ -157,7 +157,16 @@ partial class Build
     /// for hands-off argument escaping and async drains both pipes to avoid
     /// stderr-buffer deadlocks during long compiles.
     /// </remarks>
-    static int RunDotnet(IEnumerable<string> args)
+    static int RunDotnet(IEnumerable<string> args) => RunDotnet(args, onLine: null);
+
+    /// <summary>
+    /// Overload that routes child stdout/stderr through <paramref name="onLine"/>
+    /// instead of the global <see cref="Log"/> sink. The parallel
+    /// regression-validate harness uses this to tee each cell's output into a
+    /// dedicated <c>/tmp/regression-cell-*.log</c> file so the main session log
+    /// stays readable when N cells run concurrently.
+    /// </summary>
+    static int RunDotnet(IEnumerable<string> args, Action<string>? onLine)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -169,12 +178,25 @@ partial class Build
         foreach (var a in args)
             psi.ArgumentList.Add(a);
 
-        Log.Information("> dotnet {Args}", string.Join(' ', psi.ArgumentList));
+        var argsLine = "> dotnet " + string.Join(' ', psi.ArgumentList);
+        if (onLine is null) Log.Information("{Line}", argsLine);
+        else onLine(argsLine);
 
         using var process = System.Diagnostics.Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start dotnet");
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) Log.Information("{Line}", e.Data); };
-        process.ErrorDataReceived  += (_, e) => { if (e.Data is not null) Log.Information("{Line}", e.Data); };
+
+        if (onLine is null)
+        {
+            process.OutputDataReceived += (_, e) => { if (e.Data is not null) Log.Information("{Line}", e.Data); };
+            process.ErrorDataReceived  += (_, e) => { if (e.Data is not null) Log.Information("{Line}", e.Data); };
+        }
+        else
+        {
+            // Per-cell sink: write under a lock so concurrent stdout/stderr
+            // drains can't interleave half-lines in the tee file.
+            process.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (onLine) onLine(e.Data); };
+            process.ErrorDataReceived  += (_, e) => { if (e.Data is not null) lock (onLine) onLine(e.Data); };
+        }
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 

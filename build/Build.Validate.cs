@@ -36,8 +36,12 @@ partial class Build
     /// behavior wrap with <see cref="ReportTerminalStatus"/>. Used by both
     /// <see cref="ValidateSim"/> and the regression-validate orchestrator.
     /// </summary>
-    TestRunResult ValidateSimFor(string library, int timeoutSeconds, string? deviceUdid, string rid)
+    TestRunResult ValidateSimFor(string library, int timeoutSeconds, string? deviceUdid, string rid,
+        Action<string>? onLine = null)
     {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+        void Err(string line) { if (onLine is null) Log.Error("{Line}", line); else onLine(line); }
+
         var (testDir, appName, bundleId) = ResolveTestNames(library);
         var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
         if (!Directory.Exists(appPath))
@@ -53,10 +57,10 @@ partial class Build
         sim.InstallApp(appPath);
         sim.CleanStaleConsoleFifos();
 
-        Log.Information("Launching {App} on {Device} (timeout: {Timeout}s)", appName, sim.Device, timeoutSeconds);
+        Info($"Launching {appName} on {sim.Device} (timeout: {timeoutSeconds}s)");
         var psi = sim.BuildLaunchPsi(bundleId);
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: line => Log.Information("{Line}", line))
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
         sim.TerminateApp(bundleId);
@@ -65,13 +69,13 @@ partial class Build
         if (afterCrashCount > beforeCrashCount)
         {
             var newest = NewestCrashLog(crashDir, appName);
-            Log.Error("=== CRASH LOG DETECTED ===");
+            Err("=== CRASH LOG DETECTED ===");
             if (newest is not null)
-                Log.Error("{Path}\n{Head}", newest, HeadOfFile(newest, 50));
+                Err($"{newest}\n{HeadOfFile(newest, 50)}");
             return new TestRunResult(TestRunStatus.Crashed, "Crash log appeared after sim test run", result.Output, result.CrashLogs);
         }
 
-        Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+        Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
 
@@ -94,8 +98,11 @@ partial class Build
     /// instead of throwing — callers wrap with <see cref="ReportTerminalStatus"/>.
     /// Auto-detects the device UDID if <paramref name="deviceUdid"/> is null/empty.
     /// </summary>
-    TestRunResult ValidateDeviceFor(string library, int timeoutSeconds, string? deviceUdid, bool aot, string rid)
+    TestRunResult ValidateDeviceFor(string library, int timeoutSeconds, string? deviceUdid, bool aot, string rid,
+        Action<string>? onLine = null)
     {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+
         var (testDir, appName, bundleId) = ResolveTestNames(library);
 
         var config = aot ? "Release" : "Debug";
@@ -116,19 +123,19 @@ partial class Build
                     "Error: No connected device found.\n" +
                     "Connect a device and try again, or specify a device UDID.\n" +
                     "Available devices: xcrun devicectl list devices");
-            Log.Information("Auto-detected device: {Udid}", udid);
+            Info($"Auto-detected device: {udid}");
         }
 
         var dev = new DevicectlClient(udid);
         dev.InstallApp(appPath);
 
-        Log.Information("Launching {App} on {Device} (timeout: {Timeout}s)", appName, udid, timeoutSeconds);
+        Info($"Launching {appName} on {udid} (timeout: {timeoutSeconds}s)");
         var psi = dev.BuildLaunchPsi(bundleId);
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: line => Log.Information("{Line}", line))
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
-        Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+        Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
 
@@ -215,8 +222,10 @@ partial class Build
     /// Pure-function validate-mac core. Returns the <see cref="TestRunResult"/>
     /// instead of throwing — callers wrap with <see cref="ReportTerminalStatus"/>.
     /// </summary>
-    TestRunResult ValidateMacFor(string library, int timeoutSeconds, string rid)
+    TestRunResult ValidateMacFor(string library, int timeoutSeconds, string rid, Action<string>? onLine = null)
     {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+
         var (testDir, appName, _) = ResolveTestNames(library);
 
         var config = "Debug";
@@ -245,7 +254,7 @@ partial class Build
                 string.Join("\n  ", candidates) + "\n" +
                 $"Run BuildTestApp --library {library} --platform macos first.");
 
-        Log.Information("Launching Mac test: {Binary} (timeout: {Timeout}s)", binaryPath, timeoutSeconds);
+        Info($"Launching Mac test: {binaryPath} (timeout: {timeoutSeconds}s)");
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -255,10 +264,10 @@ partial class Build
             UseShellExecute = false,
         };
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: line => Log.Information("{Line}", line))
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
-        Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+        Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
 
@@ -287,8 +296,11 @@ partial class Build
     /// <see cref="TestRunResult"/> instead of throwing — callers wrap with
     /// <see cref="ReportTerminalStatus"/>.
     /// </summary>
-    TestRunResult ValidateMacCatalystFor(string library, int timeoutSeconds, string rid)
+    TestRunResult ValidateMacCatalystFor(string library, int timeoutSeconds, string rid,
+        Action<string>? onLine = null)
     {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+
         var (testDir, appName, _) = ResolveTestNames(library);
         var appPath = ResolveAppPath(testDir, "Debug", "maccatalyst", rid, appName);
         var binaryPath = appPath / "Contents" / "MacOS" / appName;
@@ -298,7 +310,7 @@ partial class Build
                 $"MacCatalyst binary not found at {binaryPath}\n" +
                 $"Run BuildTestApp --library {library} --platform maccatalyst first.");
 
-        Log.Information("Launching MacCatalyst test: {Binary} (timeout: {Timeout}s)", binaryPath, timeoutSeconds);
+        Info($"Launching MacCatalyst test: {binaryPath} (timeout: {timeoutSeconds}s)");
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -308,10 +320,10 @@ partial class Build
             UseShellExecute = false,
         };
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: line => Log.Information("{Line}", line))
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
-        Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+        Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
 

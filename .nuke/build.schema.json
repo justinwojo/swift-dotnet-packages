@@ -231,6 +231,15 @@
             "type": "string"
           }
         },
+        "RegressionJobs": {
+          "type": "integer",
+          "description": "RegressionValidate: max parallel cells (default 4, capped at 16). NativeAOT publish + concurrent app-bundle builds can push a 32 GB box into swap before CPU saturates — bump only after observing actual memory headroom",
+          "format": "int32"
+        },
+        "RegressionSerial": {
+          "type": "boolean",
+          "description": "RegressionValidate: run cells sequentially (equivalent to --regression-jobs 1)"
+        },
         "ReuseSim": {
           "type": "boolean",
           "description": "Reuse already-booted simulator (CI)"

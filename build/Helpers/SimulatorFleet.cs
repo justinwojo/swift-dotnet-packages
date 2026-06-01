@@ -112,6 +112,159 @@ public sealed class SimulatorFleet
     }
 
     /// <summary>
+    /// Find every already-booted iPhone simulator UDID. Used by
+    /// <see cref="EnsureFleet"/> to seed the fleet from pre-booted sims
+    /// before creating fresh ones.
+    /// </summary>
+    public IReadOnlyList<string> FindAllBootedIPhones()
+    {
+        var booted = new List<string>();
+        var devices = ListDevices();
+        if (!devices.RootElement.TryGetProperty("devices", out var byRuntime))
+            return booted;
+
+        foreach (var runtime in byRuntime.EnumerateObject())
+        {
+            if (!runtime.Name.Contains("iOS", StringComparison.Ordinal)) continue;
+            foreach (var d in runtime.Value.EnumerateArray())
+            {
+                var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                if (name.Contains("iPhone", StringComparison.Ordinal) && State(d) == "Booted")
+                    if (Udid(d) is { } u) booted.Add(u);
+            }
+        }
+        return booted;
+    }
+
+    /// <summary>
+    /// Find up to <paramref name="want"/> shutdown iPhone simulators, in
+    /// preference order. Used by <see cref="EnsureFleet"/> to top up a partial
+    /// fleet from already-existing sims before creating fresh ones (each
+    /// <c>simctl create</c> + boot is ~10–20s of CoreSimulator overhead).
+    /// Excludes anything in <paramref name="exclude"/> so the same sim isn't
+    /// returned twice when the fleet already counted it.
+    /// </summary>
+    public IReadOnlyList<string> FindShutdownIPhones(int want, ISet<string> exclude, string? runtimePrefix = null)
+    {
+        var found = new List<string>();
+        if (want <= 0) return found;
+        var devices = ListDevices();
+        if (!devices.RootElement.TryGetProperty("devices", out var byRuntime))
+            return found;
+
+        // Preferred runtimes first, then any iOS runtime — same shape as FindExistingShutdownIPhone.
+        var runtimes = byRuntime.EnumerateObject()
+            .Where(r => r.Name.Contains("iOS", StringComparison.Ordinal))
+            .Where(r => runtimePrefix is null || r.Name.Contains(runtimePrefix, StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var runtime in runtimes)
+        {
+            // Preferred device names first.
+            foreach (var pref in PreferredDevices)
+            {
+                foreach (var d in runtime.Value.EnumerateArray())
+                {
+                    if (found.Count >= want) return found;
+                    if (DeviceMatches(d, pref) && IsAvailable(d) && State(d) != "Booted")
+                    {
+                        var u = Udid(d);
+                        if (u is not null && !exclude.Contains(u) && !found.Contains(u))
+                            found.Add(u);
+                    }
+                }
+            }
+            // Fallback: any iPhone.
+            foreach (var d in runtime.Value.EnumerateArray())
+            {
+                if (found.Count >= want) return found;
+                var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                if (name.Contains("iPhone", StringComparison.Ordinal)
+                    && IsAvailable(d) && State(d) != "Booted")
+                {
+                    var u = Udid(d);
+                    if (u is not null && !exclude.Contains(u) && !found.Contains(u))
+                        found.Add(u);
+                }
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Ensure a fleet of <paramref name="n"/> booted iPhone simulators and
+    /// return their UDIDs. Reuses every already-booted iPhone first (free),
+    /// then adopts shutdown iPhones (cheap), and finally creates fresh ones
+    /// (expensive). Each fresh sim is booted in parallel via
+    /// <c>Task.Run</c> so a fleet of 4 takes ~the boot time of one, not four.
+    ///
+    /// <para>The caller owns shutdown/cleanup. <see cref="FleetMember.WasCreated"/>
+    /// flags sims this call created (vs. reused existing); a typical caller pairs
+    /// <c>ShutdownOne</c>+<c>DeleteOne</c> on created sims only to avoid evicting
+    /// the developer's pre-existing iPhone from their <c>simctl list</c>.</para>
+    /// </summary>
+    public IReadOnlyList<FleetMember> EnsureFleet(int n, string? runtimePrefix = null)
+    {
+        if (n < 1) throw new ArgumentOutOfRangeException(nameof(n), "Fleet size must be ≥ 1");
+
+        var members = new List<FleetMember>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        // 1. Adopt every already-booted iPhone (zero cost).
+        foreach (var udid in FindAllBootedIPhones())
+        {
+            if (members.Count >= n) break;
+            if (seen.Add(udid))
+                members.Add(new FleetMember(udid, WasCreated: false, WasPreBooted: true));
+        }
+
+        // 2. Top up from shutdown iPhones (boot cost only, no create cost).
+        if (members.Count < n)
+        {
+            var need = n - members.Count;
+            var shutdown = FindShutdownIPhones(need, seen, runtimePrefix);
+            foreach (var udid in shutdown)
+            {
+                if (members.Count >= n) break;
+                if (seen.Add(udid))
+                    members.Add(new FleetMember(udid, WasCreated: false, WasPreBooted: false));
+            }
+        }
+
+        // 3. Create fresh sims for any remaining slots (create + boot cost).
+        while (members.Count < n)
+        {
+            var udid = CreateSimulator(runtimePrefix, deviceName: null);
+            if (!seen.Add(udid))
+                continue;
+            members.Add(new FleetMember(udid, WasCreated: true, WasPreBooted: false));
+        }
+
+        // 4. Boot every non-pre-booted member in parallel and wait for readiness.
+        Log.Information("Fleet: {N} simulator(s) ({Pre} pre-booted, {Created} created)",
+            members.Count,
+            members.Count(m => m.WasPreBooted),
+            members.Count(m => m.WasCreated));
+
+        Parallel.ForEach(members, m =>
+        {
+            // Pre-booted sims still need a readiness probe — the developer may have
+            // booted them seconds ago. BootAndWaitForReady is idempotent on a sim
+            // that's already in Booted state (it short-circuits boot, runs WaitUntilBooted
+            // which exits immediately, and WaitUntilResponsive).
+            BootAndWaitForReady(m.Udid);
+        });
+
+        return members;
+    }
+
+    /// <summary>
+    /// One slot in a simulator fleet — the UDID and provenance flags so the
+    /// caller knows whether to leave it alone or shut it down.
+    /// </summary>
+    public sealed record FleetMember(string Udid, bool WasCreated, bool WasPreBooted);
+
+    /// <summary>
     /// Reuse-or-boot. Returns the UDID of an iPhone simulator in the
     /// <c>Booted</c> state. Equivalent of <c>SimManager.prepare_simulator(..., create_fresh=False)</c>.
     /// Drives the <c>--reuse-sim</c> CI flag.

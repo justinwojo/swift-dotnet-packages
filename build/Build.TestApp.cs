@@ -57,9 +57,12 @@ partial class Build
             Log.Information("=== Build complete ===");
         });
 
-    void BuildTestAppSimulator(string library, AbsolutePath testDir, string platform = "ios")
+    void BuildTestAppSimulator(string library, AbsolutePath testDir, string platform = "ios",
+        Action<string>? onLine = null, bool noRestore = false)
     {
-        Log.Information("=== Building {Library} tests for {Platform} ===", library, platform);
+        var startLine = $"=== Building {library} tests for {platform} ===";
+        if (onLine is null) Log.Information("{Line}", startLine);
+        else onLine(startLine);
         var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
         // Pass -f only when necessary: non-default platform always needs it
         // (e.g. --platform macos), and multi-TFM projects need it to select
@@ -73,14 +76,19 @@ partial class Build
         // iossimulator-arm64 selection that Session 3 validated end-to-end.
         if (!string.IsNullOrEmpty(RuntimeIdentifier))
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
-        var exit = RunDotnet(args.ToArray());
+        if (noRestore)
+            args.Add("--no-restore");
+        var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build ({platform}) failed with exit {exit}");
     }
 
-    void BuildTestAppDevice(string library, AbsolutePath testDir)
+    void BuildTestAppDevice(string library, AbsolutePath testDir,
+        Action<string>? onLine = null, bool noRestore = false)
     {
-        Log.Information("=== Building {Library} tests for device ===", library);
+        var startLine = $"=== Building {library} tests for device ===";
+        if (onLine is null) Log.Information("{Line}", startLine);
+        else onLine(startLine);
         var rid = ResolveRid("ios-arm64");
         var args = new List<string>
         {
@@ -88,12 +96,15 @@ partial class Build
         };
         if (IsMultiTfmTestProject(testDir))
             args.AddRange(new[] { "-f", ResolveTfm("ios") });
-        var exit = RunDotnet(args.ToArray());
+        if (noRestore)
+            args.Add("--no-restore");
+        var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build (device) failed with exit {exit}");
     }
 
-    void BuildTestAppNativeAot(string library, AbsolutePath testDir)
+    void BuildTestAppNativeAot(string library, AbsolutePath testDir,
+        Action<string>? onLine = null, bool noRestore = false)
     {
         // Codesign properties (CodesignKey / CodesignProvision / TeamIdentifierPrefix)
         // come from Directory.Build.tests.props.local — a gitignored, per-developer
@@ -106,7 +117,9 @@ partial class Build
         var provisioningProfile = Environment.GetEnvironmentVariable("PROVISIONING_PROFILE");
         var teamId = Environment.GetEnvironmentVariable("TEAM_ID");
 
-        Log.Information("=== Building {Library} tests for device (NativeAOT) ===", library);
+        var startLine = $"=== Building {library} tests for device (NativeAOT) ===";
+        if (onLine is null) Log.Information("{Line}", startLine);
+        else onLine(startLine);
         var rid = ResolveRid("ios-arm64");
         var args = new List<string>
         {
@@ -124,8 +137,10 @@ partial class Build
             args.Add($"-p:CodesignProvision={provisioningProfile}");
         if (!string.IsNullOrEmpty(teamId))
             args.Add($"-p:TeamIdentifierPrefix={teamId}");
+        if (noRestore)
+            args.Add("--no-restore");
 
-        var exit = RunDotnet(args.ToArray());
+        var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)
             throw new InvalidOperationException($"dotnet publish (NativeAOT) failed with exit {exit}");
     }
