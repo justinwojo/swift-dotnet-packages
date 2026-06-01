@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -7,7 +7,7 @@
     <PackageId>SwiftBindings.Lottie</PackageId>
     <Version>4.6.2</Version>
     <Description>.NET bindings for the Lottie Swift library</Description>
-    <PackageTags>swift;dotnet;interop;lottie;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);lottie;animation;vector-animation</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
   </PropertyGroup>

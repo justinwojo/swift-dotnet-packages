@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -8,7 +8,7 @@
     <PackageId>SwiftBindings.Stripe.Connect</PackageId>
     <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeConnect Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripeconnect;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);stripe;stripeconnect;payments</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

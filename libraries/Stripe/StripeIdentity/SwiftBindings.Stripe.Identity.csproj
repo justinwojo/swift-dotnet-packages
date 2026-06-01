@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -7,7 +7,7 @@
     <PackageId>SwiftBindings.Stripe.Identity</PackageId>
     <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeIdentity Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripeidentity;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);stripe;identity-verification;payments</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <SwiftWrapperRequired>false</SwiftWrapperRequired>
   </PropertyGroup>

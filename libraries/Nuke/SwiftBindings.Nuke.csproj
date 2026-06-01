@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <!-- Override single-TFM default from Directory.Build.props -->
@@ -9,7 +9,7 @@
     <PackageId>SwiftBindings.Nuke</PackageId>
     <Version>13.0.6</Version>
     <Description>.NET bindings for the Nuke Swift image loading library</Description>
-    <PackageTags>swift;dotnet;interop;nuke;image-loading;ios;macos;tvos</PackageTags>
+    <PackageTags>$(CommonPackageTags);macos;tvos;nuke;image-loading;image-cache</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
   </PropertyGroup>

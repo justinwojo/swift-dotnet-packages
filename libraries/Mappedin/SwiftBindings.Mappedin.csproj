@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -7,7 +7,7 @@
     <PackageId>SwiftBindings.Mappedin</PackageId>
     <Version>6.2.0</Version>
     <Description>Native Swift interop bindings for the Mappedin indoor mapping library</Description>
-    <PackageTags>swift;dotnet;interop;mappedin;indoor-mapping;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);mappedin;indoor-mapping;maps;wayfinding</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

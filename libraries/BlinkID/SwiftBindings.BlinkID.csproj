@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -9,7 +9,7 @@
     <PackageId>SwiftBindings.BlinkID</PackageId>
     <Version>7.8.0</Version>
     <Description>.NET bindings for the BlinkID Swift library</Description>
-    <PackageTags>swift;dotnet;interop;blinkid;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);blinkid;id-scanning;ocr;document-scanning</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

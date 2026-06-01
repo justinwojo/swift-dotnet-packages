@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.11.0">
+<Project Sdk="SwiftBindings.Sdk/0.12.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -8,7 +8,7 @@
     <PackageId>SwiftBindings.Stripe.CardScan</PackageId>
     <Version>25.15.0</Version>
     <Description>.NET bindings for the StripeCardScan Swift library</Description>
-    <PackageTags>swift;dotnet;interop;stripecardscan;ios</PackageTags>
+    <PackageTags>$(CommonPackageTags);stripe;stripecardscan;card-scanning;payments;ocr</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
