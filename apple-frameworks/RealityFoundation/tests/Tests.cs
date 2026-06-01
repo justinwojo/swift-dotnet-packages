@@ -167,21 +167,97 @@ internal static class Tests
         }
         catch (Exception ex) { Fail("Transform.Identity", ex.Message); }
 
-        // Transform's translation/scale setters take Swift SIMD3<Float> (16-byte
-        // 4-lane aligned), but the generated PInvoke marshals System.Numerics.Vector3
-        // (12 bytes, 3 floats). Under the AAPCS calling convention only the first
-        // lane survives the register split, so writes silently truncate to X.
-        // The 16-byte simd_quatf rotation setter is hit by the same SIMD-by-value
-        // gap on the wrapper boundary (writes vanish entirely). Identity reads
-        // still work end-to-end above. Skip the writers until the SDK lands a
-        // wider marshal for SIMD3 / simd_quatf.
-        Skip("Transform.Translation round-trip", "SDK gap: SIMD3<Float> setter marshalling truncates Vector3 to first lane");
-        Skip("Transform.Scale round-trip", "SDK gap: SIMD3<Float> setter marshalling truncates Vector3 to first lane");
-        Skip("Transform.Rotation round-trip", "SDK gap: simd_quatf setter marshalling drops written Quaternion lanes");
-        // Transform(Matrix4x4) hits the same SIMD-by-value layout mismatch on
-        // the column-vector init parameter — the wrapper observes garbage past
-        // the first lane of each column.
-        Skip("Transform(Matrix4x4) constructor", "SDK gap: simd_float4x4 init parameter marshalling drops lanes past first");
+        // RC-SIMD (apple-framework-gaps/01-marshalling-correctness.md, Task 3).
+        // The translation/scale/rotation setters take Swift SIMD3<Float> / simd_quatf.
+        // Previously the generated PInvoke passed System.Numerics.Vector3/Quaternion
+        // BY VALUE, and the AArch64 register-class mismatch (NEON v0 vs HFA s0,s1,s2)
+        // truncated every write to lane 0. The fix routes simd params through the
+        // indirect/pointer path: the setters now `stackalloc` a buffer, `MarshalToSwift`,
+        // and call a `SBW_Set_*` @_cdecl wrapper taking `IntPtr value` (verified in
+        // obj/.../RealityFoundation.cs). These round-trips assert ALL lanes survive —
+        // if the truncation regressed, Y/Z/W would read back zero. Both sim and device
+        // must pass (the JIT/AOT split is exactly where this used to diverge).
+        try
+        {
+            using var t = Transform.Identity;
+            t.Translation = new Vector3(1.5f, -2.5f, 3.5f);
+            var rt = t.Translation;
+            if (MathF.Abs(rt.X - 1.5f) > 1e-4f || MathF.Abs(rt.Y + 2.5f) > 1e-4f || MathF.Abs(rt.Z - 3.5f) > 1e-4f)
+                throw new InvalidOperationException($"got {rt}, expected (1.5, -2.5, 3.5)");
+            Pass("Transform.Translation round-trip");
+        }
+        catch (Exception ex) { Fail("Transform.Translation round-trip", ex.Message); }
+
+        try
+        {
+            using var t = Transform.Identity;
+            t.Scale = new Vector3(2f, 3f, 4f);
+            var rs = t.Scale;
+            if (MathF.Abs(rs.X - 2f) > 1e-4f || MathF.Abs(rs.Y - 3f) > 1e-4f || MathF.Abs(rs.Z - 4f) > 1e-4f)
+                throw new InvalidOperationException($"got {rs}, expected (2, 3, 4)");
+            Pass("Transform.Scale round-trip");
+        }
+        catch (Exception ex) { Fail("Transform.Scale round-trip", ex.Message); }
+
+        try
+        {
+            using var t = Transform.Identity;
+            // 90° about Y: (0, sin45, 0, cos45). A truncating setter would zero Y/Z/W.
+            var q = Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f));
+            t.Rotation = q;
+            var rq = t.Rotation;
+            // simd_quatf stores the vector as-is, but q and -q are the same rotation;
+            // accept either sign so a normalization flip isn't a false failure.
+            bool Match(Quaternion a, Quaternion b) =>
+                MathF.Abs(a.X - b.X) < 1e-4f && MathF.Abs(a.Y - b.Y) < 1e-4f &&
+                MathF.Abs(a.Z - b.Z) < 1e-4f && MathF.Abs(a.W - b.W) < 1e-4f;
+            if (!Match(rq, q) && !Match(rq, new Quaternion(-q.X, -q.Y, -q.Z, -q.W)))
+                throw new InvalidOperationException($"got {rq}, expected {q} (or its negation)");
+            Pass("Transform.Rotation round-trip");
+        }
+        catch (Exception ex) { Fail("Transform.Rotation round-trip", ex.Message); }
+
+        // Transform(Matrix4x4) — the column-major simd_float4x4 init param now goes
+        // through the @_cdecl wrapper (SBW_..._init_C5C1E657, IntPtr matrix). A pure
+        // translation matrix decomposes to translation (5,6,7); lane truncation would
+        // drop Y/Z. (Translation occupies the same memory slot in row-major Matrix4x4
+        // and column-major simd_float4x4, so the byte-copy marshal aligns here.)
+        try
+        {
+            var m = Matrix4x4.CreateTranslation(5f, 6f, 7f);
+            using var t = new Transform(m);
+            var tr = t.Translation;
+            if (MathF.Abs(tr.X - 5f) > 1e-4f || MathF.Abs(tr.Y - 6f) > 1e-4f || MathF.Abs(tr.Z - 7f) > 1e-4f)
+                throw new InvalidOperationException($"decomposed translation {tr}, expected (5, 6, 7)");
+            Pass("Transform(Matrix4x4) constructor");
+        }
+        catch (Exception ex) { Fail("Transform(Matrix4x4) constructor", ex.Message); }
+
+        // Transform(scale:rotation:translation:) is @inlinable public in RealityKit. The
+        // parser now classifies it correctly as public (an @inlinable member with no
+        // explicit AccessControl attribute is no longer mis-read as module-internal when a
+        // swiftinterface is present), so its @_cdecl wrapper SBW_..._Transform_init_C8B878FF
+        // is emitted and the three SIMD params marshal indirectly through buffer pointers
+        // (CallConvCdecl), exactly like Transform(Matrix4x4). All lanes must round-trip.
+        try
+        {
+            var scale = new Vector3(2f, 3f, 4f);
+            var trans = new Vector3(5f, 6f, 7f);
+            using var t = new Transform(scale, Quaternion.Identity, trans);
+            var rs = t.Scale;
+            var rtr = t.Translation;
+            bool scaleOk = MathF.Abs(rs.X - 2f) < 1e-4f && MathF.Abs(rs.Y - 3f) < 1e-4f && MathF.Abs(rs.Z - 4f) < 1e-4f;
+            bool transOk = MathF.Abs(rtr.X - 5f) < 1e-4f && MathF.Abs(rtr.Y - 6f) < 1e-4f && MathF.Abs(rtr.Z - 7f) < 1e-4f;
+            if (scaleOk && transOk)
+                Pass("Transform(scale,rotation,translation) constructor");
+            else
+                Fail("Transform(scale,rotation,translation) constructor",
+                    $"SIMD lanes truncated through the indirect ctor — got scale={rs} trans={rtr}");
+        }
+        catch (Exception ex)
+        {
+            Fail("Transform(scale,rotation,translation) constructor", ex.Message);
+        }
 
         // Entity lifecycle — parameterless ctor has a @_cdecl wrapper, so
         // running it during the main test pass (not the constructor tail)
@@ -285,12 +361,30 @@ internal static class Tests
                 Pass("Entity.ObservableValue.Transform read");
             }
             catch (Exception ex) { Fail("Entity.ObservableValue.Transform read", ex.Message); }
-            // The setter assignment triggers RealityKit's observation willSet
-            // path, which traps inside re::ecs2::TransformComponent when no
-            // Scene is driving the observation framework (the simulator NonAR
-            // path doesn't satisfy that). Pin the reason for future revisits.
-            Skip("Entity.ObservableValue.Transform write",
-                "Observable.Transform setter traps in RealityKit ecs2 willSet without an attached Scene");
+            // RC-WILLSET preflight guardrail: the Observable.Transform setter
+            // traps inside re::ecs2::TransformComponent's willSet hook when the
+            // entity is not attached to a Scene driving the observation framework.
+            // No ABI route bypasses a property observer, so the generator cannot
+            // intercept this — the safe consumer pattern is to check the public
+            // Entity.Scene predicate up front and surface a clear C# error
+            // instead of letting the native willSet trap (SIGSEGV / EXC_BREAKPOINT).
+            try
+            {
+                if (root.Scene is null)
+                    throw new InvalidOperationException(
+                        "Cannot set Transform on a detached entity; attach to a Scene first.");
+                using var current = root.ObservableValue.Transform;
+                root.ObservableValue.Transform = current;
+                Pass("Entity.ObservableValue.Transform write (with Scene preflight)");
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Detached test entity — preflight surfaces a clear C# message
+                // instead of the Swift willSet trap. This is the documented safe
+                // path, not a regression.
+                Skip("Entity.ObservableValue.Transform write", ex.Message);
+            }
+            catch (Exception ex) { Fail("Entity.ObservableValue.Transform write", ex.Message); }
 
             // ComponentSet — read-only inspection. The mutating Set/Has APIs
             // are existential-shaped (any RealityKit.Component) and either
@@ -381,6 +475,30 @@ internal static class Tests
             Pass("AnchorEntity() constructor");
         }
         catch (Exception ex) { Fail("AnchorEntity() constructor", ex.Message); }
+
+        // §1 (apple-framework-gaps/05-residual-gaps.md): box a concrete AnchorEntity into
+        // the `IHasAnchoring` existential — the exact operation Scene.AddAnchor /
+        // AnchorCollection.Append perform on their parameter (the generated AddAnchor calls
+        // ExistentialContainerFactory.GetOrCreate<IHasAnchoring>). AnchorEntity is
+        // @_originallyDefinedIn(RealityKit) but re-exported by RealityFoundation, so its
+        // IHasAnchoring conformance descriptor is mangled with the *original* module
+        // ($s10RealityKit12AnchorEntityCAA12HasAnchoringAAMc). The generator now recovers
+        // that descriptor (parser original-module fallback) and emits it into
+        // AnchorEntity._protocolConformanceSymbols, and boxes via the runtime concrete type
+        // (Create<AnchorEntity, TProtocol>). GetOrCreate resolves the witness table via
+        // GetProtocolConformanceDescriptor — it throws on a missing conformance, so a
+        // returned container with a non-zero witness-table slot and metadata proves the box.
+        try
+        {
+            using var boxable = new AnchorEntity();
+            var container = Swift.Runtime.ExistentialContainerFactory.GetOrCreate<IHasAnchoring>(boxable);
+            if (container[0] == IntPtr.Zero)
+                throw new InvalidOperationException("IHasAnchoring witness-table slot is null after boxing");
+            if (container.ObjectMetadata.Handle == IntPtr.Zero)
+                throw new InvalidOperationException("boxed existential has null object metadata");
+            Pass("AnchorEntity boxes as IHasAnchoring existential");
+        }
+        catch (Exception ex) { Fail("AnchorEntity boxes as IHasAnchoring existential", ex.Message); }
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

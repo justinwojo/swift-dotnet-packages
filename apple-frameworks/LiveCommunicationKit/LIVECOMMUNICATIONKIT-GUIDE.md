@@ -208,8 +208,10 @@ await history.MarkConversationsAsReadAsync(recentConversations);
 ## Known limitations
 
 - **Live behavior is device + capability gated.** Reporting conversations and performing actions requires the VoIP/LiveCommunicationKit capability on the app and a running system call UI. The bindings construct fine, but the validated surface here is metadata + enum values only.
-- **The delegate is the integration point.** Most of the interesting flow (incoming-call routing, audio-session activation) arrives through `IConversationManagerDelegate` callbacks. Implementing that interface in C# and having Swift invoke it is the unverified part of this binding; test on a physical device.
+- **The delegate is fully wired.** `IConversationManagerDelegate` is backed by a generated `ConversationManagerDelegateProxy` with vtable dispatch for all five methods. Implement the interface in C# and assign it to `manager.Delegate`; Swift will call back through the proxy. Test on a physical device with the VoIP capability to exercise the full round-trip.
 - **No constructor on the singleton managers.** `TelephonyConversationManager` and `ConversationHistoryManager` are reached only through `SharedInstance`.
+- **Three niche APIs are not bound.** A second overload of `pendingConversationActions` (returning an opaque placeholder type), `ConversationHistoryManager.makeMessage` (unsupported placeholder return type), and the predicate-based `ConversationHistoryManager.recentConversations` overload (requires `Foundation.Predicate<…>` which references SwiftUI/Combine) are commented out in the generated bindings. The primary `PendingActions`, `MarkConversationAsReadAsync`, and `MarkConversationsAsReadAsync` APIs are fully bound.
+- **Synthesized `Codable` members pruned.** Several value types implement Swift's `Codable` protocol; the `encode(to:)` and `init(from:)` members are intentionally omitted because `Encoder`/`Decoder` are unresolvable existential protocols. Use `ConversationHistoryManager.RecentConversation.DecodeFromJson(byte[])` for JSON round-tripping where the framework provides it.
 
 ## Memory & threading
 

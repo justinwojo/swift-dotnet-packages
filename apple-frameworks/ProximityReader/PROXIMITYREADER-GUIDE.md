@@ -196,6 +196,8 @@ using MobileDocumentReaderSession docSession = await docReader.PrepareAsync(/* t
 
 The data-request types (`MobileDriversLicenseDataRequest`, `MobileNationalIDCardDataRequest`, `MobilePhotoIDDataRequest`, and their `…RawDataRequest` / `…DisplayRequest` variants) and their nested `Element` / `Response` types model exactly which document fields you request and receive. `MobileDocumentAnyOfDataRequest` lets you accept any of several document types. This is a large, structured surface — consult Apple's docs for the field-by-field semantics.
 
+> **Known limitation — `MobileDocumentReaderSession.requestDocument`:** This method takes an app-defined conformer of the `MobileDocumentRequest` protocol (a protocol with associated types). The binding generator cannot specialize the call site for open-ended conformer sets, so `requestDocument` is not bound and has no C# equivalent. This is a won't-fix under the current source-generation model; a future source-generator-based approach would be required to support arbitrary app-defined conformers. All other `MobileDocumentReader` and `MobileDocumentReaderSession` APIs are fully bound.
+
 ## Errors
 
 Throwing reader calls surface Swift errors as `Swift.Runtime.SwiftException<PaymentCardReaderError>`. Discriminate via the error's `Tag` (`PaymentCardReaderError.CaseTag`):
@@ -219,9 +221,7 @@ catch (SwiftException<PaymentCardReaderError> ex)
 
 `PaymentCardReaderError` also exposes static singletons for common cases (e.g. `PaymentCardReaderError.PrepareExpired`).
 
-Mobile-document errors use a plain enum, `MobileDocumentReaderError` (`Unknown=0`, `NotAllowed`, `NotSupported`, `Cancelled`, `SessionExpired`, `NetworkUnavailable`, `ServiceUnavailable`, `SystemBusy`, `InvalidToken`, `InvalidRequest`, `InvalidResponse`).
-
-> **Known gap:** `MobileDocumentReaderError`'s `GetErrorDescription()` extension is emitted on the C# side but the matching Swift `@_cdecl` wrapper is missing, so calling it throws `EntryPointNotFoundException`. Read the enum case directly instead. Tracked as a generator bug.
+Mobile-document errors use a plain enum, `MobileDocumentReaderError` (`Unknown=0`, `NotAllowed`, `NotSupported`, `Cancelled`, `SessionExpired`, `NetworkUnavailable`, `ServiceUnavailable`, `SystemBusy`, `InvalidToken`, `InvalidRequest`, `InvalidResponse`). Its `GetErrorDescription()` extension returns the localized message (e.g. `MobileDocumentReaderError.Unknown.GetErrorDescription()`).
 
 ## Memory & threading
 

@@ -256,10 +256,9 @@ internal static class Tests
         }
 
         // Test 17: Tips.DonationLimit constructor round-trip (maximumCount only).
-        // Note: DonationLimit is ISwiftObject — do NOT Dispose.
         try
         {
-            var limit = new Tips.DonationLimit(3);
+            using var limit = new Tips.DonationLimit(3);
             var count = limit.MaximumCount;
             if (count != 3)
                 throw new InvalidOperationException($"MaximumCount = {count}, expected 3");
@@ -271,10 +270,9 @@ internal static class Tests
         }
 
         // Test 18: Tips.IgnoresDisplayFrequency constructor round-trip.
-        // Note: IgnoresDisplayFrequency is ISwiftObject — do NOT Dispose.
         try
         {
-            var opt = new Tips.IgnoresDisplayFrequency(true);
+            using var opt = new Tips.IgnoresDisplayFrequency(true);
             if (opt is null)
                 throw new InvalidOperationException("IgnoresDisplayFrequency was null");
             Pass("Tips.IgnoresDisplayFrequency ctor (true)");
@@ -285,10 +283,9 @@ internal static class Tests
         }
 
         // Test 19: Tips.MaxDisplayCount constructor.
-        // Note: MaxDisplayCount is ISwiftObject — do NOT Dispose.
         try
         {
-            var opt = new Tips.MaxDisplayCount(5);
+            using var opt = new Tips.MaxDisplayCount(5);
             if (opt is null)
                 throw new InvalidOperationException("MaxDisplayCount was null");
             Pass("Tips.MaxDisplayCount ctor (5)");

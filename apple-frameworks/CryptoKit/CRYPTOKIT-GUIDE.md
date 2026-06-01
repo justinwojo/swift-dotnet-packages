@@ -236,7 +236,9 @@ Digest types (`SHA256Digest`, …) implement `IDigest<T>`, value equality (`==`,
 
 ## Message authentication (HMAC)
 
-HMAC is exposed as **static one-shot helpers per hash function**, on the extension classes `HMACSHA256CsmExtensions`, `HMACSHA384CsmExtensions`, and `HMACSHA512CsmExtensions`. (The generic `HMAC<H>` *constructor* — the incremental builder — is `[Obsolete]` and not callable; compute the code in one shot instead.)
+HMAC is exposed as **static helpers per hash function**, on the extension classes `HMACSHA256CsmExtensions`, `HMACSHA384CsmExtensions`, and `HMACSHA512CsmExtensions`. Both the one-shot path and the incremental builder are reachable through these classes: the CSM (concrete-specialization) engine monomorphizes `HMAC<H>` into per-hash factories — `HMACSHA256CsmExtensions.FromSHA256(key)`, `HMACSHA384CsmExtensions.FromSHA384(key)`, etc. — that hand you a real `HMAC<H>` to feed with `Update`. You can also construct `HMAC<H>` directly with `new HMAC<SHA256>(key)` (same simulator-only NativeAOT caveat as the `From{Hash}` factories — see below).
+
+> **Simulator only (incremental path).** The `From{Hash}` → `Update` → `Finalize` path works on the simulator (Mono JIT) but currently **throws on a NativeAOT device build** — resolving the `HashFunction` protocol conformance descriptor triggers a `dlopen("@rpath/CryptoKit.framework/CryptoKit")` call that fails because CryptoKit is an Apple system framework at `/System/Library/Frameworks`, not bundled in the app's `@rpath` (`TypeInitializationException` → `SwiftRuntimeException: Unable to load library`). The **one-shot** `AuthenticationCode(...)` helpers below work on both simulator and device. Tracked in `apple-framework-gaps/05-residual-gaps.md`; prefer the one-shot helpers for shipped device code.
 
 ```csharp
 using CryptoKit;
@@ -261,7 +263,20 @@ Each `HMACSHA{256,384,512}CsmExtensions` class provides:
 | `AuthenticationCode(Foundation.Data data, SymmetricKey key)` | `HashedAuthenticationCode<H>` | |
 | `IsValidAuthenticationCode(byte[] code, byte[] data, SymmetricKey key)` | `bool` | verify raw MAC bytes |
 | `IsValidAuthenticationCode(Foundation.Data code, …)` | `bool` | several `code`-type overloads (`byte[]`, `Data`, `SymmetricKey`, the `*Digest` types) |
-| `Update(this HMAC<H> self, byte[] data)` | `void` | incremental update (requires an `HMAC<H>` you cannot currently construct) |
+| `From{Hash}(SymmetricKey key)` | `HMAC<H>` | construct the incremental builder (`FromSHA256`, `FromSHA384`, …) — **simulator only** (throws on NativeAOT device; see note above) |
+| `Update(HMAC<H> self, byte[] data)` | `void` | incremental update; call repeatedly |
+| `Finalize(HMAC<H> self)` | `HashedAuthenticationCode<H>` | finish and return the MAC |
+
+The incremental flow mirrors Swift's `var h = HMAC<SHA256>(key:); h.update(data:); h.finalize()`:
+
+```csharp
+// Simulator-only incremental path (use the one-shot AuthenticationCode on device)
+var hmac = HMACSHA256CsmExtensions.FromSHA256(key);
+HMACSHA256CsmExtensions.Update(hmac, message[..20]);   // static-call form avoids
+HMACSHA256CsmExtensions.Update(hmac, message[20..]);   // clashing with object.Finalize
+HashedAuthenticationCode<SHA256> mac = HMACSHA256CsmExtensions.Finalize(hmac);
+// byte-identical to HMACSHA256CsmExtensions.AuthenticationCode(message, key)
+```
 
 `HashedAuthenticationCode<H>` is `IDisposable` and does not expose a raw-bytes accessor directly; to verify, feed the received MAC bytes into the matching `IsValidAuthenticationCode(byte[] code, …)` overload rather than comparing bytes yourself.
 
@@ -297,7 +312,7 @@ Key-agreement members (same shape for `Curve25519`, `P256`, `P384`, `P521`):
 
 ## Digital signatures
 
-ECDSA signing and verification are available on the `Signing` nested classes of `P256`, `P384`, and `P521`. (Curve25519/EdDSA signing is **verification-only** from C# — see [Known limitations](#known-limitations).)
+ECDSA signing and verification are available on the `Signing` nested classes of `P256`, `P384`, and `P521`. Ed25519 signing via `Curve25519.Signing.PrivateKey` is also fully available (see below).
 
 ```csharp
 using CryptoKit;
@@ -329,12 +344,18 @@ Signing members (`P256` / `P384` / `P521`, identical shape):
 
 > The `ECDSASignature` type lives at `Swift.CryptoKit.P256.Signing.ECDSASignature` (it is supplied by the shared `SwiftBindings.Apple` supplement). You normally hold it as the return value of `Signature(...)` and pass it straight back into `IsValidSignature(...)`.
 
-**Curve25519 signature verification** works (the private-key `Signature(...)` does not — see below):
+`Curve25519.Signing.PrivateKey.Signature(...)` returns `byte[]` (the raw Ed25519 signature) rather than a typed `ECDSASignature` — pass those bytes directly to `pub.IsValidSignature(byte[] signature, byte[] data)`.
+
+**Curve25519/Ed25519 signing and verification** are both fully available:
 
 ```csharp
-using var key = new Curve25519.Signing.PrivateKey();
-Curve25519.Signing.PublicKey pub = key.PublicKey;     // .RawRepresentation is byte[]
-bool ok = pub.IsValidSignature(signatureBytes, messageBytes);   // byte[] overloads
+using var signingKey = new Curve25519.Signing.PrivateKey();
+byte[] message = Encoding.UTF8.GetBytes("sign me");
+byte[] sig = signingKey.Signature(message);           // byte[] overload
+// or: signingKey.Signature(Foundation.Data data)
+
+Curve25519.Signing.PublicKey pub = signingKey.PublicKey;  // .RawRepresentation is byte[]
+bool ok = pub.IsValidSignature(sig, message);             // byte[] overloads
 ```
 
 ## Errors
@@ -374,15 +395,16 @@ When a call like `AES.GCM.Open` fails authentication, catch the thrown exception
 The generator emits the **concrete `byte[]` / `Foundation.Data` overloads** of CryptoKit's generic methods, which cover the common path. The open-generic forms and a few constructors are emitted only as `[Obsolete("SB0001")]` stubs — they will produce a compiler warning and will not run correctly. Avoid:
 
 - **The generic AEAD overloads** — `AES.GCM.Seal<TPlaintext>(...)`, `AES.GCM.Open<TAuthenticatedData>(...)`, and the ChaChaPoly equivalents. Use the non-generic `byte[]` / `Data` overloads instead (these work).
-- **`HMAC<H>` constructor** — the incremental HMAC builder is not constructible. Use the one-shot `HMACSHA{256,384,512}CsmExtensions.AuthenticationCode(...)` helpers.
-- **Curve25519 signing** — `Curve25519.Signing.PrivateKey.Signature<D>(...)` is obsolete (no concrete overload is emitted), so you cannot *produce* Ed25519 signatures from C#. **Verification** (`Curve25519.Signing.PublicKey.IsValidSignature(byte[], byte[])`) does work. P256/P384/P521 signing is fully available.
+- **`HMAC<H>` incremental builder on device** — the `HMACSHA{256,384,512}CsmExtensions.From{Hash}(key)` factories and the `Update`/`Finalize` flow work **on the simulator** (Mono JIT). On a NativeAOT device build, resolving the `HashFunction` protocol conformance descriptor triggers a `dlopen("@rpath/CryptoKit.framework/CryptoKit")` call that fails because CryptoKit is an Apple system framework at `/System/Library/Frameworks`, not bundled in the app's `@rpath`; the result is a `TypeInitializationException` on the first CSM call. For device code use the one-shot `AuthenticationCode(...)` helpers. (See HMAC section / `apple-framework-gaps/05-residual-gaps.md`.)
 - **The generic verification overloads** — `IsValidSignature<S,D>(...)` and `IsValidSignature<D>(signature, data)`. Use the concrete `byte[]` / `Data` / `*Digest` overloads.
 - **`SealedBox` reconstruction from parts** — there is no public `SealedBox(nonce:ciphertext:tag:)` initializer (a Swift generic init). Persist `box.Combined` and keep the box, rather than rebuilding one from raw nonce/ciphertext/tag.
 - **One-shot `static func hash(data:)`** on the hash functions — not projected. Use the incremental `new SHA256()` → `Update` → `FinalizeSwift()` flow.
 - **Shared-secret HKDF/X9.63 derivation** (`hkdfDerivedSymmetricKey`, `x963DerivedSymmetricKey`) — not projected. Derive a key via `SymmetricKey.FromCryptoKit_SharedSecret(secret)`.
-- **HPKE `Unwrap` / `Decapsulate` / `ExportSecret`** and **`AES.KeyWrap.Unwrap<TWrappedKey>`** generic forms — obsolete. Some concrete `Unwrap(byte[], …)` / `Unwrap(Data, …)` overloads are emitted for `AES.KeyWrap`, but the HPKE sender/recipient flows are largely generic and not exercised.
+- **HPKE `Sender` / `Recipient` initializers (construction blocked)** — `HPKE.Sender` and `HPKE.Recipient` cannot be constructed from C#. Their initializers all require method-own generic type parameters (constraints over `HPKEDiffieHellmanPublicKey` / `HPKEKEMPublicKey` etc.) — a language limitation C# cannot satisfy. The instance methods (`Sender.Seal(byte[])`, `Sender.Seal(byte[], byte[])`, `Sender.ExportSecret(byte[], nint)`, `Recipient.Open(byte[])`, `Recipient.Open(byte[], byte[])`, `Recipient.ExportSecret(byte[], nint)`) and the `Sender.EncapsulatedKey` property **are** emitted as concrete `byte[]` / `Foundation.Data` overloads, but they are unreachable because no constructor exists to produce a `Sender` or `Recipient` from C#.
+- **`AES.KeyWrap.Unwrap<TWrappedKey>`** generic form — obsolete. Concrete `Unwrap(byte[], …)` / `Unwrap(Data, …)` overloads are emitted and work.
+- **KEM `Decapsulate`** — **works end-to-end.** `MLKEM768.PrivateKey.Decapsulate(byte[] encapsulated)` / `Decapsulate(Data encapsulated)` (and the equivalent on other KEM private-key types) have working concrete `byte[]`/`Data` overloads emitted by the CSM engine, AND the receiver (`new MLKEM768.PrivateKey()`) has a public parameterless constructor. Use it directly.
 
-If you stay on the `byte[]` / `Foundation.Data` overloads shown in this guide, every code path above is verified working on simulator and device.
+If you stay on the `byte[]` / `Foundation.Data` overloads shown in this guide, every code path is verified working on both simulator and device — with two exceptions: the incremental `HMAC<H>` `From{Hash}` builder is simulator-only (use the one-shot `AuthenticationCode(...)` helpers on device), and the HPKE `Sender`/`Recipient` constructors remain unreachable on both platforms.
 
 ## Memory & threading
 

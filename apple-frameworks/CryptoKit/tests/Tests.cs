@@ -14,6 +14,8 @@ using Insecure = CryptoKit.Insecure;
 using P256 = CryptoKit.P256;
 using P384 = CryptoKit.P384;
 using P521 = CryptoKit.P521;
+using MLDSA65 = CryptoKit.MLDSA65;
+using Curve25519 = CryptoKit.Curve25519;
 
 namespace SwiftBindings.CryptoKit.Tests;
 
@@ -435,6 +437,168 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail("AES.GCM.Seal with AD dispatch", ex.Message);
+        }
+
+        // Tests 30–31: HMAC incremental Update/Finalize via the CSM factories.
+        //
+        // Session 02 (apple-framework-gaps/02-csm-cryptokit.md) restored the HMAC
+        // ConcreteSpecializationEngine factories (`FromSHA256`/`FromSHA384`/…) that
+        // monomorphize `HMAC<H>` over each concrete hash conformer. Before that fix
+        // the incremental HMAC surface was unconstructible. These tests exercise the
+        // full incremental path — construct via the CSM factory, feed the message in
+        // two chunks through `Update`, `Finalize` — and assert the result is bit-for-bit
+        // identical to CryptoKit's own one-shot `AuthenticationCode` over the same input.
+        // Matching a trusted single-call reference proves the incremental binding is
+        // correct, not merely non-crashing.
+        //
+        // RUNTIME GATE (device/NativeAOT): the CSM factories monomorphize the generic
+        // `HMAC<H>` ISwiftObject, and the generated `HMAC{SHA256,SHA384}CsmExtensions`
+        // static initializer resolves the hash conformer's protocol-conformance descriptor
+        // by dlopen-ing the framework via `@rpath/CryptoKit.framework/CryptoKit`. On a
+        // physical device that path does NOT resolve — CryptoKit is an Apple SYSTEM
+        // framework at /System/Library/Frameworks, not bundled in the app's @rpath — so
+        // the cctor throws (TypeInitializationException -> SwiftRuntimeException: "Unable
+        // to load library: @rpath/CryptoKit.framework/CryptoKit") on the first CSM call.
+        // It works on sim because the simulator runtime resolves @rpath to the framework.
+        // The CSM path was only device-validated via the KeyedBag fixture in swift-bindings'
+        // BindingTests (a non-system test module, so @rpath is valid there); the real
+        // CryptoKit HMAC<H> regen against an Apple system framework had never been
+        // device-validated until this pass (confirmed 2026-05-29). We gate on
+        // RuntimeFeature.IsDynamicCodeSupported (true on Mono/sim, false on NativeAOT/device):
+        // on the JIT/sim lane a failure is a real regression and Fails; on the AOT/device
+        // lane the @rpath system-framework load failure is the documented gap and Skips.
+        // Tracked in apple-framework-gaps/05-residual-gaps.md.
+        bool dynamicCodeSupported = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported;
+        const string csmAotGapReason =
+            "SDK gap: CSM conformance-descriptor load dlopens @rpath/CryptoKit.framework, which doesn't resolve the Apple system framework on device";
+
+        // Local helper: classify a CSM exception as the documented NativeAOT gap (Skip)
+        // or a real failure (Fail). Surfaces the InnerException for triage.
+        void CsmResult(string name, Exception ex)
+        {
+            string detail = ex is TypeInitializationException && ex.InnerException is { } inner
+                ? $"{ex.GetType().Name} -> {inner.GetType().Name}: {inner.Message}"
+                : $"{ex.GetType().Name}: {ex.Message}";
+            if (!dynamicCodeSupported && ex is TypeInitializationException)
+                Skip(name, $"{csmAotGapReason} ({detail}) — see apple-framework-gaps/05-residual-gaps.md");
+            else
+                Fail(name, detail);
+        }
+
+        // Test 30: HMAC<SHA256> incremental == one-shot, 32-byte MAC.
+        try
+        {
+            var key = new SymmetricKey(SymmetricKeySize.Bits256);
+            var msg = Encoding.UTF8.GetBytes("The quick brown fox jumps over the lazy dog");
+            var oneShot = HMACSHA256CsmExtensions.AuthenticationCode(msg, key);
+            var hmac = HMACSHA256CsmExtensions.FromSHA256(key);
+            // Static-call form (not `hmac.Finalize()`) to avoid colliding with object.Finalize.
+            HMACSHA256CsmExtensions.Update(hmac, msg[..20]);
+            HMACSHA256CsmExtensions.Update(hmac, msg[20..]);
+            var incremental = HMACSHA256CsmExtensions.Finalize(hmac);
+            Log($"HMAC<SHA256> ByteCount={incremental.ByteCount} desc={incremental.Description}");
+            if (incremental.ByteCount != 32)
+                throw new InvalidOperationException($"unexpected MAC length {incremental.ByteCount}");
+            if (incremental.Description != oneShot.Description)
+                throw new InvalidOperationException(
+                    $"incremental != one-shot: '{incremental.Description}' vs '{oneShot.Description}'");
+            Pass("HMAC<SHA256> incremental == one-shot");
+        }
+        catch (Exception ex)
+        {
+            CsmResult("HMAC<SHA256> incremental == one-shot", ex);
+        }
+
+        // Test 31: HMAC<SHA384> incremental == one-shot, 48-byte MAC (second CSM specialization).
+        try
+        {
+            var key = new SymmetricKey(SymmetricKeySize.Bits256);
+            var msg = Encoding.UTF8.GetBytes("incremental HMAC over multiple Update calls");
+            var oneShot = HMACSHA384CsmExtensions.AuthenticationCode(msg, key);
+            var hmac = HMACSHA384CsmExtensions.FromSHA384(key);
+            HMACSHA384CsmExtensions.Update(hmac, msg[..11]);
+            HMACSHA384CsmExtensions.Update(hmac, msg[11..]);
+            var incremental = HMACSHA384CsmExtensions.Finalize(hmac);
+            Log($"HMAC<SHA384> ByteCount={incremental.ByteCount}");
+            if (incremental.ByteCount != 48)
+                throw new InvalidOperationException($"unexpected MAC length {incremental.ByteCount}");
+            if (incremental.Description != oneShot.Description)
+                throw new InvalidOperationException(
+                    $"incremental != one-shot: '{incremental.Description}' vs '{oneShot.Description}'");
+            Pass("HMAC<SHA384> incremental == one-shot");
+        }
+        catch (Exception ex)
+        {
+            CsmResult("HMAC<SHA384> incremental == one-shot", ex);
+        }
+
+        // Test 32: MLDSA65 context-string verify round-trip via the byte[] CSM overloads.
+        //
+        // ML-DSA (FIPS 204) is the post-quantum signature scheme exposed in CryptoKit on
+        // iOS/macOS 26+; its `PublicKey.isValidSignature(_:for:context:)` and matching
+        // `PrivateKey.signature(for:context:)` are the carriers of the 3-arg context-string
+        // verify overloads — the ECDSA P256/P384/P521 surfaces have no context parameter
+        // in Apple's API. Each unbound `where … DataProtocol` parameter expands into a
+        // 2^N byte[]/Data cartesian on CSM, so PublicKey emits 8 IsValidSignature
+        // overloads and PrivateKey emits 4 Signature(data, context) overloads. This test
+        // drives the all-byte[] variants — the (byte[], byte[], byte[]) verify and the
+        // (byte[], byte[]) sign — proving the wire carriers, the context-string parameter
+        // routing, and the Data-return CSM (Swift.Foundation.Data → byte[] via the
+        // existing CryptoKit Sign-side projection) all land round-trip.
+        //
+        // The CSM dispatches here are direct cdecl entries (SBW_CSM_..._signature_...,
+        // SBW_CSM_..._isValidSignature_...) emitted by the per-package
+        // CryptoKitSwiftBindings wrapper — they do NOT take the HMAC<H>-style
+        // ConcreteSpecializationEngine static-cctor path, so the @rpath system-framework
+        // dlopen gap (Test 30/31's NativeAOT-only Skip) does not affect this test. Sim
+        // gate only — device coverage matches the existing CryptoKit cell.
+        try
+        {
+            using var privateKey = new MLDSA65.PrivateKey();
+            using var publicKey = privateKey.PublicKey;
+            var msg = Encoding.UTF8.GetBytes("post-quantum context-string verify");
+            var context = Encoding.UTF8.GetBytes("application/cryptokit-test/v1");
+            var wrongContext = Encoding.UTF8.GetBytes("application/cryptokit-test/v2");
+            var sig = privateKey.Signature(msg, context);
+            if (sig is null || sig.Length == 0)
+                throw new InvalidOperationException("Signature returned empty");
+            if (!publicKey.IsValidSignature(sig, msg, context))
+                throw new InvalidOperationException("verify with matching context returned false");
+            if (publicKey.IsValidSignature(sig, msg, wrongContext))
+                throw new InvalidOperationException("verify with wrong context returned true");
+            Pass("MLDSA65 context-string verify round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("MLDSA65 context-string verify round-trip", ex.Message);
+        }
+
+        // Test 33: Curve25519.Signing (Ed25519) sign + verify round-trip via the byte[] CSM
+        // overloads. Earlier SDKs surfaced PrivateKey.Signature only as the [Obsolete] open
+        // generic `Signature<D>` — there was no callable C# entrypoint, so the guide listed
+        // Curve25519 signing as verification-only. The CSM engine now emits concrete
+        // byte[]/Foundation.Data overloads (SBW_CSM_..._PrivateKey_..._signature_...), and
+        // PublicKey.IsValidSignature has its 4-overload byte[]/Data cartesian. This test
+        // exercises the all-byte[] variants of both halves to lock the fix in place.
+        try
+        {
+            using var privateKey = new Curve25519.Signing.PrivateKey();
+            using var publicKey = privateKey.PublicKey;
+            var msg = Encoding.UTF8.GetBytes("ed25519 round-trip");
+            var sig = privateKey.Signature(msg);
+            if (sig is null || sig.Length == 0)
+                throw new InvalidOperationException("Signature returned empty");
+            if (!publicKey.IsValidSignature(sig, msg))
+                throw new InvalidOperationException("verify with matching message returned false");
+            var tampered = (byte[])msg.Clone();
+            tampered[0] ^= 0x01;
+            if (publicKey.IsValidSignature(sig, tampered))
+                throw new InvalidOperationException("verify with tampered message returned true");
+            Pass("Curve25519.Signing sign + verify round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("Curve25519.Signing sign + verify round-trip", ex.Message);
         }
 
         // Summary

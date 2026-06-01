@@ -50,7 +50,7 @@ using TipKit;
 
 The single most important fact: **you cannot define a `Tip` type in pure C#.** In Swift you write `struct MyTip: Tip { ... }`; that protocol conformance (and the result-builder rules it carries) is compiler-synthesized and has no C#-constructible equivalent. The binding instead gives you:
 
-- **`ITip`** — the projected `Tip` protocol. Its `Status`, `ShouldDisplay`, and `Invalidate(...)` members are protocol-extension defaults that throw `NotSupportedException` when called through the interface; they only work on a concrete conforming type (which lives in Swift).
+- **`ITip`** — the projected `Tip` protocol. Because you can't define a Tip in pure C#, every `ITip` you hold in practice points at a Swift-backed `TipProxy` (the generated existential wrapper). On that proxy, `Id`, `Title`, and `Options` dispatch correctly via wrapper thunks. `Message` and `Image` throw `NotSupportedException` because their optional SwiftUI types aren't witness-dispatchable across the existential boundary (SB0003); access them on the concrete Swift conforming type. `Status` and `Invalidate(reason:)` are not part of the `ITip` interface — they live on the concrete Swift conforming type only; expose entry points from your Swift companion if you need them from C#.
 - **`AnyTip`** — a type-erased wrapper around an existing Swift tip, exposing read-only metadata (`Id`, `Title`, `Message`, `Image`, `Options`). It has no public constructor; you obtain one from Swift via `AnyTip.FromTipKit_AnyTip(...)`.
 
 So the supported pattern from C# is: **define your tips in a small Swift companion target, then drive configuration, display, donations, and presentation from C#.** Everything in the rest of this guide — datastore configuration, status enums, option/frequency types, donation time ranges, the UIKit presentation controller, actions, and errors — is fully usable from C#. The rule-builder DSL itself is the one piece that must originate in Swift.
@@ -179,7 +179,7 @@ Tips.Status inv = Tips.Status.Invalidated(Tips.InvalidationReason.TipClosed);
 | `DisplayDurationExceeded` | 2 |
 | `TipClosed` | 3 |
 
-> **Invalidating a tip from C#** goes through the concrete tip's `Invalidate(reason:)`, which lives on your Swift conforming type. The `ITip.Invalidate(...)` interface default throws `NotSupportedException` — expose an invalidation entry point from your Swift companion if you need to invalidate programmatically.
+> **Invalidating a tip from C#** goes through the concrete tip's `Invalidate(reason:)`, which lives on your Swift conforming type and is not part of the `ITip` interface. Expose an invalidation entry point from your Swift companion if you need to invalidate programmatically from C#.
 
 ## Display-frequency options
 
@@ -305,19 +305,19 @@ catch (Exception ex)
 
 ## Known limitations
 
-- **You cannot define a `Tip` in pure C#.** Conforming to the `Tip` protocol (and its synthesized rule/parameter machinery) requires Swift. From C# you get `ITip` (interface, with throwing defaults) and `AnyTip` (read-only, no public ctor). Author tips in a small Swift companion target and drive everything else from C#.
+- **You cannot define a `Tip` in pure C#.** Conforming to the `Tip` protocol (and its synthesized rule/parameter machinery) requires Swift. From C# you get `ITip` (always backed by a Swift-resident proxy in practice) and `AnyTip` (read-only, no public ctor). Author tips in a small Swift companion target and drive everything else from C#.
 - **The `@Rule` / `Tips.Rule(...) { ... }` result-builder DSL is unreachable from C#.** Those entry points are `@_alwaysEmitIntoClient` in the Swift standard library — they're inlined into each Swift caller and export no stable ABI symbol, so there is no call target to bind. Donation-tracking, parameter rules, and event-count rules built through the DSL must be declared in Swift. (You can publish concrete `Tips.Rule` values as `public static let` from your Swift companion; ordinary stored-property symbols bind cleanly.) `Tips.Rule`, `Tips.RuleBuilder`, `Tips.ActionBuilder`, `Tips.OptionsBuilder`, and `Tips.GroupBuilder` are present as types but their builder methods are part of this DSL surface.
 - **SwiftUI views are not bound.** `TipView` and `PopoverTipView` are detected only as SwiftUI bridge templates that require manual completion — they are *not* generated as usable C# types. Use the UIKit path (`TipUIPopoverViewController`, `TipUIView`) instead.
-- **`ITip.Invalidate(reason:)`, `ITip.Status`, and `ITip.ShouldDisplay`** throw `NotSupportedException` when called through the interface — they are Swift protocol-extension defaults. Access status / invalidation through your concrete Swift tip type.
+- **Several `ITip` members are not dispatchable on Swift-backed `TipProxy` values.** On a `TipProxy` wrapping a Swift-side conforming type, `Id`, `Title`, and `Options` dispatch correctly via wrapper thunks. `Message` and `Image` throw `NotSupportedException` because their optional SwiftUI types aren't witness-dispatchable across the existential boundary (SB0003); access them on the concrete Swift type. `Status` and `Invalidate(reason:)` are not part of the `ITip` interface — they live only on the concrete conforming Swift type; expose them from your Swift companion if needed.
 
-What *does* work from C#, fully: `Tips.Configure` / `ResetDatastore` / `ShowAllTipsForTesting` / `HideAllTipsForTesting`, the `Tips.Status` enum and its singletons, `Tips.InvalidationReason`, all the configuration presets, the display-frequency option types, `Tips.DonationTimeRange` / `Tips.DonationLimit` / `Tips.ParameterOption`, `Tips.Action`, the UIKit presentation types, `TipKitError`, and `TipGroup.Priority`.
+What *does* work from C#, fully: `Tips.Configure` / `ResetDatastore` / `ShowAllTipsForTesting` / `HideAllTipsForTesting`, the `Tips.Status` enum and its singletons, `Tips.InvalidationReason`, all the configuration presets, the display-frequency option types, `Tips.DonationTimeRange` / `Tips.DonationLimit` / `Tips.ParameterOption`, `Tips.Action`, the UIKit presentation types, `TipKitError`, and `TipGroup.Priority`. On a Swift-backed `TipProxy`, `Id`, `Title`, and `Options` dispatch correctly via wrapper thunks; `Message` and `Image` throw (SB0003 — reach them through the concrete Swift type).
 
 ## Memory & threading
 
-Generated types implement `ISwiftObject` / `IDisposable`. For genuinely disposable types, `using var` is the recommended pattern for deterministic cleanup (the finalizer also cleans up short-lived locals). The one exception is the configuration option value-structs — `Tips.DonationLimit`, `Tips.IgnoresDisplayFrequency`, `Tips.MaxDisplayCount`, and `Tips.MaxDisplayDuration` — which implement `IDisposable` unconditionally with no cached-singleton guard and must **not** be disposed; construct them with a plain `var` and pass them directly to `Tips.Configure(...)`.
+Generated types implement `ISwiftObject` / `IDisposable`. `using var` is the recommended pattern for deterministic cleanup, including the configuration option value-structs (`Tips.DonationLimit`, `Tips.IgnoresDisplayFrequency`, `Tips.MaxDisplayCount`, `Tips.MaxDisplayDuration`). They are `SwiftSafeHandle`-backed with proper `Dispose` + finalizer, so the standard pattern applies — pass them to `Tips.Configure(...)` first, then let the `using` scope release them.
 
 ```csharp
-var limit = new Tips.DonationLimit(100);          // option value-struct — do NOT dispose
+using var limit = new Tips.DonationLimit(100);
 using var anyTip = AnyTip.FromTipKit_AnyTip(/* … */);
 ```
 

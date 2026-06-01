@@ -182,7 +182,7 @@ controller.CancelCommissioningForNodeID(nodeID, out error);
 ## Clusters & the rest of the surface
 
 Matter models every device capability as a **cluster**. The binding emits one
-type family per cluster — roughly 150 `MTRBaseCluster…` / `MTRCluster…` classes
+type family per cluster — 146 `MTRBaseCluster…` types and 140 `MTRCluster…` types
 (e.g. `MTRBaseClusterOnOff`, `MTRBaseClusterLevelControl`, `MTRBaseClusterColorControl`)
 plus hundreds of per-cluster command/response/struct/event types
 (`MTR<Cluster>Cluster<Thing>`). There are also frozen enums for protocol values

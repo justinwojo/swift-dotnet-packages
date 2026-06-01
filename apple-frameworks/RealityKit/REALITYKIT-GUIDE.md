@@ -143,11 +143,30 @@ IReadOnlyList<RealityFoundation.CollisionCastHit> hits = arView.HitTest(new CGPo
 
 ## Entity gestures
 
-Entity gesture recognizers are **not usable from C#** in the current binding — see
-[Known limitations](#known-limitations). `ARView.InstallGestures` is present but
-deprecated and throws at runtime, and the concrete recognizer types
-(`EntityTranslationGestureRecognizer`, `EntityScaleGestureRecognizer`,
-`EntityRotationGestureRecognizer`) throw on their `.Entity` / `.Location` accessors.
+Entity gesture recognizers are fully usable from C# as of SDK 0.12.0. Call
+`ARView.InstallGestures` with an `ARView.EntityGestures` mask and any
+`RealityFoundation.IHasCollision` entity (e.g. `ModelEntity`); it returns
+an `IReadOnlyList<IEntityGestureRecognizer>` of the installed recognizers:
+
+```csharp
+using var model = new ModelEntity();
+// model must be attached to the scene before gestures fire meaningfully,
+// but the install call and .Entity accessor work without a live scene.
+var recognizers = arView.InstallGestures(ARView.EntityGestures.Translation, model);
+
+foreach (IEntityGestureRecognizer r in recognizers)
+{
+    // .Entity reads the Swift-stored existential back as an IHasCollision proxy.
+    var entity = r.Entity;
+}
+```
+
+The concrete recognizer types (`EntityTranslationGestureRecognizer`,
+`EntityScaleGestureRecognizer`, `EntityRotationGestureRecognizer`) can also be
+constructed and used directly. `EntityTranslationGestureRecognizer.Entity` supports
+both get and set, and a full forward/backward identity round-trip (set entity A, read
+back entity A; set entity B, read back entity B; set null, read back null) is verified
+in the test suite.
 
 ## Render, debug & environment options
 
@@ -181,29 +200,13 @@ The RealityKit *view* surface (`ARView` construction, scene/environment/option
 reads, hit-testing entrypoints) is verified working. The gaps you'll hit come from
 the **RealityFoundation** types reached through `ARView` — they apply here too:
 
-1. **SIMD transform setters truncate.** Writing `Transform.Translation`/`.Scale`/
-   `.Rotation` or using `new Transform(Matrix4x4)` loses every lane past the first.
-   Reading the camera/identity transform works. (RealityFoundation gap 1.)
-
-2. **`Entity.ObservableValue.Transform` setter traps without a live Scene.** Reads
+1. **`Entity.ObservableValue.Transform` setter traps without a live Scene.** Reads
    are fine; writes on a detached entity raise `EXC_BREAKPOINT`. (RealityFoundation
-   gap 2.)
+   gap 1.)
 
-3. **Typed mesh buffers fail on NativeAOT.** `MeshBuffer<T>` / `MeshBuffers.Semantic<T>`
+2. **Typed mesh buffers fail on NativeAOT.** `MeshBuffer<T>` / `MeshBuffers.Semantic<T>`
    work on the Mono interpreter (simulator) but not NativeAOT device builds.
-   (RealityFoundation gap 3.)
-
-4. **`Scene.AddAnchor` refuses an `AnchorEntity`.** Walking `arView.Scene.Anchors`
-   works, and you can construct an `AnchorEntity`, name it, and `AddChild` to it —
-   but `Scene.AddAnchor(IHasAnchoring)` won't accept the `AnchorEntity` because the
-   binding doesn't project the `IHasAnchoring` conformance. (RealityFoundation gap 4.)
-
-5. **Entity gesture recognizers are not usable from C#.** `ARView.InstallGestures`
-   is deprecated and throws `NotSupportedException` at runtime because the gesture
-   protocol projections were not emitted. The concrete recognizer types
-   (`EntityTranslationGestureRecognizer`, `EntityScaleGestureRecognizer`,
-   `EntityRotationGestureRecognizer`) likewise throw on their `.Entity` / `.Location`
-   accessors.
+   (RealityFoundation gap 2.)
 
 See the
 [RealityFoundation Known limitations](https://github.com/justinwojo/swift-dotnet-packages/wiki/RealityFoundation#known-limitations)

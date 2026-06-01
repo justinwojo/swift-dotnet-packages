@@ -72,13 +72,20 @@ internal static class Tests
             Fail("MobileDocumentReaderError values", ex.Message);
         }
 
-        // Intentionally omitted: MobileDocumentReaderErrorExtensions.GetErrorDescription
-        // The C# binding emits the extension method and P/Invoke, but the Swift wrapper
-        // side is missing the corresponding @_cdecl function — resulting in an
-        // EntryPointNotFoundException at call time. Tracked as a generator bug: the
-        // enum extension emitter needs parity between C# extension emission and
-        // Swift wrapper emission for errorDescription (and similar LocalizedError
-        // inherited members). Re-enable this test once the wrapper is emitted.
+        // MobileDocumentReaderError.GetErrorDescription: C# extension + P/Invoke pair
+        // resolve to the Swift @_cdecl wrapper. The previous skip comment here was stale
+        // (the parity bug was fixed before May 2026); verify the call doesn't crash and
+        // returns either the LocalizedError string or null on OS versions that vend nil.
+        try
+        {
+            var desc = MobileDocumentReaderError.Unknown.GetErrorDescription();
+            Log($"MobileDocumentReaderError.Unknown description = {desc ?? "<null>"}");
+            Pass("MobileDocumentReaderError.GetErrorDescription");
+        }
+        catch (Exception ex)
+        {
+            Fail("MobileDocumentReaderError.GetErrorDescription", ex.Message);
+        }
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

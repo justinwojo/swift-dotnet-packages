@@ -164,14 +164,14 @@ Alerts conform to the `IWorkoutAlert` interface and can be attached to steps. Th
 
 | Type | Constructor(s) | Key members |
 |---|---|---|
-| `HeartRateRangeAlert` | *(no public ctor — inspect only)* | `TargetQuantityLowerBound`, `TargetQuantityUpperBound` (`HealthKit.HKQuantity`) |
+| `HeartRateRangeAlert` | `HeartRateRangeAlert(SwiftClosedRange<Measurement<NSUnitFrequency>>)` | `Target`, `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` (`HealthKit.HKQuantity`) |
 | `HeartRateZoneAlert` | `HeartRateZoneAlert(nint zone)` | `Zone` (`int`) |
-| `CadenceRangeAlert` | *(no public ctor)* | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
+| `CadenceRangeAlert` | `CadenceRangeAlert(SwiftClosedRange<Measurement<NSUnitFrequency>>)` | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
 | `CadenceThresholdAlert` | `CadenceThresholdAlert(Measurement<NSUnitFrequency> target)` | `Target`, `Metric`, `TargetQuantity` |
-| `PowerRangeAlert` | *(no public ctor)* | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
+| `PowerRangeAlert` | `PowerRangeAlert(SwiftClosedRange<Measurement<NSUnitPower>>)`, `(target, WorkoutAlertMetric metric)` | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
 | `PowerThresholdAlert` | `PowerThresholdAlert(Measurement<NSUnitPower> target)`, `(target, WorkoutAlertMetric metric)` | `Target`, `Metric`, `TargetQuantity` |
 | `PowerZoneAlert` | `PowerZoneAlert(nint zone)` | `Zone`, `Metric` |
-| `SpeedRangeAlert` | *(no public ctor)* | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
+| `SpeedRangeAlert` | `SpeedRangeAlert(SwiftClosedRange<Measurement<NSUnitSpeed>>, WorkoutAlertMetric metric)` | `Metric`, `TargetQuantityLowerBound`, `TargetQuantityUpperBound` |
 | `SpeedThresholdAlert` | `SpeedThresholdAlert(Measurement<NSUnitSpeed> target, WorkoutAlertMetric metric)` | `Target`, `Metric`, `TargetQuantity` |
 
 ```csharp
@@ -183,7 +183,16 @@ var alert = new HeartRateZoneAlert(zone: 3);
 var step = new WorkoutStep(WorkoutGoal.Open, alert);
 ```
 
-> The four **range** alert types (`HeartRateRangeAlert`, `CadenceRangeAlert`, `PowerRangeAlert`, `SpeedRangeAlert`) expose no public constructor in this binding — you can read their bounds/metric off instances you obtain, but cannot build them from C#. The threshold and zone alerts above are constructible.
+All four **range** alert types are fully constructible from C#. The pattern is: build a `Swift.Foundation.Measurement<T>(double value, T unit)`, wrap a lower/upper pair in `Swift.SwiftClosedRange<Measurement<T>>(lower, upper)`, then pass that to the alert constructor. Unit singleton instances (e.g. `Foundation.NSUnitFrequency.Hertz`, `Foundation.NSUnitPower.Watts`, `Foundation.NSUnitSpeed.MetersPerSecond`) come from the Foundation binding:
+
+```csharp
+using var lo = new Measurement<NSUnitFrequency>(60.0, NSUnitFrequency.Hertz);
+using var hi = new Measurement<NSUnitFrequency>(150.0, NSUnitFrequency.Hertz);
+using var range = new SwiftClosedRange<Measurement<NSUnitFrequency>>(lo, hi);
+using var alert = new HeartRateRangeAlert(range);
+```
+
+The same pattern applies to `CadenceRangeAlert`, `PowerRangeAlert`, and `SpeedRangeAlert` (substituting `NSUnitPower.Watts` / `NSUnitSpeed.MetersPerSecond` as appropriate).
 
 You can ask whether a workout supports a given alert with `CustomWorkout.SupportsAlert(IWorkoutAlert alert, HealthKit.HKWorkoutActivityType activity, HealthKit.HKWorkoutSessionLocationType location = Unknown)`.
 

@@ -1545,20 +1545,29 @@ public class MainViewController : UIViewController
         logger.Skip("ImageRequest(NSUrlRequest, processors): constructor not exposed in Nuke 13.0 binding");
         results.Skip("N1_URLRequest_AddValue", "Removed in Nuke 13.0 binding");
 
-        // N2: ImageRequest.Processors property exists (throws NotSupportedException)
+        // N2: ImageRequest.Processors is now a fully-bound existential-array property —
+        // IReadOnlyList<IImageProcessing>, projected from SwiftArray<ExistentialContainer1>.
+        // It used to be a co-gated stub that threw NotSupportedException; the existential-array
+        // binding work made it real, so accessing it must succeed. A default ImageRequest carries
+        // no processors, so the getter round-trips an empty list.
         logger.Info("--- N2: ImageRequest.Processors ---");
         try
         {
             var request = new ImageRequest(TestImageUrl());
-            try
+            var processors = request.Processors;
+            if (processors is null)
             {
-                var _ = request.Processors;
-                logger.Fail("N2: Processors get should throw NotSupportedException");
-                results.Fail("N2_Processors_Exists", "Expected NotSupportedException");
+                logger.Fail("N2: Processors returned null");
+                results.Fail("N2_Processors_Exists", "Processors was null");
             }
-            catch (NotSupportedException)
+            else if (processors.Count != 0)
             {
-                logger.Pass("N2: Processors property exists (throws NotSupportedException as expected)");
+                logger.Fail($"N2: Processors expected empty for a default request, got {processors.Count}");
+                results.Fail("N2_Processors_Exists", $"Expected empty list, got {processors.Count}");
+            }
+            else
+            {
+                logger.Pass("N2: Processors projects an empty IReadOnlyList<IImageProcessing> for a default request");
                 results.Pass("N2_Processors_Exists");
             }
         }

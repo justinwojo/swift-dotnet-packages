@@ -1,8 +1,11 @@
 // Copyright (c) 2026 Justin Wojciechowski.
 // Licensed under the MIT License.
 
-using WorkoutKit;
+using Foundation;
+using Swift;
+using Swift.Foundation;
 using Swift.Runtime;
+using WorkoutKit;
 
 namespace SwiftBindings.WorkoutKit.Tests;
 
@@ -10,7 +13,7 @@ internal static class Tests
 {
     public static int Run()
     {
-        int passed = 0, failed = 0, skipped = 0;
+        int passed = 0, failed = 0;
 
         void Pass(string name)
         {
@@ -22,12 +25,6 @@ internal static class Tests
         {
             failed++;
             Log($"FAIL: {name} — {error}");
-        }
-
-        void Skip(string name, string reason)
-        {
-            skipped++;
-            Log($"SKIP: {name} — {reason}");
         }
 
         void MetadataTest<T>(string name) where T : class, ISwiftObject
@@ -249,8 +246,77 @@ internal static class Tests
             Fail("IntervalBlock default constructor", ex.Message);
         }
 
+        // Range-alert construction (HeartRate/Cadence/Power/Speed RangeAlert).
+        //
+        // The end-to-end path is: public `Measurement<T>(value, unit)` (Swift.Runtime
+        // Foundation/Measurement.cs, routed through the SBW_Measurement_InitFromValueUnit
+        // @_cdecl shim that builds Foundation.Measurement(value:unit:) and ARC-retains the
+        // NSUnit reference) → `SwiftClosedRange<Bound>(lower, upper)` (Comparable witness
+        // table on Measurement registered in its cctor) → range-alert ctor. Disposes are
+        // safe to interleave because both Measurement and SwiftClosedRange copy bounds
+        // into their own buffers via VWT InitializeWithCopy.
+        try
+        {
+            using var lo = new Measurement<NSUnitFrequency>(60.0, NSUnitFrequency.Hertz);
+            using var hi = new Measurement<NSUnitFrequency>(150.0, NSUnitFrequency.Hertz);
+            using var range = new SwiftClosedRange<Measurement<NSUnitFrequency>>(lo, hi);
+            using var alert = new HeartRateRangeAlert(range);
+            if (alert is null)
+                throw new InvalidOperationException("ctor returned null");
+            Pass("HeartRateRangeAlert construction");
+        }
+        catch (Exception ex)
+        {
+            Fail("HeartRateRangeAlert construction", ex.Message);
+        }
+
+        try
+        {
+            using var lo = new Measurement<NSUnitFrequency>(80.0, NSUnitFrequency.Hertz);
+            using var hi = new Measurement<NSUnitFrequency>(95.0, NSUnitFrequency.Hertz);
+            using var range = new SwiftClosedRange<Measurement<NSUnitFrequency>>(lo, hi);
+            using var alert = new CadenceRangeAlert(range);
+            if (alert is null)
+                throw new InvalidOperationException("ctor returned null");
+            Pass("CadenceRangeAlert construction");
+        }
+        catch (Exception ex)
+        {
+            Fail("CadenceRangeAlert construction", ex.Message);
+        }
+
+        try
+        {
+            using var lo = new Measurement<NSUnitPower>(150.0, NSUnitPower.Watts);
+            using var hi = new Measurement<NSUnitPower>(250.0, NSUnitPower.Watts);
+            using var range = new SwiftClosedRange<Measurement<NSUnitPower>>(lo, hi);
+            using var alert = new PowerRangeAlert(range);
+            if (alert is null)
+                throw new InvalidOperationException("ctor returned null");
+            Pass("PowerRangeAlert construction");
+        }
+        catch (Exception ex)
+        {
+            Fail("PowerRangeAlert construction", ex.Message);
+        }
+
+        try
+        {
+            using var lo = new Measurement<NSUnitSpeed>(3.0, NSUnitSpeed.MetersPerSecond);
+            using var hi = new Measurement<NSUnitSpeed>(5.0, NSUnitSpeed.MetersPerSecond);
+            using var range = new SwiftClosedRange<Measurement<NSUnitSpeed>>(lo, hi);
+            using var alert = new SpeedRangeAlert(range, WorkoutAlertMetric.Current);
+            if (alert is null)
+                throw new InvalidOperationException("ctor returned null");
+            Pass("SpeedRangeAlert construction");
+        }
+        catch (Exception ex)
+        {
+            Fail("SpeedRangeAlert construction", ex.Message);
+        }
+
         // Summary
-        Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
+        Log($"Results: {passed} passed, {failed} failed");
         if (failed == 0)
             Log("TEST SUCCESS", prefixed: false);
         else

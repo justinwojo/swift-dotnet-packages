@@ -50,8 +50,8 @@ using RealityFoundation;
 | `enum AntialiasingMode` (plain) | C# `enum` | plain Swift enums map to C# enums |
 | `func clone(recursive:)` | `Clone(recursive: false)` | — |
 | `static let identity` | `Transform.Identity` | static members PascalCase |
-| `SIMD3<Float>` | `System.Numerics.Vector3` | SIMD vectors map to `System.Numerics` types (**see limitations — setters truncate**) |
-| `simd_quatf` / `simd_float4x4` | `System.Numerics.Quaternion` / `Matrix4x4` | (**see limitations**) |
+| `SIMD3<Float>` | `System.Numerics.Vector3` | SIMD vectors map to `System.Numerics` types; reads and setters round-trip all lanes |
+| `simd_quatf` / `simd_float4x4` | `System.Numerics.Quaternion` / `Matrix4x4` | full-lane round-trip on all constructors and setters |
 
 ## Quick start: build an entity hierarchy
 
@@ -86,9 +86,10 @@ Entity copy = root.Clone(recursive: true);
 child.RemoveFromParent(preservingWorldTransform: false);
 ```
 
-> **Don't set the transform on a detached entity.** Reading the identity transform
-> works; *writing* a transform on an entity that isn't attached to a live `Scene`
-> traps. See [Known limitations](#known-limitations).
+> **Don't set the Observable transform on a detached entity.** Reading
+> `entity.ObservableValue.Transform` works; *writing* it when the entity is not
+> attached to a live `Scene` traps inside RealityKit's `willSet` hook. Guard with
+> `if (entity.Scene is not null)` before assigning. See [Known limitations](#known-limitations).
 
 ## Entities
 
@@ -125,28 +126,32 @@ anchor.Name = "anchor";
 anchor.AddChild(new Entity { Name = "child" }, preservingWorldTransform: false);
 ```
 
-> Attaching an `AnchorEntity` to a `Scene` via `Scene.AddAnchor` does **not** work
-> — see limitations.
+> `AnchorEntity` boxes correctly as `IHasAnchoring`, so `Scene.AddAnchor(anchor)`
+> and `Scene.AnchorCollection.Append(anchor)` / `.Remove(anchor)` are callable.
+> Full scene-attachment behavior depends on a live AR session; test on device.
 
 ## Transforms
 
 `Transform` is a value type with `Scale`, `Rotation` (`Quaternion`), and
-`Translation` (`Vector3`). The identity transform and all *getters* work:
+`Translation` (`Vector3`). Getters **and** setters round-trip every lane:
 
 ```csharp
 using var t = Transform.Identity;
-Vector3 translation = t.Translation;   // (0,0,0)
-Vector3 scale = t.Scale;               // (1,1,1)
+t.Translation = new Vector3(1.5f, -2.5f, 3.5f);   // all 3 lanes survive
+t.Scale       = new Vector3(2f, 3f, 4f);
+t.Rotation    = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f);
+
+Vector3 translation = t.Translation;   // reads back (1.5, -2.5, 3.5)
 Quaternion rotation = t.Rotation;
 ```
 
-Constructors: `new Transform()`, `new Transform(scale, rotation, translation)`,
-`new Transform(x, y, z)`, `new Transform(Matrix4x4)`. JSON round-trip is available
-via `EncodeToJson()` / `Transform.DecodeFromJson(byte[])`.
+All SIMD-typed constructors and setters — including `new Transform(scale, rotation,
+translation)` and `new Transform(Matrix4x4)` — are routed through the SDK's
+indirect/pointer marshal path, so all lanes survive on both simulator/Mono and
+device/NativeAOT.
 
-> **The `Vector3`/`Quaternion`/`Matrix4x4` setters and the `Transform(Matrix4x4)`
-> constructor truncate today.** See [Known limitations](#known-limitations) before
-> writing transforms.
+Constructors: `new Transform()`, `new Transform(x, y, z)`, `new Transform(scale, rotation, translation)`, `new Transform(Matrix4x4)`.
+JSON round-trip is available via `EncodeToJson()` / `Transform.DecodeFromJson(byte[])`.
 
 ## Components
 
@@ -159,10 +164,12 @@ int n = components.Count;
 ```
 
 The existential `Has(object componentType)` and `Remove(object componentType)`
-overloads (the `any Component` shape) are marked `[Obsolete]` — no `@_cdecl`
-wrapper or native thunk is generated for them, so they are not usable. The
-supported mutation path is the typed overloads (e.g. `Set(ModelComponent)`),
-which are not obsolete; validate on-device for your component types.
+overloads (the `any Component` shape) are marked `[Obsolete(SB0001)]` — they
+call through `CallConvSwift` without a `@_cdecl` wrapper and the ABI may
+mismatch on AArch64. The typed `Set<T>(T component)` overload is also
+`[Obsolete(SB0001)]` for the same reason. The supported mutation path today is
+the `Set(IEnumerable<IComponent>)` overload (uses a `@_cdecl` wrapper) and
+reading `Count`; validate typed set/has on-device for your component types.
 
 The framework binds a large catalog of component types, e.g. `ModelComponent`,
 `CollisionComponent`, `AnchoringComponent`, `PhysicsBodyComponent`,
@@ -210,45 +217,42 @@ and `MeshDescriptor`. **These generics have a NativeAOT runtime gap** — see be
 
 ## Known limitations
 
-RealityFoundation exposes a broad surface, but several paths have **confirmed
-runtime gaps** in the current SDK. The binding test app pins each one with a
-`Skip` so they're re-validated on every SDK rebuild. Avoid them:
+RealityFoundation exposes a broad surface, but a few paths have **confirmed
+runtime gaps** in the current SDK. The binding test app gates each one with
+`IsDynamicCodeSupported` or a `Scene` preflight so they're re-validated on
+every SDK rebuild. Avoid them:
 
-1. **SIMD setters truncate to the first lane.** Assigning `Transform.Translation`,
-   `Transform.Scale`, or `Transform.Rotation`, and the `new Transform(Matrix4x4)`
-   constructor, silently lose every lane past X. The Swift side takes a 16-byte
-   4-lane `SIMD3<Float>` / `simd_quatf` / `simd_float4x4`, but the generated PInvoke
-   marshals a 12-byte `System.Numerics.Vector3`; under AAPCS only the first lane
-   survives the register split, so writes truncate (rotation writes vanish
-   entirely). **Reading** the identity transform and individual components works
-   fine — the gap is on the *write* boundary. Until the SDK lands a wider SIMD
-   marshal, treat transform setters as non-functional.
-
-2. **`Entity.ObservableValue.Transform` setter traps without a live Scene.**
+1. **`Entity.ObservableValue.Transform` setter traps without a live Scene.**
    Reading `root.ObservableValue.Transform` (and `.Position` / `.Scale`) is fine.
    *Assigning* to it on a detached entity raises `EXC_BREAKPOINT` inside
    RealityKit's `re::ecs2::TransformComponent` `willSet` hook, which expects a
-   `Scene` to be driving the observation framework. Don't set transforms on
-   entities that aren't attached to a running scene.
+   `Scene` to be driving the observation framework. Guard with
+   `if (entity.Scene is not null)` before writing, or only set transforms on
+   entities already attached to a running scene. (Won't-fix — no ABI route
+   bypasses a Swift property observer.)
 
-3. **NativeAOT generic-metadata gap for mesh buffers.** `MeshBuffer<T>`,
-   `MeshBuffers.Semantic<T>`, and `UnsafeForceEffectBuffer<T>` resolve correctly on
-   the Mono interpreter (the simulator default) but fail on NativeAOT / full-AOT
-   builds (physical-device release), which trim the generic-specialization
-   metadata these types need. If you ship NativeAOT, don't rely on the typed mesh
-   buffers.
+2. **NativeAOT generic-metadata gap for mesh buffers (deferred to 0.13.0).**
+   `MeshBuffer<T>`, `MeshBuffers.Semantic<T>`, and `UnsafeForceEffectBuffer<T>`
+   resolve correctly on the Mono interpreter (the simulator default) but fail on
+   NativeAOT / full-AOT builds (physical-device release), which trim the
+   generic-specialization metadata these types need. The test suite
+   capability-gates on `RuntimeFeature.IsDynamicCodeSupported` — it passes on
+   Mono/sim and skips on NativeAOT/device. If you ship NativeAOT, don't rely on
+   the typed mesh buffers.
 
-4. **`Scene.AddAnchor` refuses an `AnchorEntity`.** `Scene.AddAnchor(IHasAnchoring)`
-   (and `Scene.AnchorCollection.Append(IHasAnchoring)` / `.Remove(...)`) won't
-   accept an `AnchorEntity` argument — the `AnchorEntity` binding doesn't project
-   the `IHasAnchoring` conformance, so the existential box refuses the cast.
-   Constructing an `AnchorEntity`, naming it, and adding children all work; only
-   handing it to the scene's anchor collection does not.
+3. **`Entity.ComponentSet.Has` / `Remove` / typed `Set<T>` are `[Obsolete(SB0001)]`.**
+   These existential-shaped overloads call through `CallConvSwift` without a
+   `@_cdecl` wrapper; the ABI may mismatch on AArch64. Use
+   `Set(IEnumerable<IComponent>)` (which has a wrapper) for bulk mutation, and
+   read `Count` for inspection.
 
 Everything in [Quick start](#quick-start-build-an-entity-hierarchy) — entity
 construction, the hierarchy operations, `Name`/`IsEnabled`/`Id` round-trips,
-`FindEntity`, `Clone`, identity-transform *reads*, and component-count reads — is
-verified working.
+`FindEntity`, `Clone`, and component-count reads — is verified working, as are
+all `Transform` constructors (including `new Transform(scale, rotation,
+translation)`), the SIMD setters, `new Transform(Matrix4x4)`, and
+`Scene.AddAnchor(IHasAnchoring)` (AnchorEntity now boxes correctly as
+`IHasAnchoring`).
 
 ## Memory & threading
 
