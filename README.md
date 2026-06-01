@@ -28,6 +28,8 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 
 > [`SwiftBindings.Apple.ActivityKit`](apple-frameworks/ActivityKit/README.md) is **not published**. Live Activities require user-defined `Codable & Hashable` Swift types that the binding layer cannot synthesize from C#. See its README for the full reasoning.
 
+> [`SwiftBindings.Apple.AppIntents`](apple-frameworks/AppIntents/README.md) is **not published**. AppIntents' value is OS-level Siri / Shortcuts / Spotlight integration, which requires authoring App Intent Swift structs and build-time metadata extraction from the consumer's Swift source — neither reachable from C#. The `AppEntity` value types that do bind are orphaned without an authored intent to consume them. See its README for the full reasoning.
+
 ## Third-party libraries
 
 Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/swift-dotnet-bindings).
