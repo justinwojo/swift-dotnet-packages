@@ -283,6 +283,59 @@ Bumping Stripe's version is a single edit to `version` in `libraries/Stripe/libr
 - Wrapper xcframework names follow `{ModuleName}SwiftBindings.xcframework` convention
 - See `CONTRIBUTING.md` for library structure patterns (single-package, multi-package vendor, dependent packages)
 
+## Release Process
+
+Releases run through the `Release` workflow (`.github/workflows/release.yml`), one run per **library** (directory), driven by `BuildAndPackRelease`. Each run builds at `-c Release`, packs every non-internal product, sim-tests via `RunCiSimTest`, and — unless it's a dry run — pushes the `.nupkg` files to nuget.org.
+
+### Versioning convention
+
+A package's **NuGet version is independent of the upstream framework version**. `library.json`'s `version` only pins which SPM/zip source to build; the NuGet version is whatever the release tag says.
+
+- **Third-party, new upstream release** → ship at the upstream version. Editing `library.json`'s `version` (and committing to `main`) is the only source change. Examples: Stripe `25.16.0`, Mappedin `6.3.0`.
+- **Third-party, rebuild of the same upstream** (e.g. against a new SDK) → bump the **patch** of the last *published* NuGet version, leaving `library.json` alone. Examples: Lottie (upstream 4.6.0) `4.6.1` → `4.6.2`; Nuke (upstream 13.0.6) → `13.0.7`. The NuGet patch routinely exceeds the upstream patch — that's expected, not a mistake.
+- **Apple frameworks** → all share one version that tracks the `SwiftBindings.Apple` SDK (e.g. `26.2.5`). No `library.json`, no xcframework build (the SDK reads the system framework target directly).
+
+Always check the last published version before computing the next — don't assume:
+```bash
+curl -s https://api.nuget.org/v3-flatcontainer/<package-id-lowercase>/index.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["versions"][-1])'
+```
+
+**The tag supplies the version** (`--version` → `/p:Version`, overriding the csproj `<Version>`), so a rebuild bump needs **no source edit at all** — only the tag. Only an upstream framework bump touches `library.json`.
+
+### Tag → packages
+
+Tag format is `<Library>/<version>` where `<Library>` is the directory name (`release.yml` resolves it against `libraries/` then `apple-frameworks/`). One tag packs **all non-internal products** in that library, so a single `Stripe/25.16.0` dispatch ships all 14 Stripe sub-packages. Products marked `"internal": true` are skipped.
+
+### Triggering a release wave (dispatch, not bulk tag-push)
+
+Pushing >3 tags in one `git push` **silently throttles** the tag-push trigger (no error; the surplus runs simply never start). For any wave of ≥3 packages, drive each release via `workflow_dispatch`:
+```bash
+for t in Lottie/4.6.2 Nuke/13.0.7 Stripe/25.16.0 CryptoKit/26.2.5 ...; do
+  gh workflow run release.yml -f tag="$t" -f dry_run=false   # dry_run defaults to true
+done
+```
+- **Dispatch builds from `origin/main` HEAD** (via `actions/checkout`), *not* the tag's commit. Any `library.json` bump must be committed and pushed to `main` **before** dispatching, or the build uses stale source. Tags are optional (git provenance only) on the dispatch path.
+- Each dispatched run is its own concurrency group, so the macOS-runner cap drains the queue rather than dropping runs; `run-name` renders `Release <Library>/<version>` so parallel runs stay distinguishable.
+- Recommended when the SDK delta is large: dispatch the whole set with `dry_run=true` first (build + pack + sim-test, no publish), confirm every run green, then re-dispatch with `dry_run=false`.
+
+### Inter-package publish order (dependents must go last)
+
+A few packages depend on a sibling package via a **published `<PackageReference>`** (not a `<ProjectReference>`), pinned to the new version. In a parallel wave the base package must finish and publish to nuget.org *before* the dependent's build restores, or the dependent fails with `NU1102: Unable to find package ... with version (>= X)`. The failure is clean (build-step failure, publish skipped — nothing bad ships), but the dependent must then be re-dispatched after the base is live. Known pairs (as of the 26.2.5 wave):
+
+- `SwiftBindings.Apple.MatterSupport` → `SwiftBindings.Apple.Matter`
+- `SwiftBindings.Apple.RealityKit` → `SwiftBindings.Apple.RealityFoundation`
+
+To check the surface before a wave: `grep -rn '<PackageReference Include="SwiftBindings\.' apple-frameworks libraries --include='SwiftBindings.*.csproj'` (excluding `tests/`). Either dispatch the base(s) first and wait for the nuget.org index to show the new version, or just dispatch everything and re-dispatch the dependents at the end (they restore fine once the base has published). Stripe's intra-library cross-refs are `<ProjectReference>` within one dispatch, so they build together and are unaffected.
+
+### Recovering a partially-failed publish (+ index lag)
+
+The publish job pushes every `.nupkg` for a library in parallel (`xargs -P5`). Things to know when a multi-package library is involved (Stripe = 14 packages; single-package libraries never fan out wide enough to hit any of this):
+
+- **Partial publish → re-run the failed job, do NOT re-dispatch.** If one push fails, `xargs` exits 123 and the whole step goes red *after* the other packages already published — leaving the library partially live. The build artifact (every `.nupkg`) is retained 30 days, so `gh run rerun <run-id> --failed` re-runs only the publish job: it re-downloads the artifact and re-pushes with `--skip-duplicate`, so already-live packages skip cleanly and only the missing one lands (~1 min, no rebuild). Identify the gap first by querying the flat-container index per package id: `curl -s https://api.nuget.org/v3-flatcontainer/<id-lowercase>/index.json`.
+- **dotnet first-run race (now fixed in `release.yml`).** On a cold runner, 5 concurrent `dotnet` processes raced on the `NuGet-Migrations` named mutex (backed by `/tmp/.dotnet/shm`), and one died with an `IOException` *before* pushing → the umbrella `SwiftBindings.Stripe` was dropped while the other 13 published (seen 2026-06-01). The publish step now pre-warms the first-run config serially (`dotnet nuget locals all --list`) and sets `DOTNET_SKIP_FIRST_TIME_EXPERIENCE`/`DOTNET_NOLOGO` before the parallel push, so the race can't recur.
+- **Index lag is not a failure.** A successful push is not immediately visible in the flat-container `index.json` — propagation takes a few minutes (sometimes 10–15). A green publish job with the package "missing" from the index is almost always just lag; confirm via the publish-job log (`Your package was pushed.` / HTTP `Created`, vs `Conflict` for a `--skip-duplicate` skip) rather than trusting the index immediately.
+- **Transient sim/xcframework flake.** A single run failing on xcframework merge (`xcodebuild -create-xcframework ... _merge_slices` exit 70) or sim validation, when siblings on the same SDK pass, is usually infra flake — re-dispatch once before investigating as a real per-package issue.
+
 ## Do not ship to nuget.org
 
 Some packages live in this repo for build/test purposes but **must not be published to nuget.org**. Before tagging or dispatching a release for any package, confirm it is not on this list:

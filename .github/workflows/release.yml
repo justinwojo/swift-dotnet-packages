@@ -235,6 +235,12 @@ jobs:
       - name: Publish to NuGet
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          # Suppress the dotnet first-run experience. Without these, every
+          # `dotnet` invocation runs DotnetFirstTimeUseConfigurer on startup,
+          # which is the machinery that races below (see the pre-warm note).
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+          DOTNET_NOLOGO: "1"
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         run: |
           set -e
           shopt -s nullglob
@@ -245,6 +251,19 @@ jobs:
           fi
           echo "=== Publishing ${#pkgs[@]} package(s) (parallelism=5) ==="
           printf '  - %s\n' "${pkgs[@]}"
+          # Pre-warm the dotnet first-run config ONCE, serially, before the
+          # parallel push. On a cold runner the first `dotnet` invocation runs
+          # NuGet.Common.Migrations.MigrationRunner, which creates the named
+          # mutex `NuGet-Migrations` backed by a file under /tmp/.dotnet/shm.
+          # When `xargs -P5` starts 5 `dotnet` processes simultaneously, one is
+          # still creating that directory tree while another stat()s it ->
+          # ENOENT -> IOException -> that process dies before pushing -> xargs
+          # exits 123 and the whole step fails (with most packages already
+          # pushed). Only multi-package libraries (e.g. Stripe's 14 .nupkg)
+          # ever fan out wide enough to trip it. One serial warm-up populates
+          # the shm dir so the parallel pushes never race. (Belt-and-suspenders
+          # with DOTNET_SKIP_FIRST_TIME_EXPERIENCE above.)
+          dotnet nuget locals all --list >/dev/null 2>&1 || true
           # NUL-delimit so any filename quirks are safe end-to-end; xargs -P5
           # runs up to 5 pushes in parallel.
           printf '%s\0' "${pkgs[@]}" | LC_ALL=C sort -z | xargs -0 -P5 -I{} \
