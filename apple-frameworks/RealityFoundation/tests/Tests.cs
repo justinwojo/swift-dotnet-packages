@@ -56,101 +56,41 @@ internal static class Tests
         MetadataTest<ModelComponent>("ModelComponent");
 
         // MeshBuffer / MeshBuffers.Semantic with a primitive blittable T.
-        // Pinning the upstream constraint relaxation that allows T : Vector3
-        // (and other blittable primitives) instead of T : ISwiftObject.
+        // Pins the upstream constraint relaxation that allows T : Vector3 (and
+        // other blittable primitives) instead of T : ISwiftObject.
         //
-        // Empirically probe whether the SDK's generic-specialization metadata
-        // path is reachable via a canonical sentinel call. The relaxation path
-        // requires a runtime that can fully resolve generic-specialization
-        // metadata; NativeAOT and full-AOT Mono trim it, while Mono interpreter
-        // (sim default) has it. We use IsDynamicCodeSupported as the
-        // expected-to-work gate: when it's true, a probe failure is a real
-        // regression and we Fail; when it's false, a probe failure is the
-        // documented runtime gap and we Skip. Empirical probe + capability
-        // gate together avoid both the over-broad-predicate problem (skipping
-        // on a runtime where the path actually works) and the silent-pass
-        // problem (skipping a real regression).
-        const string genericGapReason =
-            "SDK gap: constraint-relaxation generic metadata not reachable on this runtime";
-        bool dynamicCodeSupported = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported;
-        bool genericRelaxationWorks;
-        Exception? probeException = null;
+        // T2.1 closed the NativeAOT generic-specialization metadata gap:
+        // resilient SIMD generic metadata is now reachable on every runtime
+        // (Mono interpreter on the sim, Mono AOT, and NativeAOT on device), so
+        // these run unconditionally. MetadataTest itself Fails on a null
+        // metadata handle, so a runtime regression still surfaces as a failure
+        // here rather than a silent skip.
+        MetadataTest<MeshBuffer<Vector3>>("MeshBuffer<Vector3>");
+        MetadataTest<MeshBuffers.Semantic<Vector3>>("MeshBuffers.Semantic<Vector3>");
+        MetadataTest<MeshBuffers.Semantic<Vector2>>("MeshBuffers.Semantic<Vector2>");
+        MetadataTest<MeshBuffers.Semantic<float>>("MeshBuffers.Semantic<float>");
+        MetadataTest<UnsafeForceEffectBuffer<Vector3>>("UnsafeForceEffectBuffer<Vector3>");
+
         try
         {
-            var probe = SwiftObjectHelper<MeshBuffers.Semantic<Vector3>>.GetTypeMetadata();
-            genericRelaxationWorks = probe.Handle != IntPtr.Zero;
+            using var positions = MeshBuffers.Positions;
+            Pass("MeshBuffers.Positions read");
         }
-        catch (Exception ex)
+        catch (Exception ex) { Fail("MeshBuffers.Positions read", ex.Message); }
+
+        try
         {
-            probeException = ex;
-            genericRelaxationWorks = false;
+            using var normals = MeshBuffers.Normals;
+            Pass("MeshBuffers.Normals read");
         }
+        catch (Exception ex) { Fail("MeshBuffers.Normals read", ex.Message); }
 
-        if (!genericRelaxationWorks)
+        try
         {
-            if (dynamicCodeSupported)
-            {
-                // Runtime SHOULD support this path — failure is a regression.
-                string detail = probeException is { } pex
-                    ? $"probe threw {pex.GetType().Name}: {pex.Message}"
-                    : "probe returned a null metadata handle";
-                Fail("MeshBuffers.Semantic<Vector3> probe", detail);
-                Fail("MeshBuffer<Vector3> metadata", "skipped due to upstream probe failure");
-                Fail("MeshBuffers.Semantic<Vector2> metadata", "skipped due to upstream probe failure");
-                Fail("MeshBuffers.Semantic<float> metadata", "skipped due to upstream probe failure");
-                Fail("UnsafeForceEffectBuffer<Vector3> metadata", "skipped due to upstream probe failure");
-                Fail("MeshBuffers.Positions read", "skipped due to upstream probe failure");
-                Fail("MeshBuffers.Normals read", "skipped due to upstream probe failure");
-                Fail("MeshBuffers.Tangents read", "skipped due to upstream probe failure");
-            }
-            else
-            {
-                // Runtime is the known-unsupported lane (NativeAOT / full-AOT).
-                // Annotate the skip reason with the probe exception type for
-                // triage; type name is safe diagnostic text and won't trip
-                // the validator's signal-name detection.
-                string reason = probeException is { } pex
-                    ? $"{genericGapReason} (probe: {pex.GetType().Name})"
-                    : genericGapReason;
-                Skip("MeshBuffer<Vector3> metadata", reason);
-                Skip("MeshBuffers.Semantic<Vector3> metadata", reason);
-                Skip("MeshBuffers.Semantic<Vector2> metadata", reason);
-                Skip("MeshBuffers.Semantic<float> metadata", reason);
-                Skip("UnsafeForceEffectBuffer<Vector3> metadata", reason);
-                Skip("MeshBuffers.Positions read", reason);
-                Skip("MeshBuffers.Normals read", reason);
-                Skip("MeshBuffers.Tangents read", reason);
-            }
+            using var tangents = MeshBuffers.Tangents;
+            Pass("MeshBuffers.Tangents read");
         }
-        else
-        {
-            MetadataTest<MeshBuffer<Vector3>>("MeshBuffer<Vector3>");
-            MetadataTest<MeshBuffers.Semantic<Vector3>>("MeshBuffers.Semantic<Vector3>");
-            MetadataTest<MeshBuffers.Semantic<Vector2>>("MeshBuffers.Semantic<Vector2>");
-            MetadataTest<MeshBuffers.Semantic<float>>("MeshBuffers.Semantic<float>");
-            MetadataTest<UnsafeForceEffectBuffer<Vector3>>("UnsafeForceEffectBuffer<Vector3>");
-
-            try
-            {
-                using var positions = MeshBuffers.Positions;
-                Pass("MeshBuffers.Positions read");
-            }
-            catch (Exception ex) { Fail("MeshBuffers.Positions read", ex.Message); }
-
-            try
-            {
-                using var normals = MeshBuffers.Normals;
-                Pass("MeshBuffers.Normals read");
-            }
-            catch (Exception ex) { Fail("MeshBuffers.Normals read", ex.Message); }
-
-            try
-            {
-                using var tangents = MeshBuffers.Tangents;
-                Pass("MeshBuffers.Tangents read");
-            }
-            catch (Exception ex) { Fail("MeshBuffers.Tangents read", ex.Message); }
-        }
+        catch (Exception ex) { Fail("MeshBuffers.Tangents read", ex.Message); }
 
         // Transform value semantics — Identity, individual SIMD components,
         // and round-trip via Vector3 / Quaternion / Matrix4x4.

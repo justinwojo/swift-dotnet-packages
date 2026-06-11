@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using ActivityKit;
+using Swift.ActivityKit;
 using Swift.Runtime;
 
 namespace SwiftBindings.ActivityKit.Tests;
@@ -254,6 +255,90 @@ internal static class Tests
         MetadataTest<AlertConfiguration>("AlertConfiguration");
         MetadataTest<AlertConfiguration.AlertSound>("AlertConfiguration.AlertSound");
         MetadataTest<ActivityUIDismissalPolicy>("ActivityUIDismissalPolicy");
+
+        // ── Swift.ActivityKit.LiveActivity facade (Apple supplement) ──
+        // These exercise the consumer-visible Live Activities surface that ships in
+        // the SwiftBindings.Apple supplement and is pulled in transitively by this
+        // package. They stay headless-safe: we never start a real activity (that
+        // needs a foreground-active host + an embedded widget), only the calls that
+        // are deterministic on a test runner — the enablement read and the input
+        // validation that rejects payloads BEFORE any native ActivityKit call.
+
+        // Test 20: AreActivitiesEnabled — a plain bool read over the @_cdecl shim.
+        // Any value is valid (a sim with Live Activities off returns false); the
+        // point is that the P/Invoke binds and round-trips without throwing.
+        try
+        {
+            bool enabled = LiveActivity.AreActivitiesEnabled;
+            Log($"LiveActivity.AreActivitiesEnabled = {enabled}");
+            Pass("LiveActivity.AreActivitiesEnabled");
+        }
+        catch (Exception ex)
+        {
+            Fail("LiveActivity.AreActivitiesEnabled", ex.Message);
+        }
+
+        // Test 21: Request rejects malformed JSON attributes with ArgumentException
+        // (a malformed payload would start an activity whose widget renders nothing,
+        // so the facade fails fast before touching ActivityKit).
+        try
+        {
+            LiveActivity.Request("delivery", attributesJson: "{not valid json");
+            Fail("LiveActivity.Request rejects malformed JSON", "expected ArgumentException, none thrown");
+        }
+        catch (ArgumentException)
+        {
+            Pass("LiveActivity.Request rejects malformed JSON");
+        }
+        catch (Exception ex)
+        {
+            Fail("LiveActivity.Request rejects malformed JSON", $"wrong exception: {ex.GetType().Name}");
+        }
+
+        // Test 22: Request rejects a non-object JSON content state (the widget decodes
+        // the payload as an object, so a top-level array/scalar is rejected).
+        try
+        {
+            LiveActivity.Request("delivery", contentStateJson: "[1,2,3]");
+            Fail("LiveActivity.Request rejects non-object JSON", "expected ArgumentException, none thrown");
+        }
+        catch (ArgumentException)
+        {
+            Pass("LiveActivity.Request rejects non-object JSON");
+        }
+        catch (Exception ex)
+        {
+            Fail("LiveActivity.Request rejects non-object JSON", $"wrong exception: {ex.GetType().Name}");
+        }
+
+        // Test 23: Request rejects an embedded NUL in the name (it crosses as a
+        // null-terminated UTF-8 C string and would silently truncate on the Swift side).
+        try
+        {
+            LiveActivity.Request("deli\0very");
+            Fail("LiveActivity.Request rejects embedded NUL", "expected ArgumentException, none thrown");
+        }
+        catch (ArgumentException)
+        {
+            Pass("LiveActivity.Request rejects embedded NUL");
+        }
+        catch (Exception ex)
+        {
+            Fail("LiveActivity.Request rejects embedded NUL", $"wrong exception: {ex.GetType().Name}");
+        }
+
+        // Test 24: LiveActivityException carries the system-reported reason verbatim.
+        try
+        {
+            var liveEx = new LiveActivityException("activities disabled");
+            if (liveEx.Message != "activities disabled")
+                throw new InvalidOperationException($"message not preserved: {liveEx.Message}");
+            Pass("LiveActivityException message round-trip");
+        }
+        catch (Exception ex)
+        {
+            Fail("LiveActivityException message round-trip", ex.Message);
+        }
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

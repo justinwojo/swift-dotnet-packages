@@ -1,39 +1,75 @@
 # SwiftBindings.Apple.ActivityKit
 
-Native .NET bindings for Apple's [ActivityKit](https://developer.apple.com/documentation/activitykit) framework — the API behind Live Activities and Dynamic Island on iOS.
+Native .NET bindings for Apple's [ActivityKit](https://developer.apple.com/documentation/activitykit) framework — the API behind Live Activities and the Dynamic Island on iOS.
 
-## Status: not shipping for 1.0
+You can **start, update, and end Live Activities from C#.** The request/update/end chain is verified end-to-end on both the iOS Simulator (Mono JIT) and a physical device (NativeAOT).
 
-ActivityKit is **not being published to nuget.org for the 1.0 release**. The blocker (below) is structural — first-class C# activity authorship would require a C# source generator that emits a Swift companion target, which is not in scope for 1.0.
+## Quick start
 
-If you're searching nuget.org for `SwiftBindings.Apple.ActivityKit` (or the legacy `SwiftBindings.ActivityKit`): it is intentionally absent. The README is kept here so that the decision (and the path forward) is discoverable in the repository.
+```bash
+dotnet add package SwiftBindings.Apple.ActivityKit
+```
 
-## Why it is shelved
+The content crosses as a **JSON string**, but you never hand-write it — model each payload as a C# type and serialize it (camelCase keys match the Swift struct your widget decodes into). Your payload shape and your widget's UI are entirely yours:
 
-`Activity<Attributes>` is the core entry point of ActivityKit, and `Attributes` must be a concrete user type conforming to `ActivityAttributes`. `ActivityAttributes` in turn refines `Codable` and `Hashable`, and its associated `ContentState` must also be `Codable & Hashable`. Activity payloads are then shipped across the XPC boundary inside `ActivityContent<ContentState>`.
+```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Swift.ActivityKit;
 
-The binding layer exposes the ActivityKit type metadata (`Activity`, `ActivityContent`, `ActivityAuthorizationInfo`, `ActivityState`, `ActivityActivationState`, push-token APIs, etc.), but **user types cannot supply the required conformances from C#**. Two unrelated constraints combine to block this:
+record DeliveryAttributes(string OrderId);
+record DeliveryState(string Status, string? Eta = null);
 
-1. **`Codable` / `Hashable` synthesis is compiler-driven.** Both protocols are synthesized in Swift from the user type's stored properties at compile time. There is no runtime entry point we can hand-roll from the C# side that produces a functioning witness table for a type the Swift compiler never saw.
-2. **`ActivityContent<ContentState>` is projected as an indeterminate PWT shape.** Even if we could supply the conformances, the generic parameter's witness-table layout depends on which protocols the *concrete* `ContentState` actually conforms to, information that only exists at the Swift call site.
+var jsonOptions = new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+};
 
-Concretely, you can compile and link against an ActivityKit binding, but any attempt to materialize an `Activity<YourAttributes>` from C# will fail because `YourAttributes` has no Swift-visible definition, no conformance records, and no metadata descriptor.
+if (LiveActivity.AreActivitiesEnabled)
+{
+    var activity = LiveActivity.Request(
+        name: "delivery",
+        attributesJson:   JsonSerializer.Serialize(new DeliveryAttributes("A-42"), jsonOptions),
+        contentStateJson: JsonSerializer.Serialize(new DeliveryState("Preparing", "15 min"), jsonOptions));
 
-### What works (if you build the binding locally)
+    activity.Update(JsonSerializer.Serialize(new DeliveryState("Out for delivery", "5 min"), jsonOptions));
+    activity.End(JsonSerializer.Serialize(new DeliveryState("Delivered"), jsonOptions), immediate: true);
+}
+```
 
-- Reading `ActivityAuthorizationInfo.areActivitiesEnabled` and push-token capability metadata.
-- Inspecting the ActivityKit type surface (e.g. in mixed projects that import `ActivityKit` symbols but never construct activities themselves).
-- Consuming ActivityKit indirectly: a Swift companion target can declare your `ActivityAttributes` type, expose a C-callable shim (`@_cdecl`) that accepts an opaque handle plus a JSON or struct payload, and a future ActivityKit binding can still be used for the surrounding type references.
+> Publishing to a physical device (NativeAOT)? Reflection-based serialization warns there; the [wiki guide](https://github.com/justinwojo/swift-dotnet-packages/wiki/ActivityKit) shows the source-generated variant for a warning-free publish.
 
-### Path to shipping
+Two more things are required, both standard for *any* Live Activity (Swift apps need them too):
 
-Tracked as a permanent limitation absent one of:
+1. Add `<key>NSSupportsLiveActivities</key><true/>` to your app's **Info.plist**.
+2. Embed a small **SwiftUI widget extension** (~30 lines) to render the activity.
 
-- **A C# source generator that emits a Swift companion target** declaring the attributes struct, its `ContentState`, conformance decls, and wrapper `@_cdecl` entry points for `request/update/end`. This is the only tractable path but has no precedent in the generator today (the existing analyzers all emit C#, not Swift).
-- **Swift ABI changes** allowing runtime synthesis of `Codable` / `Hashable` witnesses for opaque external types. No indication Apple intends this.
+The complete walkthrough — the widget template, the shared attributes type, and the full C# API — is in the wiki:
 
-Apps that must ship Live Activities from a .NET codebase today should declare the `ActivityAttributes` in a Swift companion target, expose a narrow C-callable API (`activity_request`, `activity_update(handle, payloadPtr)`, `activity_end(handle)`), and call into that surface via P/Invoke.
+➡️ **[Live Activities from .NET](https://github.com/justinwojo/swift-dotnet-packages/wiki/ActivityKit)**
+
+## How it works
+
+ActivityKit's entry point is `Activity<Attributes>`, where `Attributes` conforms to `ActivityAttributes: Codable & Hashable`. Those conformances are synthesized by the Swift compiler from the type's stored properties **at compile time** — so a C# type the Swift compiler never saw cannot serve as `Attributes`, and `Activity<YourCSharpType>` can never be materialized from C#.
+
+This binding sidesteps that by shipping **one fixed, Swift-defined attributes type** (`DotNetLiveActivityAttributes`) inside the native `SBApple` framework. Because it is concrete at the binding's build time, the compiler synthesizes its witnesses then, and the `Activity<…>` generic is resolved entirely within `SBApple` — no generic and no protocol-witness table ever crosses the C ABI. Your per-activity data rides inside that fixed type as **JSON**; the widget decodes it to draw the UI.
+
+Cross-process pairing between your running activity and the widget is by the attributes type's **unqualified name** plus a `Codable` round-trip, so your widget extension declares its own byte-for-byte copy of the type (Apple's standard "attributes in two targets" pattern) and never links this package.
+
+## What ships vs. what doesn't
+
+**Ships and works:**
+
+- `LiveActivity.Request` / `Update` / `End` — the full lifecycle, returning a handle.
+- `LiveActivity.AreActivitiesEnabled`, `IsActive`, and `LiveActivityException` for the failure reason.
+- `LiveActivity.ObservePushToken` — APNs push tokens for server-driven updates (lowercase hex), when started with `usePushToken: true`.
+- Registry hardening: idempotent `End`, and `Update`-after-`End` is a safe no-op rather than a use-after-free.
+
+**Not available:** genuinely distinct, strongly-typed `ActivityAttributes` structs authored per app in C#. You model per-activity data as JSON inside the one fixed type instead. If you need separate compiler-checked attributes types, declare them in a Swift companion target and call into a narrow `@_cdecl` shim — the same technique this binding uses internally.
 
 ## Documentation
 
+- [Live Activities from .NET (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/ActivityKit) — full setup walkthrough
 - [Apple ActivityKit framework](https://developer.apple.com/documentation/activitykit)
+- [Known Limitations (wiki)](https://github.com/justinwojo/swift-dotnet-bindings/wiki/Known-Limitations)

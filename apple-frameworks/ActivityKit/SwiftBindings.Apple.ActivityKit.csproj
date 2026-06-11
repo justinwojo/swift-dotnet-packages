@@ -1,10 +1,10 @@
-<Project Sdk="SwiftBindings.Sdk/0.12.1">
+<Project Sdk="SwiftBindings.Sdk/0.14.0">
   <PropertyGroup>
     <!-- Override single-TFM default from Directory.Build.props -->
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2</TargetFrameworks>
     <PackageId>SwiftBindings.Apple.ActivityKit</PackageId>
-    <Version>26.2.5</Version>
+    <Version>26.2.6</Version>
     <Description>Native Swift interop bindings for Apple ActivityKit</Description>
     <PackageTags>$(CommonPackageTags);activitykit;live-activities;dynamic-island</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

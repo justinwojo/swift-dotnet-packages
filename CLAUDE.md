@@ -340,7 +340,6 @@ The publish job pushes every `.nupkg` for a library in parallel (`xargs -P5`). T
 
 Some packages live in this repo for build/test purposes but **must not be published to nuget.org**. Before tagging or dispatching a release for any package, confirm it is not on this list:
 
-- **`apple-frameworks/ActivityKit`** — structural limitation. `Activity<Attributes>` requires user types to conform to `Codable` + `Hashable`, which are compiler-synthesized in Swift; C# can't supply working conformance witnesses for types the Swift compiler never saw. See `apple-frameworks/ActivityKit/README.md` for the full explanation and the source-generator path forward.
 - **`apple-frameworks/AppIntents`** — structural limitation. The framework's value is OS-level Siri / Shortcuts / Spotlight integration, which needs (a) authoring `@AppIntent` / `@AppEntity` Swift structs — a Swift-struct-only protocol with no `@objc` bridge from C# — and (b) build-time `appintentsmetadataprocessor` scanning of the consumer's Swift source, which a C# app never emits. The `AppEntity` value types that do bind are orphaned (constructible, but no authored intent consumes them and no metadata reaches the OS). See `apple-frameworks/AppIntents/README.md` for the full explanation and the source-generator path forward.
 - **`libraries/Kingfisher`** — not planned for ship.
 
