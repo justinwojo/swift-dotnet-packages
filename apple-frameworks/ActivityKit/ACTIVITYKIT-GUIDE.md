@@ -17,6 +17,7 @@ This guide covers the one design constraint that makes it possible, the complete
 - [Push-driven updates](#push-driven-updates)
 - [Lifetime & threading](#lifetime--threading)
 - [What ships vs. what doesn't](#what-ships-vs-what-doesnt)
+- [Alternative: roll your own Swift bridge](#alternative-roll-your-own-swift-bridge)
 - [Troubleshooting](#troubleshooting)
 - [Reference links](#reference-links)
 
@@ -256,14 +257,18 @@ Each run produces `…/Build/Products/Release-{iphoneos|iphonesimulator}/LiveAct
 </ItemGroup>
 ```
 
-The `BuildOutput` split is the detail that matters — a single entry resolves to the device or simulator `.appex` automatically based on what you're building. .NET handles the copy into `PlugIns/` and the re-sign; you hand-copy nothing.
+Three details decide whether this resolves:
 
-Two bundle rules iOS enforces (both confirmed by the end-to-end test that validated this binding):
+- **The SDK looks for the bundle at exactly `{Include}/{BuildOutput}/{Name}.appex`.** So `Name` must match the `.appex` filename (without the extension) — here `LiveActivityWidget` → `LiveActivityWidget.appex`. The `BuildOutput` split is what lets one entry resolve to the device or simulator slice automatically based on what you're building. .NET then copies it into `PlugIns/` and re-signs it; you hand-copy nothing.
+- **Signing follows the host app's identity.** A **simulator** build re-signs the embedded `.appex` ad-hoc — no entitlements or provisioning needed, which is why the simulator path Just Works. A **device** build re-signs it with your real signing identity and provisioning profile, and that is where `CodesignEntitlements` matters (e.g. an App Group or push entitlement on the widget).
+- **`CodesignEntitlements` is optional.** Omit it and the SDK auto-uses `{Include}/{Name}.entitlements` if that file exists; if the widget needs none, drop the line and set `<CodesignWarnIfNoEntitlements>false</CodesignWarnIfNoEntitlements>` to silence the otherwise-emitted warning.
+
+Two further bundle rules iOS enforces (both confirmed by the end-to-end test that validated this binding):
 
 - **The widget's bundle id must be a child of the host app's** — app `com.acme.app` → widget `com.acme.app.widget`. A non-prefixed id makes iOS silently refuse to load the extension (the activity still starts; only the UI is missing).
 - **The widget's `Info.plist` must declare the WidgetKit extension point** — `NSExtension` → `NSExtensionPointIdentifier` = `com.apple.widgetkit-extension`. Xcode's Widget Extension template writes this for you.
 
-> **MAUI:** the MAUI iOS head *is* a .NET for iOS app, so `AdditionalAppExtensions` applies unchanged — the widget is embedded under the iOS head's `PlugIns/`. Microsoft's [.NET MAUI Live Activity sample](https://learn.microsoft.com/dotnet/samples/dotnet/maui-samples/platformintegration-live-activity/) and the [How to Build iOS Widgets with .NET MAUI](https://devblogs.microsoft.com/dotnet/how-to-build-ios-widgets-with-dotnet-maui/) blog post walk this exact path. To pass anything beyond the activity payload (or otherwise coordinate app ↔ widget), share an **App Group** container between the host app and the extension.
+> **MAUI:** the MAUI iOS head *is* a .NET for iOS app, so `AdditionalAppExtensions` applies unchanged — the widget is embedded under the iOS head's `PlugIns/`. Microsoft's [.NET MAUI Live Activity sample](https://learn.microsoft.com/en-us/samples/dotnet/maui-samples/platformintegration-live-activity/) and the [How to Build iOS Widgets with .NET MAUI](https://devblogs.microsoft.com/dotnet/how-to-build-ios-widgets-with-dotnet-maui/) blog post walk this exact path. To pass anything beyond the activity payload (or otherwise coordinate app ↔ widget), share an **App Group** container between the host app and the extension.
 
 ## Step 4 — Drive it from C#
 
@@ -321,6 +326,14 @@ Your server then pushes `content-state` payloads to APNs against that token. The
 - Registry hardening: idempotent `End`, and `Update`-after-`End` is a safe no-op rather than a use-after-free.
 
 **Not available:** genuinely distinct, strongly-typed `ActivityAttributes` structs authored per app in C#. You model per-activity data as JSON inside the one fixed type instead. If you need separate compiler-checked attributes types, declare them in a Swift companion target and call into a narrow `@_cdecl` shim — the same technique this binding uses internally.
+
+## Alternative: roll your own Swift bridge
+
+This binding exists so a **C#-only** team can drive Live Activities without authoring or maintaining any Swift bridge or P/Invoke layer — you write only the widget UI (which is irreducibly SwiftUI no matter the approach). The cost of that convenience is the JSON-blob attributes design above.
+
+If your team is comfortable writing a little Swift, Microsoft documents the lower-level path directly — [How to Build iOS Widgets with .NET MAUI](https://devblogs.microsoft.com/dotnet/how-to-build-ios-widgets-with-dotnet-maui/) and the [.NET MAUI Live Activity sample](https://learn.microsoft.com/en-us/samples/dotnet/maui-samples/platformintegration-live-activity/). There you author your own Swift bridge (`Activity.request/update/end` behind `@_cdecl` shims), expose it to C# via P/Invoke, and embed the widget with the same `AdditionalAppExtensions` step from [Step 3c](#step-3c--embed-and-sign-it-from-your-csproj). It's more moving parts to write and maintain, but because *you* define the `ActivityAttributes` struct in your own Swift, you get **genuinely typed, compiler-checked attributes** instead of a JSON round-trip — the one capability this binding structurally cannot offer.
+
+Rule of thumb: reach for this package when you want zero Swift bridge code and JSON payloads are fine; roll your own when typed attributes are worth owning a small Swift target. Either way the widget extension and `AdditionalAppExtensions` embedding are identical.
 
 ## Troubleshooting
 
