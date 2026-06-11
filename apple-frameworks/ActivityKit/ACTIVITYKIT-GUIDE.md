@@ -27,7 +27,7 @@ This guide covers the one design constraint that makes it possible, the complete
 - **iOS 16.2+** at runtime for `Request` / `Update` / `End` (the attributes type itself is 16.1+)
 - macOS host for development
 - The host app must be **foreground-active** when it calls `Request` — ActivityKit throws otherwise (an Apple rule, not a binding limitation)
-- A **WidgetKit extension** embedded in your app to render the activity (~30 lines of SwiftUI; template below)
+- A **WidgetKit extension** embedded in your app to render the activity (~30 lines of SwiftUI; template below). It is embedded straight from your `.csproj` via `AdditionalAppExtensions` — **your .NET/MAUI app never becomes an Xcode project** (see [Step 3](#step-3--add-the-swiftui-widget-extension))
 - The **`NSSupportsLiveActivities`** Info.plist key on the host app
 - The **Dynamic Island** specifically needs an iPhone 14 Pro or newer; every Live-Activity-capable device shows the lock-screen / banner presentation regardless
 
@@ -144,7 +144,13 @@ Add to your app's **Info.plist**:
 
 ## Step 3 — Add the SwiftUI widget extension
 
-Live Activity UI is always SwiftUI, authored in a WidgetKit extension — this is true for Swift apps too; it is the one piece that cannot be C#. Add a **Widget Extension** target to your app (in Xcode: *File ▸ New ▸ Target ▸ Widget Extension*, check *Include Live Activity*), then put these **two** files in it.
+Live Activity UI is always SwiftUI compiled into a WidgetKit app extension (a signed `.appex` bundle) — true for Swift apps too. It is the one piece that cannot be C#, and the one piece that needs Xcode's Swift toolchain to compile. The crucial point for .NET and MAUI: **your app does not become an Xcode project.** You author the widget as a *standalone* Swift extension, build it to a `.appex`, and let the .NET build embed and sign it into your app bundle's `PlugIns/` folder — the same place every iOS app, Swift or not, carries its extensions.
+
+The three sub-steps below do exactly that: **3a** write the two Swift files, **3b** compile them to a `.appex`, **3c** embed it from your `.csproj`.
+
+### Step 3a — Author the widget
+
+Create a Widget Extension target in *any* Xcode project — a throwaway one whose only job is to compile this widget is fine (*File ▸ New ▸ Target ▸ Widget Extension*, check *Include Live Activity*). Keep its two source files in your repo, e.g. under `Platforms/iOS/LiveActivityWidget/`. Put these **two** files in the target.
 
 **`DotNetLiveActivityAttributes.swift`** — a byte-for-byte copy of the binding's attributes type. ActivityKit pairs a running activity to your widget by this type's **unqualified name** plus a `Codable` round-trip, so your widget declaring its own identical copy is all the pairing needs.
 
@@ -218,6 +224,47 @@ struct DotNetLiveActivityWidget: Widget {
 
 Decode the JSON into a real model instead of showing the raw string in anything you ship — for example `try JSONDecoder().decode(MyState.self, from: Data(context.state.json.utf8))`. The binding does not care about the JSON's shape; you own both ends of it.
 
+### Step 3b — Compile the widget to a `.appex`
+
+The widget is built by Xcode's Swift toolchain, never by .NET. Build its target once per slice you ship — device and simulator land in different output folders:
+
+```bash
+# Device slice
+xcodebuild -project LiveActivityWidget.xcodeproj -scheme LiveActivityWidget \
+  -configuration Release -sdk iphoneos        -derivedDataPath build-device
+
+# Simulator slice
+xcodebuild -project LiveActivityWidget.xcodeproj -scheme LiveActivityWidget \
+  -configuration Release -sdk iphonesimulator  -derivedDataPath build-sim
+```
+
+Each run produces `…/Build/Products/Release-{iphoneos|iphonesimulator}/LiveActivityWidget.appex`. You don't sign it here — the .NET build re-signs it with your app's identity in Step 3c.
+
+### Step 3c — Embed and sign it from your `.csproj`
+
+.NET for iOS has a first-class build item, **`AdditionalAppExtensions`**, that copies a prebuilt native `.appex` into `YourApp.app/PlugIns/` and code-signs it with your app's identity during `dotnet build` / `publish` — **no app-level Xcode project required.** Add it to your iOS app `.csproj` (for MAUI, the iOS head's `.csproj`):
+
+```xml
+<ItemGroup>
+  <AdditionalAppExtensions Include="Platforms/iOS/LiveActivityWidget">
+    <Name>LiveActivityWidget</Name>
+    <!-- BuildOutput is appended to Include; the right slice resolves per build. -->
+    <BuildOutput Condition="'$(SdkIsSimulator)' == 'true'">build-sim/Build/Products/Release-iphonesimulator</BuildOutput>
+    <BuildOutput Condition="'$(SdkIsSimulator)' == 'false'">build-device/Build/Products/Release-iphoneos</BuildOutput>
+    <CodesignEntitlements>Platforms/iOS/LiveActivityWidget/Widget.entitlements</CodesignEntitlements>
+  </AdditionalAppExtensions>
+</ItemGroup>
+```
+
+The `BuildOutput` split is the detail that matters — a single entry resolves to the device or simulator `.appex` automatically based on what you're building. .NET handles the copy into `PlugIns/` and the re-sign; you hand-copy nothing.
+
+Two bundle rules iOS enforces (both confirmed by the end-to-end test that validated this binding):
+
+- **The widget's bundle id must be a child of the host app's** — app `com.acme.app` → widget `com.acme.app.widget`. A non-prefixed id makes iOS silently refuse to load the extension (the activity still starts; only the UI is missing).
+- **The widget's `Info.plist` must declare the WidgetKit extension point** — `NSExtension` → `NSExtensionPointIdentifier` = `com.apple.widgetkit-extension`. Xcode's Widget Extension template writes this for you.
+
+> **MAUI:** the MAUI iOS head *is* a .NET for iOS app, so `AdditionalAppExtensions` applies unchanged — the widget is embedded under the iOS head's `PlugIns/`. Microsoft's [.NET MAUI Live Activity sample](https://learn.microsoft.com/dotnet/samples/dotnet/maui-samples/platformintegration-live-activity/) and the [How to Build iOS Widgets with .NET MAUI](https://devblogs.microsoft.com/dotnet/how-to-build-ios-widgets-with-dotnet-maui/) blog post walk this exact path. To pass anything beyond the activity payload (or otherwise coordinate app ↔ widget), share an **App Group** container between the host app and the extension.
+
 ## Step 4 — Drive it from C#
 
 The C# is the three-call loop from [Quick start](#quick-start) — `Request`, then `Update` as the state changes, then `End`. One rule is specific to this binding: every JSON argument (`attributesJson`, `contentStateJson`, and the `Update` / `End` payloads) must be a JSON **object** — `{ … }` — or null/empty, which the facade normalizes to `{}`. A malformed payload would start an activity whose widget silently renders nothing, so the facade validates eagerly and throws `ArgumentException` before any ActivityKit call.
@@ -283,6 +330,8 @@ Your server then pushes `content-state` payloads to APNs against that token. The
 | `LiveActivityException: visibility` | The app wasn't foreground-active when you called `Request`. Call it from an active state, not from the background or during launch. |
 | `AreActivitiesEnabled` is false | The user turned Live Activities off for your app in Settings (or the entitlement is absent at runtime). A missing `NSSupportsLiveActivities` key usually surfaces instead as `LiveActivityException: unsupportedTarget` on `Request`. |
 | Activity starts but nothing renders | No widget extension embedded, or its `DotNetLiveActivityAttributes` doesn't match (same property names, same `Codable` shape). The activity is still tracked; only the UI is missing. |
+| Extension never loads — no UI, no error | The widget's bundle id isn't a child of the host app's (`com.acme.app.widget`), or its `Info.plist` is missing `NSExtensionPointIdentifier = com.apple.widgetkit-extension`. Both are required for iOS to load the `.appex`. |
+| Widget UI doesn't reflect a Swift change you just made | MSBuild's incremental copy can ship a **stale `.appex`**. Rebuild the widget (Step 3b), then clean the .NET app's `bin/` + `obj/` before redeploying so the new bundle is copied into `PlugIns/`. |
 | Nothing in the Dynamic Island, but the lock screen works | Expected on devices without Dynamic Island hardware (anything before iPhone 14 Pro). The lock-screen presentation is the cross-device surface. |
 | Simulator shows nothing in the Dynamic Island | The iOS Simulator does not composite third-party Live Activities into the Dynamic Island. Use the lock screen, or a physical device, to see it render. The start/update/end calls themselves work on the simulator. |
 
