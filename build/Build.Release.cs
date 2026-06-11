@@ -344,10 +344,21 @@ partial class Build
             var csproj = product.CsprojPath(libraryDir);
             Log.Information("=== Packing {Csproj} ===", Path.GetRelativePath(RootDirectory, csproj));
 
+            // NOTE: intentionally NOT --no-build. SDK 0.14.0's
+            // _BuildMixedObjCCompanion target builds the generated ObjC
+            // companion project out-of-band via <MSBuild Targets="Build">
+            // without stripping the inherited NoBuild global property, so
+            // `pack --no-build` propagates NoBuild=true into that companion
+            // build and trips NETSDK1085 — but ONLY for Mixed (Swift+ObjC)
+            // frameworks (BlinkID, BlinkIDUX, Stripe). The full Release build
+            // already ran in step 1 (BuildLibraryAtConfiguration), so dropping
+            // --no-build here is an incremental no-op for the main assembly and
+            // merely lets the companion build run without NoBuild. Restore
+            // --no-build once the SDK fix lands (see swift-bindings/src/docs/
+            // Future/pack-nobuild-mixed-objc-companion.md).
             var exit = RunDotnet(new[]
             {
                 "pack", (string)csproj,
-                "--no-build",
                 "-c", configuration,
                 $"/p:Version={version}",
                 "-o", (string)outputDir,
