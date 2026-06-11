@@ -72,17 +72,10 @@ partial class Build
                 var csproj = product.CsprojPath(libraryDir);
                 Log.Information("=== Packing {Csproj} ===", Path.GetRelativePath(RootDirectory, csproj));
 
-                // NOTE: intentionally NOT --no-build — SDK 0.14.0's
-                // _BuildMixedObjCCompanion builds the generated ObjC companion
-                // out-of-band and `pack --no-build` propagates NoBuild=true into
-                // it, tripping NETSDK1085 for Mixed (Swift+ObjC) frameworks.
-                // Callers build at the desired configuration first, so this is an
-                // incremental no-op for the main assembly. Restore --no-build
-                // once the SDK fix lands (swift-bindings/src/docs/Future/
-                // pack-nobuild-mixed-objc-companion.md).
                 var args = new List<string>
                 {
                     "pack", (string)csproj,
+                    "--no-build",
                     "-c", Configuration,
                     "-o", (string)outputDir,
                 };
@@ -151,19 +144,16 @@ partial class Build
                 var csproj = product.CsprojPath(libraryDir);
                 Log.Information("=== Validating pack: {Csproj} ===", Path.GetRelativePath(RootDirectory, csproj));
 
-                // -c Configuration must match the prior `dotnet build` pass so
-                // pack resolves bin/$(Configuration)/.../*.dll. CI's BuildLibrary
-                // step uses the global default (Debug).
-                // NOTE: intentionally NOT --no-build — SDK 0.14.0's
-                // _BuildMixedObjCCompanion builds the generated ObjC companion
-                // out-of-band and `pack --no-build` propagates NoBuild=true into
-                // it, tripping NETSDK1085 for Mixed (Swift+ObjC) frameworks. With
-                // the prior build pass done, dropping --no-build is an incremental
-                // no-op for the main assembly. Restore --no-build once the SDK fix
-                // lands (swift-bindings/src/docs/Future/pack-nobuild-mixed-objc-companion.md).
+                // -c Configuration must match the prior `dotnet build` pass —
+                // dotnet pack --no-build resolves bin/$(Configuration)/.../*.dll,
+                // and CI's BuildLibrary step uses the global default (Debug). If
+                // anyone runs `dotnet nuke PackValidate --library X --configuration Release`
+                // without first re-running BuildLibrary at Release, pack will
+                // fail loudly rather than silently picking up Debug artifacts.
                 var exit = RunDotnet(new[]
                 {
                     "pack", (string)csproj,
+                    "--no-build",
                     "-c", Configuration,
                     "/p:Version=0.0.0-ci",
                     "-o", (string)outputDir,
