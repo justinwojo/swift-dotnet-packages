@@ -5,6 +5,7 @@
 ## Contents
 
 - [Requirements & install](#requirements--install)
+- [Testing: `.storekit`, Sandbox, and Production](#testing-storekit-sandbox-and-production)
 - [Naming conventions](#naming-conventions)
 - [Quick start: a complete purchase](#quick-start-a-complete-purchase)
 - [1. Check capability](#1-check-capability)
@@ -29,7 +30,7 @@
 - .NET 10.0+
 - iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
 - macOS host for development
-- Products configured in App Store Connect for live flows, or a `.storekit` configuration file for local testing in the simulator
+- Products configured in App Store Connect for live flows (Sandbox/Production), or a `.storekit` file for local testing **launched from Xcode** — see [Testing](#testing-storekit-sandbox-and-production) for what each path supports
 
 ```
 dotnet add package SwiftBindings.Apple.StoreKit2
@@ -40,6 +41,29 @@ using StoreKit2;
 ```
 
 > The namespace is `StoreKit2` (not `StoreKit`) to avoid colliding with Microsoft's `StoreKit` types.
+
+## Testing: `.storekit`, Sandbox, and Production
+
+StoreKit purchases run against one of three backends. The active one is reported on `Transaction.Environment` / `AppStore.Environment` as `Xcode`, `Sandbox`, or `Production`:
+
+| Environment | How it's activated | Use it for |
+|---|---|---|
+| **Xcode** (local `.storekit`) | Xcode scheme → **Run → Options → StoreKit Configuration** | offline iteration in the simulator while running from Xcode |
+| **Sandbox** | a Sandbox Apple ID (App Store Connect → **Users and Access → Sandbox**), signed into the device | realistic end-to-end testing on a device or in CI — no Xcode needed |
+| **Production** | the live App Store | shipping apps |
+
+Once an environment is active, the generated C# API (`Product.ProductsAsync`, `PurchaseAsync`, `Transaction.CurrentEntitlements`, …) uses it transparently — there is nothing StoreKit2-specific to configure in your C# code.
+
+### Local `.storekit` files are activated by Xcode, not by your app
+
+A `.storekit` file is provisioned into the simulator's StoreKit daemon by **Xcode** when you launch from a scheme that has a StoreKit Configuration selected. The app never points itself at the file.
+
+> **You cannot load a `.storekit` file from a non-Xcode launch.** There is no public StoreKit API to activate a `.storekit` file at runtime, and passing `-StoreKitConfigurationFilePath` (or a similar launch argument) through `mlaunch` / `simctl` / `dotnet` / CI does **not** work — the daemon state Xcode normally sets up isn't present, and StoreKit can crash (SIGSEGV) when it reaches that uninitialized path. This is an Apple platform limitation, not a gap in the binding. The only programmatic loader, `SKTestSession`, belongs to the separate `StoreKitTest` framework and is engineered to run only inside an XCTest test host (it requires the app to be installed-for-development with the XCTest runtime loaded), so it does not translate into a usable standalone-app C# API. **To test outside Xcode — on a device, in CI, or from the command line — use a Sandbox account.**
+
+### Tips
+
+- `Product.PurchaseOption.SimulatesAskToBuyInSandbox(true)` forces the Ask-to-Buy deferral so you can exercise `PurchaseResult.CaseTag.Pending` without a real Family Sharing setup.
+- Branch on `Transaction.Environment` (`Xcode` / `Sandbox` / `Production`) if you need environment-specific behaviour, e.g. shorter entitlement-polling intervals in test builds.
 
 ## Naming conventions
 
@@ -492,4 +516,5 @@ Consumer-facing types (namespace `StoreKit2`):
 
 - [Apple — StoreKit](https://developer.apple.com/documentation/storekit)
 - [Apple — In-App Purchase](https://developer.apple.com/in-app-purchase/)
-- [Apple — Testing with a StoreKit configuration file](https://developer.apple.com/documentation/xcode/setting-up-storekit-testing-in-xcode)
+- [Apple — Testing with a StoreKit configuration file (Xcode)](https://developer.apple.com/documentation/xcode/setting-up-storekit-testing-in-xcode)
+- [Apple — Testing in-app purchases with sandbox](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox)

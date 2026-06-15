@@ -486,7 +486,8 @@ internal static class Tests
         static void RootMusicItemCollectionErgonomics(MusicItemCollection<Song> c)
         {
             c.Index((int)0);                   // index(after:) instance overload
-            c.FormIndex((int)0);               // formIndex(after:) instance overload
+            nint formIdx = 0;                  // formIndex(after: inout Index) surfaces as ref nint
+            c.FormIndex(ref formIdx);          // formIndex(after:) instance overload
             _ = c.Index((nint)0, (nint)0);     // index(_:offsetBy:) CSM extension
             _ = c.Distance((nint)0, (nint)0);  // distance(from:to:) CSM extension
         }
@@ -535,11 +536,13 @@ internal static class Tests
             }
             else
             {
-                // index(after:)/formIndex(after:) — instance methods with int convenience overloads.
+                // index(after:) — instance method with an int convenience overload.
                 if (t.GetMethod("Index", new[] { typeof(int) }) is null)
                     throw new InvalidOperationException("Index(int) missing");
-                if (t.GetMethod("FormIndex", new[] { typeof(int) }) is null)
-                    throw new InvalidOperationException("FormIndex(int) missing");
+                // formIndex(after: inout Index) surfaces as ref nint — no by-value convenience
+                // overload is possible (the writeback would be lost), so probe the ref nint form.
+                if (t.GetMethod("FormIndex", new[] { typeof(nint).MakeByRefType() }) is null)
+                    throw new InvalidOperationException("FormIndex(ref nint) missing");
 
                 // index(_:offsetBy:)/distance(from:to:) — CSM concrete-specialization extension methods
                 // (nint, nint). Callable as collection.Index(i, distance) / collection.Distance(start, end).

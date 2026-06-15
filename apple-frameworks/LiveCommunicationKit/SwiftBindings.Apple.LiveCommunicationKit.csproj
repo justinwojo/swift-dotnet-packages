@@ -1,9 +1,9 @@
-<Project Sdk="SwiftBindings.Sdk/0.14.0">
+<Project Sdk="SwiftBindings.Sdk/0.15.0">
   <PropertyGroup>
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2;net10.0-macos26.2;net10.0-maccatalyst26.2</TargetFrameworks>
     <PackageId>SwiftBindings.Apple.LiveCommunicationKit</PackageId>
-    <Version>26.2.6</Version>
+    <Version>26.2.7</Version>
     <Description>Native Swift interop bindings for Apple LiveCommunicationKit</Description>
     <PackageTags>$(CommonPackageTags);macos;maccatalyst;livecommunicationkit;voip;calls</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
