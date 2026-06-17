@@ -24,8 +24,8 @@ public sealed class SimulatorFleet
     public double CommandBackoffMaxSeconds { get; init; } = 8.0;
     // 120s (was 60s) — cold `simctl list devices -j` legitimately runs longer
     // than 60s on busy macos-26 Apple Silicon runners. A per-verb split (short
-    // for boot polling, long for cold enumeration) is the proper fix and is
-    // tracked in SIM-TEST-FOLLOWUPS.md; this coarse bump is the cheap mitigation.
+    // for boot polling, long for cold enumeration) would be the proper fix;
+    // this coarse bump is the cheap mitigation.
     public TimeSpan CommandTimeout { get; init; } = TimeSpan.FromSeconds(120);
 
     public TimeSpan BootPollInterval { get; init; } = TimeSpan.FromSeconds(2);
