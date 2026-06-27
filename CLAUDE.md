@@ -341,6 +341,7 @@ The publish job pushes every `.nupkg` for a library in parallel (`xargs -P5`). T
 Some packages live in this repo for build/test purposes but **must not be published to nuget.org**. Before tagging or dispatching a release for any package, confirm it is not on this list:
 
 - **`apple-frameworks/AppIntents`** — structural limitation. The framework's value is OS-level Siri / Shortcuts / Spotlight integration, which needs (a) authoring `@AppIntent` / `@AppEntity` Swift structs — a Swift-struct-only protocol with no `@objc` bridge from C# — and (b) build-time `appintentsmetadataprocessor` scanning of the consumer's Swift source, which a C# app never emits. The `AppEntity` value types that do bind are orphaned (constructible, but no authored intent consumes them and no metadata reaches the OS). See `apple-frameworks/AppIntents/README.md` for the full explanation and the source-generator path forward.
-- **`libraries/Kingfisher`** — not planned for ship.
+
+(`libraries/Kingfisher` was formerly on this list; it now ships — first published as `SwiftBindings.Kingfisher` 8.10.0 in the 0.16.0 / 26.2.8 wave after validating 248/0/1 on the simulator.)
 
 GRDB previously lived here and is no longer in this repo (moved out 2026-04-25). If a do-not-ship package is ever included in a release wave by mistake (tag pushed or `gh workflow run` dispatched), unlist the resulting package on nuget.org (`dotnet nuget delete <id> <version>`) — hard delete is not available via API.
