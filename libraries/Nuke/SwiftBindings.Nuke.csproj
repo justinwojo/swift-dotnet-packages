@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.15.0">
+<Project Sdk="SwiftBindings.Sdk/0.16.0">
 
   <PropertyGroup>
     <!-- Override single-TFM default from Directory.Build.props -->
