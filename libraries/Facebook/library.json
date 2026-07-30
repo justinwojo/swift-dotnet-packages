@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/facebook/facebook-ios-sdk.git",
+  "version": "18.1.0",
+  "mode": "binary",
+  "minIOS": "15.0",
+  "products": [
+    {
+      "framework": "FBSDKCoreKit_Basics",
+      "subdirectory": "FBSDKCoreKit_Basics"
+    },
+    {
+      "framework": "FBAEMKit",
+      "subdirectory": "FBAEMKit"
+    },
+    {
+      "framework": "FBSDKCoreKit",
+      "subdirectory": "FBSDKCoreKit"
+    },
+    {
+      "framework": "FBSDKLoginKit",
+      "subdirectory": "FBSDKLoginKit"
+    },
+    {
+      "framework": "FBSDKShareKit",
+      "subdirectory": "FBSDKShareKit"
+    }
+  ]
+}

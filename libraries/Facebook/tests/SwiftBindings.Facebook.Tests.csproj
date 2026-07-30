@@ -1,0 +1,107 @@
+<!--
+  Facebook (Meta) iOS SDK binding test app.
+
+  Exercises the ObjC->Swift type bridge across the mixed Facebook modules plus the
+  forward Login/Share surface. References the Core/Login/Share binding projects and
+  all five native xcframeworks (NativeReference does not propagate through
+  ProjectReference, so every framework is listed directly).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationId>com.swiftbindings.facebook.tests</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+  <!-- Binding projects (Core is pulled in transitively by Login/Share too) -->
+  <ItemGroup>
+    <ProjectReference Include="../FBSDKCoreKit/SwiftBindings.Facebook.Core.csproj" />
+    <ProjectReference Include="../FBSDKLoginKit/SwiftBindings.Facebook.Login.csproj" />
+    <ProjectReference Include="../FBSDKShareKit/SwiftBindings.Facebook.Share.csproj" />
+  </ItemGroup>
+
+  <!-- Clean-build-robust consumption of the mixed FBSDK bindings.
+
+       Each binding project emits its native-reference + ObjC-companion glue into a
+       generated *.ProjectReference.targets, but that file only exists AFTER the
+       binding has built. A static <Import Condition="Exists(...)"> of it is
+       evaluated at project-load — before the ProjectReference'd binding has produced
+       the file — so on a CLEAN build the import silently no-ops and the ObjC
+       companion types (FBSDKLocation, FBSDKAccessToken, …) go unreferenced,
+       failing the compile with CS0012/CS0103. (A warm rebuild "works" only because
+       a prior build left the file on disk.)
+
+       Instead, resolve everything at BUILD time in a target gated on
+       ResolveProjectReferences — which builds the sibling bindings first — mirroring
+       the SDK's own _ReferenceCrossModuleObjCCompanions. NativeReference and the
+       ObjC companion reference do not propagate through ProjectReference, so both are
+       injected here explicitly; paths are deterministic and Exists()-guarded at
+       execution time (after the siblings build), so a not-built transitive binding
+       (AEM) is a harmless no-op. -->
+  <ItemGroup>
+    <_FacebookBinding Include="FBSDKCoreKit" />
+    <_FacebookBinding Include="FBAEMKit" />
+    <_FacebookBinding Include="FBSDKLoginKit" />
+    <_FacebookBinding Include="FBSDKShareKit" />
+  </ItemGroup>
+
+  <Target Name="_InjectFacebookSwiftBindingArtifacts"
+          DependsOnTargets="ResolveProjectReferences"
+          BeforeTargets="ResolveAssemblyReferences;ResolveNativeReferences">
+
+    <!-- ObjC companion managed assemblies (mixed bindings only: Core, Share).
+         Query each binding via the SDK's public GetSwiftObjCCompanionAssembly
+         contract — a build-time <MSBuild> call, not an eval-time import — so no
+         chicken-and-egg. Non-mixed bindings (Login) return nothing. -->
+    <MSBuild Projects="../FBSDKCoreKit/SwiftBindings.Facebook.Core.csproj;../FBSDKLoginKit/SwiftBindings.Facebook.Login.csproj;../FBSDKShareKit/SwiftBindings.Facebook.Share.csproj"
+             Targets="GetSwiftObjCCompanionAssembly"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier"
+             BuildInParallel="false"
+             ContinueOnError="true">
+      <Output TaskParameter="TargetOutputs" ItemName="_FacebookObjCCompanion" />
+    </MSBuild>
+    <ItemGroup Condition="'@(_FacebookObjCCompanion)' != ''">
+      <Reference Include="@(_FacebookObjCCompanion->Distinct())">
+        <Private>true</Private>
+      </Reference>
+    </ItemGroup>
+
+    <!-- Native references: each binding's original framework + generated Swift
+         wrapper xcframework, plus the NativeAOT trim descriptor (device path). -->
+    <ItemGroup>
+      <NativeReference Include="../%(_FacebookBinding.Identity)/%(_FacebookBinding.Identity).xcframework"
+                       Condition="Exists('../%(_FacebookBinding.Identity)/%(_FacebookBinding.Identity).xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+      <NativeReference Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework"
+                       Condition="Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework')">
+        <Kind>Framework</Kind>
+      </NativeReference>
+      <TrimmerRootDescriptor Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml"
+                             Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml')" />
+      <IlcArg Include="--descriptor:$(MSBuildProjectDirectory)/../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml"
+              Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- FBSDKCoreKit_Basics is a transitive dependency (pure ObjC, no Swift wrapper
+       and no ProjectReference.targets), so its framework is referenced directly. -->
+  <ItemGroup>
+    <NativeReference Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework"><Kind>Framework</Kind></NativeReference>
+  </ItemGroup>
+
+</Project>

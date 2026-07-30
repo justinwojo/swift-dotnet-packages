@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationId>com.swiftbindings.maplibre.tests</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+  <!-- Reference the binding library project — brings in the ObjC bindings.
+       Note: MapLibre is a pure-ObjC framework, so there is NO Swift wrapper
+       xcframework (unlike Swift libraries); the bgen-generated bindings are
+       folded into the SwiftBindings.MapLibre assembly. -->
+  <ItemGroup>
+    <ProjectReference Include="../SwiftBindings.MapLibre.csproj" />
+  </ItemGroup>
+
+  <!-- The native MapLibre framework must be referenced directly (NativeReference
+       does not propagate through ProjectReference). MapLibre.dynamic.xcframework
+       is a dynamic framework — Kind=Framework embeds + signs it into the app's
+       Frameworks/ directory. -->
+  <ItemGroup>
+    <NativeReference Include="../MapLibre.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
+  </ItemGroup>
+
+</Project>

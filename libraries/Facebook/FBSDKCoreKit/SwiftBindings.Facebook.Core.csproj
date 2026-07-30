@@ -1,0 +1,26 @@
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>SwiftBindings.Facebook.Core</PackageId>
+    <Version>18.1.0</Version>
+    <Description>.NET bindings for the Facebook iOS SDK FBSDKCoreKit module (AccessToken, Settings, Profile, AppEvents, GraphRequest, ApplicationDelegate)</Description>
+    <PackageTags>$(CommonPackageTags);facebook;meta;fbsdk;corekit;login;graph-api</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+<!-- BEGIN auto-detected SwiftFrameworkDependency -->
+  <ItemGroup>
+    <SwiftFrameworkDependency Include="../FBAEMKit/FBAEMKit.xcframework" PackageId="SwiftBindings.Facebook.AEM" PackageVersion="18.1.0" />
+    <SwiftFrameworkDependency Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework" PackageId="SwiftBindings.Facebook.CoreBasics" PackageVersion="18.1.0" />
+  </ItemGroup>
+  <!-- END auto-detected SwiftFrameworkDependency -->
+
+</Project>

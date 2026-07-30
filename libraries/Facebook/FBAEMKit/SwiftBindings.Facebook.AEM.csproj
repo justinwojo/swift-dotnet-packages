@@ -1,0 +1,25 @@
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>SwiftBindings.Facebook.AEM</PackageId>
+    <Version>18.1.0</Version>
+    <Description>.NET bindings for the Facebook iOS SDK FBAEMKit (Aggregated Event Measurement) module</Description>
+    <PackageTags>$(CommonPackageTags);facebook;meta;fbsdk;aem</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+<!-- BEGIN auto-detected SwiftFrameworkDependency -->
+  <ItemGroup>
+    <SwiftFrameworkDependency Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework" PackageId="SwiftBindings.Facebook.CoreBasics" PackageVersion="18.1.0" />
+  </ItemGroup>
+  <!-- END auto-detected SwiftFrameworkDependency -->
+
+</Project>

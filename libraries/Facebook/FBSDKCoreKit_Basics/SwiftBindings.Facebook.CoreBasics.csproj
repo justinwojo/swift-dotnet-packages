@@ -1,0 +1,19 @@
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- NuGet package metadata -->
+    <PackageId>SwiftBindings.Facebook.CoreBasics</PackageId>
+    <Version>18.1.0</Version>
+    <Description>.NET bindings for the Facebook iOS SDK FBSDKCoreKit_Basics kernel module</Description>
+    <PackageTags>$(CommonPackageTags);facebook;meta;fbsdk;corekit-basics</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

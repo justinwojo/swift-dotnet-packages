@@ -1,0 +1,26 @@
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- MapLibre ships as a pure Objective-C framework over a C++ core — no
+         .swiftinterface, only a clang module map + umbrella header. Engage the
+         ObjC binding pipeline. Both properties must live in the csproj body so
+         the .NET iOS workload's bgen pipeline engages at evaluation time. -->
+    <SwiftFrameworkType>ObjC</SwiftFrameworkType>
+    <IsBindingProject>true</IsBindingProject>
+
+    <!-- NuGet package metadata -->
+    <PackageId>SwiftBindings.MapLibre</PackageId>
+    <Version>6.27.0</Version>
+    <Description>.NET bindings for MapLibre Native iOS (Objective-C map rendering SDK)</Description>
+    <PackageTags>$(CommonPackageTags);maplibre;maps;map-rendering;objective-c</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
