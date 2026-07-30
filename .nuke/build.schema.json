@@ -51,6 +51,10 @@
         "RunCiSimTest",
         "ShutdownSim",
         "TestCsprojRewriter",
+        "TestHarness",
+        "TestProjectRefInjection",
+        "TestProjectRefRewriter",
+        "TestRegressionArtifacts",
         "ValidateDevice",
         "ValidateMac",
         "ValidateMacCatalyst",
@@ -180,7 +184,7 @@
         },
         "Filter": {
           "type": "string",
-          "description": "RegressionValidate: single package filter (parity with --library)"
+          "description": "RegressionValidate: package filter — one name or a comma-separated list (parity with --library)"
         },
         "HeadSha": {
           "type": "string",

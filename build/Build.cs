@@ -9,8 +9,24 @@ partial class Build : NukeBuild
     /// <summary>
     /// Entry point. Default target builds the Nuke build project itself
     /// (a smoke test of the harness, mirroring the template).
+    ///
+    /// <para>
+    /// Nuke returns a blanket 255 for any failed target. <c>RegressionValidate</c>
+    /// overrides that with a reason-specific code (2 = cells failed, 3 = harness
+    /// abort) so a release gate can branch on *why* the matrix is red without
+    /// parsing the log. The override applies only when Nuke itself already
+    /// reported failure, so it can never turn a red run green or a green run red.
+    /// </para>
     /// </summary>
-    public static int Main() => Execute<Build>(x => x.Compile);
+    public static int Main() => ResolveExitCode(Execute<Build>(x => x.Compile), RegressionExitCodeOverride);
+
+    /// <summary>
+    /// Map Nuke's exit code through any target-supplied reason code. Kept
+    /// separate from <see cref="Main"/> so the contract ("never mask success,
+    /// never invent failure") is directly testable.
+    /// </summary>
+    internal static int ResolveExitCode(int nukeExitCode, int? reasonCode) =>
+        nukeExitCode != 0 && reasonCode is { } reasoned ? reasoned : nukeExitCode;
 
     // ── Parameters (§3) ─────────────────────────────────────────────────────
 

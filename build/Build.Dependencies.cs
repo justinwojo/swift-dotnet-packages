@@ -34,14 +34,16 @@ partial class Build
     /// <c>scripts/detect-dependencies.sh --inject-project-refs</c>.
     ///
     /// <para>
-    /// Two-pass design (atomic):
+    /// Two-pass design (prepare, then commit):
     /// </para>
     /// <list type="number">
-    ///   <item>Freshness-check ALL selected non-internal products before
-    ///         touching any csproj. If any check fails, abort with no writes.</item>
-    ///   <item>Scan generated C# for sibling-module references and rewrite
-    ///         each csproj's ProjectReference block via
-    ///         <see cref="CsprojRewriter.RewriteProjectRefs"/>.</item>
+    ///   <item>For each selected non-internal product: freshness-check it, scan
+    ///         its generated C# for sibling-module references and prepare the
+    ///         csproj rewrite in memory. A product that fails its freshness
+    ///         check is skipped on its own — its csproj is left untouched and
+    ///         the rest of the library is still processed.</item>
+    ///   <item>Commit every prepared rewrite, then fail if any product was
+    ///         skipped so the gap is never mistaken for "nothing to do".</item>
     /// </list>
     ///
     /// <para>
@@ -191,58 +193,56 @@ partial class Build
 
         Log.Information("Analyzing ProjectReference needs for {Count} product(s)...", products.Count);
 
-        // Pass 1: freshness check ALL products before any writes.
-        // If any product is stale, abort without touching the csprojs — the
-        // rewrite is all-or-nothing (matches detect-dependencies.sh:737–741).
-        var freshnessCache = new Dictionary<AbsolutePath, IReadOnlyList<AbsolutePath>>();
-        foreach (var (product, csproj) in products)
+        // Pass 1: freshness-check, scan and PREPARE rewrites in memory, one
+        // product at a time. No disk writes yet. A product that fails its
+        // freshness check is skipped individually (see
+        // ProjectRefInjectionPlanner) rather than cancelling the whole
+        // library's injection — the freshness question is per-product, and a
+        // library-wide abort here is what let the ProjectReference block drift
+        // out of sync with the always-per-product SwiftFrameworkDependency
+        // block. Skips are reported and re-raised after the safe writes land.
+        var targets = products
+            .Select(entry => new ProjectRefTarget(
+                entry.Product.Framework,
+                entry.Csproj,
+                entry.Product.XcframeworkPath(libraryDir) / "Info.plist",
+                SwiftBindingDir(entry.Product, libraryDir, configurationOverride)))
+            .ToList();
+
+        var plan = ProjectRefInjectionPlanner.Plan(targets, allSiblings);
+
+        foreach (var entry in plan)
         {
-            var swiftBindingDir = SwiftBindingDir(product, libraryDir, configurationOverride);
-            var xcfwPlist = product.XcframeworkPath(libraryDir) / "Info.plist";
-            freshnessCache[csproj] = Freshness.CheckFresh(product.Framework, csproj, xcfwPlist, swiftBindingDir);
+            if (entry.Skipped)
+            {
+                Log.Warning("  {Framework} → SKIPPED (csproj left untouched): {Reason}",
+                    entry.Target.Framework, entry.SkipReason);
+                continue;
+            }
+
+            Log.Information("  {Framework} → needs: [{Needs}]",
+                entry.Target.Framework,
+                entry.DetectedModules.Count > 0 ? string.Join(", ", entry.DetectedModules) : "(none)");
+
+            // A reference the scan no longer reproduces is retained rather
+            // than deleted (deleting one the build needs is a hard failure;
+            // keeping a spare one costs a redundant restore edge). Say so —
+            // a module that stays on this list run after run is the signal
+            // that the reference has genuinely gone stale.
+            if (entry.CarriedForwardModules.Count > 0)
+            {
+                Log.Information("  {Framework} → retained (not re-detected this run): [{Retained}]",
+                    entry.Target.Framework, string.Join(", ", entry.CarriedForwardModules));
+            }
         }
 
-        // Pass 2: scan + PREPARE rewrites in memory. No disk writes yet.
-        // If any product's prepare step throws (e.g. asymmetric markers),
-        // the whole batch aborts before any csproj is touched.
-        var pending = new List<CsprojWriteOp>();
-        foreach (var (product, csproj) in products)
-        {
-            var csFiles = freshnessCache[csproj];
-            var content = GeneratedCsScanner.Collect(csFiles);
-
-            var hits = new List<DependencyHit>();
-            foreach (var sib in allSiblings)
-            {
-                if (sib.Csproj == csproj)
-                    continue; // skip self
-                if (string.IsNullOrEmpty(sib.Module))
-                    continue;
-                if (GeneratedCsScanner.ContainsModuleReference(content, sib.Module))
-                    hits.Add(sib);
-            }
-
-            if (hits.Count > 0)
-            {
-                var needs = string.Join(", ", hits.Select(h => h.Module).OrderBy(m => m, StringComparer.Ordinal));
-                Log.Information("  {Framework} → needs: [{Needs}]", product.Framework, needs);
-            }
-            else
-            {
-                Log.Information("  {Framework} → needs: (none)", product.Framework);
-            }
-
-            var op = CsprojRewriter.PrepareProjectRefs(csproj, hits, allSiblings);
-            if (op is not null)
-                pending.Add(op);
-        }
-
-        // Pass 3: commit all prepared rewrites. Each Commit() is itself
+        // Pass 2: commit all prepared rewrites. Each Commit() is itself
         // atomic (temp-file + rename), so a single per-file failure cannot
         // produce a half-written csproj. A failure here can still leave
         // earlier products committed and later ones not — true cross-file
         // atomicity isn't possible without a transactional fs — but every
         // file on disk is either fully old or fully new, never torn.
+        var pending = plan.Where(e => e.WriteOp is not null).Select(e => e.WriteOp!).ToList();
         foreach (var op in pending)
         {
             op.Commit();
@@ -252,6 +252,20 @@ partial class Build
         Log.Information(pending.Count > 0
             ? "ProjectReference block(s) updated. Run 'dotnet build' (second pass)."
             : "All csprojs already up to date — no changes made.");
+
+        // Fail closed on anything we could not process. The writes above have
+        // already landed, so the fresh products are correct; this exists so a
+        // skipped product can never pass unnoticed as "injection completed".
+        var skipped = plan.Where(e => e.Skipped).ToList();
+        if (skipped.Count > 0)
+        {
+            var detail = string.Join("\n\n", skipped.Select(e => e.SkipReason));
+            throw new InvalidOperationException(
+                $"ProjectReference injection skipped {skipped.Count} of {plan.Count} product(s) in {library} " +
+                $"({string.Join(", ", skipped.Select(e => e.Target.Framework))}). " +
+                "Their csprojs were left untouched; every other product was updated.\n\n" +
+                detail);
+        }
     }
 
     void CleanSwiftBindingForLibrary(string library, string[] requestedProducts, bool allProducts)

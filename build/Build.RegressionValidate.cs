@@ -34,7 +34,7 @@ partial class Build
         .Description("Build + validate every package across every declared TFM (--version X.Y.Z --apple-version NN.N.N [--filter Foo] [--platforms ios-sim,macos] [--regression-jobs N] [--regression-serial])")
         .Requires(() => Version)
         .Requires(() => AppleVersion)
-        .Executes(async () =>
+        .Executes(() => WithAbortExitCode(async () =>
         {
             var version = Version!;
             var appleVersion = AppleVersion!;
@@ -48,7 +48,39 @@ partial class Build
             var cells = EnumerateCells(packages, requestedPlatforms);
             Log.Information("Cells to run: {Count}", cells.Count);
 
+            // A run that plans zero cells must never read as a pass. Before this,
+            // `--filter X --platforms Y` with no matching declared TFM exited 0
+            // having validated nothing — a vacuous green a release gate would
+            // happily consume.
+            if (cells.Count == 0)
+            {
+                RegressionExitCodeOverride = RegressionExitAborted;
+                throw new InvalidOperationException(
+                    "regression-validate: 0 cells to run — nothing was validated, so this is not a pass.\n" +
+                    $"  packages: {string.Join(", ", packages)}\n" +
+                    $"  platforms: {string.Join(", ", requestedPlatforms.Select(PlatformLabel))}\n" +
+                    "  No in-scope test csproj declares a TFM for any requested platform. " +
+                    "Check --filter / --platforms against the packages' declared TFMs.");
+            }
+
+            // --- Run-scoped evidence directory ---
+            // Every run gets its own directory keyed by start time + HEAD sha, so
+            // no run can overwrite another run's logs, matrix, or JSON verdict.
+            // (Before this, per-cell logs lived in a single /tmp dir that was
+            // wiped on entry and the JSON verdict was a single clobbered slot —
+            // a 1-cell spot check silently replaced a full matrix's evidence.)
+            var runStartUtc = DateTime.UtcNow;
+            var runId = ComposeRunId(runStartUtc, TryGitShortSha());
+            var runDir = RegressionRunsDir(version) / runId;
+            var cellLogDir = runDir / "cells";
+            Log.Information("Run directory: {Dir}", runDir);
+
             Preflight(version, appleVersion, cells);
+
+            // Created only once pre-flight passes: a pre-flight abort writes no
+            // cells and no verdict, so it should leave no empty evidence dir
+            // behind to be mistaken for a run that happened.
+            Directory.CreateDirectory(cellLogDir);
 
             // --- Resolve worker count ---
             // Default 4 is conservative vs. `nuke validate`'s cores-2: this target
@@ -110,16 +142,19 @@ partial class Build
             var sortedCells = SortLongestFirst(cells, version);
 
             // --- Per-cell tee directory ---
-            var teeDir = (AbsolutePath)Path.Combine(Path.GetTempPath(), $"regression-cells-{version}");
-            Directory.CreateDirectory(teeDir);
-            // Wipe stale cell logs from a prior run so users following file paths
-            // don't read pre-fix output thinking it's the current run.
-            foreach (var stale in Directory.EnumerateFiles(teeDir, "*.log"))
-                try { File.Delete(stale); } catch { /* best effort */ }
+            // Lives inside the run directory: cell logs are the evidence behind a
+            // cell's verdict, so they must survive the next run rather than being
+            // wiped by it.
+            var teeDir = cellLogDir;
 
             // --- Concurrency primitives ---
             var outcomes = new ConcurrentDictionary<Cell, CellOutcome>();
             var pipelineStart = DateTime.UtcNow;
+            // Set when the harness itself (not a cell) fails — e.g. sim-fleet
+            // exhaustion. Recorded in the artifact instead of throwing straight
+            // out of the target, so an aborted run still leaves a machine-readable
+            // record of which cells were reached.
+            string? abortReason = null;
             var semaphore = new SemaphoreSlim(maxJobs);
             // Single physical iPhone — install + launch must be exclusive. Drawn
             // from the same pool as general cells: running general=N + device=1
@@ -238,6 +273,18 @@ partial class Build
                     }
                 }));
             }
+            catch (Exception ex)
+            {
+                // A harness-level failure (not a cell failure — RunCell exceptions
+                // are already caught per-cell). Record it and fall through to the
+                // reporting tail: the run is a FAIL either way, but the operator
+                // still gets the matrix, the artifact, and the cell logs that did
+                // complete instead of a bare stack trace.
+                abortReason = ex is AggregateException agg
+                    ? string.Join(" | ", agg.Flatten().InnerExceptions.Select(e => e.Message))
+                    : ex.Message;
+                Log.Error(ex, "regression-validate: run aborted — {Reason}", abortReason);
+            }
             finally
             {
                 // Cleanup fleet members WE created (don't evict the developer's
@@ -259,6 +306,7 @@ partial class Build
             Log.Information("");
             Log.Information("─── Per-cell results (manifest order) ───");
             var outcomeList = new List<CellOutcome>(cells.Count);
+            var unreachedCells = new List<Cell>();
             foreach (var cell in cells)
             {
                 if (outcomes.TryGetValue(cell, out var outcome))
@@ -272,20 +320,131 @@ partial class Build
                 {
                     var stub = new CellOutcome(cell, CellResult.Error, "no outcome recorded", TimeSpan.Zero);
                     outcomeList.Add(stub);
+                    unreachedCells.Add(cell);
                     Log.Error("  [{Lib} {Plat}] → no outcome recorded",
                         cell.Library, PlatformLabel(cell.Platform));
                 }
             }
 
-            PrintMatrix(packages, requestedPlatforms, outcomeList, totalDuration);
-            WriteJsonArtifact(version, requestedPlatforms, outcomeList, totalDuration);
+            var matrixReport = RenderMatrix(packages, requestedPlatforms, outcomeList, totalDuration);
+            Console.WriteLine(matrixReport);
+            File.WriteAllText(runDir / "matrix.txt", matrixReport);
 
-            var failures = outcomeList.Count(o => o.Result is CellResult.Fail or CellResult.Timeout or CellResult.Crashed or CellResult.Error);
-            if (failures > 0)
-                throw new InvalidOperationException($"regression-validate: {failures} cell(s) failed");
-        });
+            // F3 scaffolding: snapshot each binding's already-emitted
+            // {Module}.api-surface.md / .api-manifest.json into the run directory
+            // and, when a checked-in baseline exists, report drift. Informational
+            // only — no gate, no exit-code effect (see ApiSurfaceBaselineDir).
+            var apiSurface = CollectApiSurfaceSnapshots(packages, runDir / "api-surface");
 
-    [Parameter("RegressionValidate: single package filter (parity with --library)")]
+            var written = WriteRegressionArtifacts(
+                version: version,
+                runId: runId,
+                runDir: runDir,
+                platforms: requestedPlatforms,
+                filter: Filter,
+                packages: packages,
+                cellsPlanned: cells.Count,
+                unreached: unreachedCells,
+                outcomes: outcomeList,
+                abortReason: abortReason,
+                totalDuration: totalDuration,
+                inputs: BuildInputsBlock(version, appleVersion, packages),
+                apiSurface: apiSurface);
+
+            // --- Verdict ---
+            // Named, machine-readable, and non-clobberable: the exit code says
+            // *why* (2 = cells failed, 3 = harness abort), the console names every
+            // failing cell with its log path, and the artifact carries the same
+            // list under `failedCells` for a release gate to consume.
+            var failedCells = outcomeList.Where(IsFailure).ToList();
+            if (failedCells.Count > 0 || abortReason is not null)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine();
+                sb.AppendLine("─── FAILING CELLS ───");
+                foreach (var o in failedCells)
+                    sb.AppendLine($"  {CellLabel(o.Result),-10} {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}" +
+                                  $"{(o.Reason is null ? "" : $" — {o.Reason}")}" +
+                                  $"\n             log: {cellLogDir / $"{o.Cell.Library}-{PlatformLabel(o.Cell.Platform)}.log"}");
+                if (abortReason is not null)
+                    sb.AppendLine($"  ABORTED    harness — {abortReason}");
+                sb.AppendLine($"  artifact:  {written.RunArtifact}");
+                Console.WriteLine(sb.ToString());
+
+                RegressionExitCodeOverride = abortReason is not null
+                    ? RegressionExitAborted
+                    : RegressionExitCellsFailed;
+
+                var named = string.Join(", ", failedCells
+                    .Take(12)
+                    .Select(o => $"{o.Cell.Library}/{PlatformLabel(o.Cell.Platform)}={CellLabel(o.Result)}"));
+                if (failedCells.Count > 12) named += $", +{failedCells.Count - 12} more";
+
+                throw new InvalidOperationException(
+                    $"regression-validate: {failedCells.Count} of {cells.Count} cell(s) failed" +
+                    (abortReason is null ? "" : $"; run ABORTED ({abortReason})") +
+                    (failedCells.Count > 0 ? $": {named}" : "") +
+                    $"\n  verdict artifact: {written.RunArtifact}" +
+                    $"\n  cell logs:        {cellLogDir}" +
+                    $"\n  exit code {(int)RegressionExitCodeOverride!}" +
+                    $" ({(abortReason is not null ? "harness abort" : "cell failures")})");
+            }
+
+            if (!written.Complete)
+                Log.Warning(
+                    "regression-validate: run is GREEN but INCOMPLETE (complete=false) — {Reasons}. " +
+                    "A release gate must not treat this as a full-matrix pass.",
+                    string.Join("; ", written.IncompleteReasons));
+        }));
+
+    /// <summary>
+    /// Run the matrix body, guaranteeing every escape path carries a
+    /// reason-specific exit code. Paths that already chose one (cell failures
+    /// = 2, deliberate abort = 3) keep it; anything else that throws — a
+    /// pre-flight failure such as a missing SDK nupkg, an unparseable
+    /// <c>--platforms</c> value, an unexpected harness exception — is an abort
+    /// and gets 3 rather than Nuke's blanket 255. Without this, a pre-flight
+    /// failure was indistinguishable from any other build failure to a release
+    /// gate, even though "the matrix never ran" and "the matrix ran and went
+    /// red" demand opposite responses.
+    ///
+    /// <para>
+    /// A pre-flight abort deliberately writes no verdict artifact and no run
+    /// directory: nothing was validated, so there is no evidence to record,
+    /// and an empty run dir would read as a run that happened. The exit code
+    /// alone (3, with the thrown message) carries it.
+    /// </para>
+    /// </summary>
+    static async Task WithAbortExitCode(Func<Task> body)
+    {
+        try
+        {
+            await body();
+        }
+        catch
+        {
+            RegressionExitCodeOverride ??= RegressionExitAborted;
+            throw;
+        }
+    }
+
+    // Exit codes distinguishable from Nuke's generic 255 so a release gate can
+    // branch on the reason without parsing the log. Surfaced through Main via
+    // RegressionExitCodeOverride.
+    internal const int RegressionExitCellsFailed = 2;
+    internal const int RegressionExitAborted = 3;
+
+    /// <summary>
+    /// Set by <c>RegressionValidate</c> immediately before it throws, so
+    /// <see cref="Main"/> can return a reason-specific exit code instead of
+    /// Nuke's blanket 255. Never set on a passing run.
+    /// </summary>
+    internal static int? RegressionExitCodeOverride;
+
+    static bool IsFailure(CellOutcome o) =>
+        o.Result is CellResult.Fail or CellResult.Timeout or CellResult.Crashed or CellResult.Error;
+
+    [Parameter("RegressionValidate: package filter — one name or a comma-separated list (parity with --library)")]
     readonly string? Filter;
 
     enum CellPlatform { IosSim, IosDevice, MacOs, MacCatalyst, TvOs }
@@ -350,10 +509,33 @@ partial class Build
         return result;
     }
 
+    /// <summary>
+    /// Resolve the in-scope package set. <paramref name="filter"/> accepts a
+    /// single name or a comma-separated list, so a re-verification run can
+    /// target exactly the failed surface of a prior matrix in ONE run — one
+    /// verdict artifact covering the whole retested set, instead of N
+    /// fragmentary partials each paying pre-flight again. Unknown names throw
+    /// rather than silently narrowing the run.
+    /// </summary>
     IReadOnlyList<string> ResolvePackages(string? filter)
     {
         if (!string.IsNullOrWhiteSpace(filter))
-            return new[] { filter };
+        {
+            var named = filter
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var unknown = named
+                .Where(n => !Directory.Exists(LibrariesDir / n) && !Directory.Exists(AppleFrameworksDir / n))
+                .ToList();
+            if (unknown.Count > 0)
+                throw new InvalidOperationException(
+                    $"--filter names unknown package(s): {string.Join(", ", unknown)}. " +
+                    "A typo would otherwise silently shrink the retested surface.");
+
+            return named;
+        }
 
         var packages = new List<string>();
         if (Directory.Exists(LibrariesDir))
@@ -412,6 +594,21 @@ partial class Build
                 $"Pre-flight: missing SDK nupkg at {nupkg}\n" +
                 $"Drop SwiftBindings.Sdk.{version}.nupkg into local-packages/ before invoking.");
         Log.Information("  SDK nupkg: {Path}", nupkg);
+
+        // 1b. Evict the global-cache extracts of the packages under test.
+        //     A regression run re-packs the SAME version with DIFFERENT content
+        //     (that is the whole point — validate the fixed build at 0.18.0).
+        //     NuGet keys its extracted copy on id+version alone, so a stale
+        //     extract from the previous build silently wins over the fresh
+        //     nupkg in local-packages/ and the matrix validates the OLD code
+        //     while reporting the new version — a false green of exactly the
+        //     class this harness exists to catch. The cross-framework Apple
+        //     dependency loop below evicts only the packages IT repacks; these
+        //     three are the ones every cell resolves.
+        EvictGlobalCacheEntries(
+            (SdkPackageId, version),
+            (RuntimePackageId, version),
+            (ApplePackageId, appleVersion));
 
         var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim);
         var needsDevice = cells.Any(c => c.Platform == CellPlatform.IosDevice);
@@ -789,11 +986,26 @@ partial class Build
     /// </summary>
     IReadOnlyList<Cell> SortLongestFirst(IReadOnlyList<Cell> cells, string version)
     {
+        // Prefer the canonical (complete-run) artifact; fall back to the most
+        // recent run-scoped artifact, which is the only record a filtered or
+        // aborted run leaves in the canonical slot's place.
         var artifactPath = RootDirectory / "artifacts" / $"regression-validate-{version}.json";
         if (!File.Exists(artifactPath))
         {
-            Log.Debug("Longest-first scheduling: no prior artifact at {Path}, falling back to manifest order", artifactPath);
-            return cells;
+            var runsDir = RegressionRunsDir(version);
+            var latestRun = Directory.Exists(runsDir)
+                ? Directory.EnumerateDirectories(runsDir)
+                    .Select(d => (AbsolutePath)d / "regression-validate.json")
+                    .Where(p => File.Exists(p))
+                    .OrderByDescending(p => (string)p, StringComparer.Ordinal)
+                    .FirstOrDefault()
+                : null;
+            if (latestRun is null)
+            {
+                Log.Debug("Longest-first scheduling: no prior artifact at {Path}, falling back to manifest order", artifactPath);
+                return cells;
+            }
+            artifactPath = latestRun;
         }
 
         var durations = new Dictionary<(string Lib, string Plat), double>();
@@ -830,6 +1042,57 @@ partial class Build
         var withData = sorted.Count(c => durations.ContainsKey((c.Library, PlatformLabel(c.Platform))));
         Log.Information("Longest-first scheduling: {WithData}/{Total} cells have prior duration data", withData, cells.Count);
         return sorted;
+    }
+
+    // The packages every cell resolves out of local-packages/. Named here so
+    // pre-flight's cache eviction and the self-test agree on one list.
+    internal const string SdkPackageId = "SwiftBindings.Sdk";
+    internal const string RuntimePackageId = "SwiftBindings.Runtime";
+    internal const string ApplePackageId = "SwiftBindings.Apple";
+
+    /// <summary>
+    /// Delete the NuGet global-packages extract for each (id, version) pair, so
+    /// a freshly-packed nupkg of an already-cached version is actually the code
+    /// under test. Returns the directories it removed (for logging/assertions).
+    /// Absent entries are not an error — a clean machine simply has nothing to
+    /// evict — but a present-and-undeletable one is, because silently
+    /// proceeding would validate stale code.
+    /// </summary>
+    internal static IReadOnlyList<string> EvictGlobalCacheEntries(
+        params (string Id, string Version)[] entries)
+    {
+        var cache = GlobalNuGetPackagesDir();
+        var evicted = new List<string>();
+        if (cache is null)
+        {
+            Log.Warning(
+                "  cannot locate the NuGet global-packages folder — skipping cache eviction. " +
+                "A stale extract of a re-packed version could shadow the build under test.");
+            return evicted;
+        }
+
+        foreach (var (id, version) in entries)
+        {
+            // NuGet lowercases both segments on disk.
+            var dir = cache / id.ToLowerInvariant() / version.ToLowerInvariant();
+            if (!Directory.Exists(dir))
+                continue;
+
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+                evicted.Add(dir);
+                Log.Information("  evicted stale cache: {Path}", dir);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Pre-flight: could not evict the stale NuGet cache entry {dir} ({ex.Message}). " +
+                    "Continuing would let the previously-cached build shadow the freshly-packed " +
+                    $"{id} {version} and produce a verdict for the wrong code.", ex);
+            }
+        }
+        return evicted;
     }
 
     /// <summary>
@@ -955,7 +1218,13 @@ partial class Build
         _ => r.ToString(),
     };
 
-    void PrintMatrix(
+    /// <summary>
+    /// Render the per-cell verdict table. Returned as a string (rather than
+    /// printed in place) so the exact text the operator sees is also persisted
+    /// to <c>matrix.txt</c> in the run directory — console scrollback is not
+    /// evidence.
+    /// </summary>
+    string RenderMatrix(
         IReadOnlyList<string> packages,
         IReadOnlyList<CellPlatform> platforms,
         IReadOnlyList<CellOutcome> outcomes,
@@ -1010,29 +1279,167 @@ partial class Build
         {
             sb.AppendLine();
             sb.AppendLine("Failures:");
-            foreach (var o in outcomes.Where(o => o.Result is CellResult.Fail or CellResult.Timeout or CellResult.Crashed or CellResult.Error))
+            foreach (var o in outcomes.Where(IsFailure))
                 sb.AppendLine($"  {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}: {o.Reason}");
         }
 
-        Console.WriteLine(sb.ToString());
+        return sb.ToString();
     }
 
-    void WriteJsonArtifact(
-        string version,
+    // ── F1: self-describing, un-clobberable matrix artifact ─────────────────
+
+    /// <summary>Root of the per-run evidence tree for a given SDK version.</summary>
+    AbsolutePath RegressionRunsDir(string version) =>
+        RootDirectory / "artifacts" / "regression-validate" / version;
+
+    /// <summary>
+    /// Optional checked-in API-surface baseline (F3). Absent by design today —
+    /// the collector reports "no baseline" rather than failing, so seeding the
+    /// baseline is a deliberate later act.
+    /// </summary>
+    AbsolutePath ApiSurfaceBaselineDir => RootDirectory / "api-surface";
+
+    /// <summary>
+    /// Run identity: UTC start (to the millisecond) + owning process id + short
+    /// HEAD sha. Sorts lexicographically by time — every component is
+    /// fixed-width or comes after the timestamp — and names the tree state the
+    /// run validated. The millisecond and pid components are what keep two runs
+    /// started in the same second on the same commit from sharing a directory
+    /// and interleaving their cell logs.
+    /// </summary>
+    static string ComposeRunId(DateTime utcStart, string? shortSha, int? processId = null) =>
+        $"{utcStart:yyyyMMdd-HHmmss.fff}Z-p{processId ?? Environment.ProcessId}" +
+        $"-{(string.IsNullOrEmpty(shortSha) ? "nogit" : shortSha)}";
+
+    /// <summary>
+    /// One drifted API-surface snapshot. Lowercase member names are deliberate:
+    /// the artifact is serialized with default (non-remapping) options, so the
+    /// record's names ARE the JSON keys.
+    /// </summary>
+    sealed record ApiSurfaceDriftEntry(string path, string status, int linesRemoved);
+
+    sealed record RegressionArtifactResult(
+        AbsolutePath RunArtifact,
+        AbsolutePath? CanonicalArtifact,
+        AbsolutePath? PartialArtifact,
+        bool Complete,
+        IReadOnlyList<string> IncompleteReasons);
+
+    /// <summary>
+    /// Decide whether a run is a *complete* matrix: unfiltered, all platforms,
+    /// every planned cell reached an outcome, and no harness abort. Only a
+    /// complete run may claim the canonical <c>regression-validate-{version}.json</c>
+    /// slot — a filtered or aborted run writes <c>.partial-N.json</c> instead, so
+    /// a 1-cell spot check can never overwrite a full matrix's record (the exact
+    /// hazard that left 0.17.0 with a 1-cell release artifact).
+    /// </summary>
+    static (bool Complete, List<string> Reasons) EvaluateCompleteness(
+        string? filter,
         IReadOnlyList<CellPlatform> platforms,
+        int cellsPlanned,
+        IReadOnlyList<Cell> unreached,
+        string? abortReason)
+    {
+        var reasons = new List<string>();
+        if (!string.IsNullOrWhiteSpace(filter))
+            reasons.Add($"--filter {filter} restricts the matrix to a package subset");
+        var missingPlatforms = AllPlatforms.Where(p => !platforms.Contains(p)).ToList();
+        if (missingPlatforms.Count > 0)
+            reasons.Add($"platform subset — not run: {string.Join(", ", missingPlatforms.Select(PlatformLabel))}");
+        if (abortReason is not null)
+            reasons.Add($"run aborted: {abortReason}");
+        if (unreached.Count > 0)
+            reasons.Add($"{unreached.Count} of {cellsPlanned} planned cell(s) produced no outcome: " +
+                        string.Join(", ", unreached.Take(8).Select(c => $"{c.Library}/{PlatformLabel(c.Platform)}")) +
+                        (unreached.Count > 8 ? ", …" : ""));
+        return (reasons.Count == 0, reasons);
+    }
+
+    /// <summary>
+    /// Write the run-scoped verdict artifact (always) plus the top-level pointer:
+    /// the canonical slot for a complete run, an indexed <c>.partial-N.json</c>
+    /// otherwise. The run-scoped copy is the durable record; the canonical file
+    /// exists so the skill and <see cref="SortLongestFirst"/> keep a stable path.
+    /// </summary>
+    RegressionArtifactResult WriteRegressionArtifacts(
+        string version,
+        string runId,
+        AbsolutePath runDir,
+        IReadOnlyList<CellPlatform> platforms,
+        string? filter,
+        IReadOnlyList<string> packages,
+        int cellsPlanned,
+        IReadOnlyList<Cell> unreached,
         IReadOnlyList<CellOutcome> outcomes,
-        TimeSpan totalDuration)
+        string? abortReason,
+        TimeSpan totalDuration,
+        object inputs,
+        object apiSurface)
     {
         var artifactDir = RootDirectory / "artifacts";
         Directory.CreateDirectory(artifactDir);
-        var path = artifactDir / $"regression-validate-{version}.json";
+        Directory.CreateDirectory(runDir);
+
+        var (complete, incompleteReasons) = EvaluateCompleteness(
+            filter, platforms, cellsPlanned, unreached, abortReason);
+
+        var failed = outcomes.Where(IsFailure).ToList();
+        var verdict = abortReason is not null ? "ABORTED" : failed.Count > 0 ? "FAIL" : "PASS";
 
         var payload = new
         {
+            schemaVersion = 2,
             version,
+            runId,
             timestamp = DateTime.UtcNow.ToString("o"),
             totalDurationSeconds = totalDuration.TotalSeconds,
+
+            // --- verdict block (F2: machine-readable enough to gate a release) ---
+            verdict,
+            complete,
+            incompleteReasons = incompleteReasons.ToArray(),
+            abortReason,
+            exitCode = verdict switch
+            {
+                "ABORTED" => RegressionExitAborted,
+                "FAIL" => RegressionExitCellsFailed,
+                _ => 0,
+            },
+            counts = new
+            {
+                planned = cellsPlanned,
+                recorded = outcomes.Count,
+                unreached = unreached.Count,
+                pass = outcomes.Count(o => o.Result == CellResult.Pass),
+                fail = failed.Count,
+                buildOnly = outcomes.Count(o => o.Result == CellResult.BuildOnly),
+                skip = outcomes.Count(o => o.Result == CellResult.Skip),
+            },
+            failedCells = failed.Select(o => new
+            {
+                library = o.Cell.Library,
+                platform = PlatformLabel(o.Cell.Platform),
+                result = CellLabel(o.Result),
+                reason = o.Reason,
+            }).ToArray(),
+
+            // --- run shape ---
+            filter,
+            packages = packages.ToArray(),
             platforms = platforms.Select(PlatformLabel).ToArray(),
+            platformsComplete = AllPlatforms.All(platforms.Contains),
+            cellsPlanned,
+
+            // --- what was actually under test ---
+            inputs,
+            apiSurface,
+            artifacts = new
+            {
+                runDir = (string)runDir,
+                cellLogs = (string)(runDir / "cells"),
+                matrix = (string)(runDir / "matrix.txt"),
+            },
+
             cells = outcomes.Select(o => new
             {
                 library = o.Cell.Library,
@@ -1040,9 +1447,208 @@ partial class Build
                 result = CellLabel(o.Result),
                 reason = o.Reason,
                 durationSeconds = o.Duration.TotalSeconds,
+                log = (string)(runDir / "cells" / $"{o.Cell.Library}-{PlatformLabel(o.Cell.Platform)}.log"),
             }).ToArray(),
         };
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
-        Log.Information("Wrote artifact: {Path}", path);
+
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+
+        var runArtifact = runDir / "regression-validate.json";
+        File.WriteAllText(runArtifact, json);
+        Log.Information("Wrote run artifact: {Path}", runArtifact);
+
+        AbsolutePath? canonical = null;
+        AbsolutePath? partial = null;
+        if (complete)
+        {
+            canonical = artifactDir / $"regression-validate-{version}.json";
+            File.WriteAllText(canonical, json);
+            Log.Information("Wrote canonical artifact (complete run): {Path}", canonical);
+        }
+        else
+        {
+            partial = NextPartialArtifactPath(artifactDir, version);
+            File.WriteAllText(partial, json);
+            Log.Warning(
+                "Incomplete run — wrote {Path} and left regression-validate-{Version}.json untouched. Reasons: {Reasons}",
+                partial, version, string.Join("; ", incompleteReasons));
+        }
+
+        return new RegressionArtifactResult(runArtifact, canonical, partial, complete, incompleteReasons);
+    }
+
+    /// <summary>Lowest free <c>regression-validate-{version}.partial-N.json</c>.</summary>
+    static AbsolutePath NextPartialArtifactPath(AbsolutePath artifactDir, string version)
+    {
+        for (var n = 1; ; n++)
+        {
+            var candidate = artifactDir / $"regression-validate-{version}.partial-{n}.json";
+            if (!File.Exists(candidate)) return candidate;
+        }
+    }
+
+    /// <summary>
+    /// The <c>inputs</c> block: everything that decides what the matrix actually
+    /// exercised. Without it, two artifacts with the same version string can
+    /// describe different runs (different library pins, different Xcode) and a
+    /// baseline comparison silently confounds them.
+    /// </summary>
+    object BuildInputsBlock(string version, string appleVersion, IReadOnlyList<string> packages)
+    {
+        var libraries = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var lib in packages)
+        {
+            var configPath = LibrariesDir / lib / "library.json";
+            if (File.Exists(configPath))
+            {
+                string? libVersion = null, mode = null;
+                try
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+                    if (doc.RootElement.TryGetProperty("version", out var v)) libVersion = v.GetString();
+                    if (doc.RootElement.TryGetProperty("mode", out var m)) mode = m.GetString();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("inputs: could not read {Path}: {Message}", configPath, ex.Message);
+                }
+                libraries[lib] = new { kind = "third-party", version = libVersion, mode };
+            }
+            else
+            {
+                // apple-frameworks/* carry no library.json — they ride the Apple train.
+                libraries[lib] = new { kind = "apple-framework", version = appleVersion, mode = (string?)null };
+            }
+        }
+
+        return new
+        {
+            sdkVersion = version,
+            appleVersion,
+            xcode = TryCapture("xcodebuild", new[] { "-version" })?.Replace("\n", " / "),
+            swift = TryCapture("swift", new[] { "--version" })?.Split('\n').FirstOrDefault(),
+            dotnet = TryCapture("dotnet", new[] { "--version" }),
+            gitSha = TryGitShortSha(),
+            gitDirty = TryCapture("git", new[] { "-C", (string)RootDirectory, "status", "--porcelain" })?.Length > 0,
+            host = Environment.MachineName,
+            libraries,
+        };
+    }
+
+    string? TryGitShortSha() =>
+        TryCapture("git", new[] { "-C", (string)RootDirectory, "rev-parse", "--short", "HEAD" });
+
+    /// <summary>
+    /// Run a short-lived command and return its trimmed stdout, or null if it
+    /// can't be started / exits non-zero / doesn't finish in 15s. Never throws:
+    /// a missing tool must degrade the artifact's <c>inputs</c> block, not fail
+    /// the matrix run that produced it.
+    /// </summary>
+    static string? TryCapture(string file, IReadOnlyList<string> args)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(file)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            foreach (var a in args) psi.ArgumentList.Add(a);
+            using var p = Process.Start(psi);
+            if (p is null) return null;
+            var sb = new System.Text.StringBuilder();
+            p.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (sb) sb.AppendLine(e.Data); };
+            p.ErrorDataReceived += (_, e) => { /* discard */ };
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+            if (!p.WaitForExit(15_000))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+                return null;
+            }
+            p.WaitForExit();
+            return p.ExitCode == 0 ? sb.ToString().Trim() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ── F3 scaffolding: per-library API-surface snapshots ───────────────────
+
+    /// <summary>
+    /// Copy every <c>{Module}.api-surface.md</c> / <c>{Module}.api-manifest.json</c>
+    /// the SDK already emitted under each in-scope package's <c>obj/**/swift-binding/</c>
+    /// into the run directory, and — when <see cref="ApiSurfaceBaselineDir"/> holds
+    /// a checked-in copy at the same relative path — report per-file drift
+    /// (including how many surface lines disappeared).
+    ///
+    /// <para>
+    /// SCAFFOLDING ONLY, by design: it collects and reports, it does not gate. The
+    /// F3 ratchet (surface shrink ⇒ red) needs a seeded, reviewed baseline; seeding
+    /// one from a run whose generator is under investigation would freeze the very
+    /// shrinkage it is meant to catch. With no baseline present this reports
+    /// <c>baselinePresent: false</c> and nothing else changes.
+    /// </para>
+    /// </summary>
+    object CollectApiSurfaceSnapshots(IReadOnlyList<string> packages, AbsolutePath snapshotDir)
+    {
+        var drift = new List<ApiSurfaceDriftEntry>();
+        var copied = 0;
+        var baselinePresent = Directory.Exists(ApiSurfaceBaselineDir);
+
+        foreach (var lib in packages)
+        {
+            AbsolutePath libDir;
+            try { libDir = LibraryDir(lib); }
+            catch { continue; }
+            if (!Directory.Exists(libDir)) continue;
+
+            foreach (var file in Directory.EnumerateFiles(libDir, "*.api-*", SearchOption.AllDirectories))
+            {
+                var name = Path.GetFileName(file);
+                if (!name.EndsWith(".api-surface.md", StringComparison.Ordinal) &&
+                    !name.EndsWith(".api-manifest.json", StringComparison.Ordinal))
+                    continue;
+
+                var rel = Path.Combine(lib, Path.GetRelativePath(libDir, file));
+                var dest = snapshotDir / rel;
+                Directory.CreateDirectory(Path.GetDirectoryName((string)dest)!);
+                File.Copy(file, dest, overwrite: true);
+                copied++;
+
+                if (!baselinePresent) continue;
+                var baseline = ApiSurfaceBaselineDir / rel;
+                if (!File.Exists(baseline))
+                {
+                    drift.Add(new ApiSurfaceDriftEntry(rel, "new", 0));
+                    continue;
+                }
+                var oldLines = File.ReadAllLines(baseline);
+                var newLines = File.ReadAllLines(file);
+                var removed = oldLines.Except(newLines, StringComparer.Ordinal).Count();
+                if (removed > 0 || !oldLines.SequenceEqual(newLines, StringComparer.Ordinal))
+                    drift.Add(new ApiSurfaceDriftEntry(rel, removed > 0 ? "shrunk" : "changed", removed));
+            }
+        }
+
+        if (copied > 0)
+            Log.Information("API-surface snapshots: {Count} file(s) → {Dir}", copied, snapshotDir);
+        var shrunk = drift.Count(d => d.status == "shrunk");
+        if (baselinePresent && drift.Count > 0)
+            Log.Warning("API-surface drift vs baseline: {Drift} file(s), {Shrunk} shrunk (informational — F3 gate not enabled)",
+                drift.Count, shrunk);
+
+        return new
+        {
+            snapshotDir = (string)snapshotDir,
+            filesCollected = copied,
+            baselineDir = (string)ApiSurfaceBaselineDir,
+            baselinePresent,
+            gateEnabled = false,
+            drift = drift.ToArray(),
+        };
     }
 }

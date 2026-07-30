@@ -396,7 +396,7 @@ public static class CsprojRewriter
         IReadOnlyList<DependencyHit> hits,
         IReadOnlyList<DependencyHit> allSiblings)
     {
-        var op = PrepareProjectRefs(csprojPath, hits, allSiblings);
+        var op = PrepareProjectRefs(csprojPath, hits, allSiblings, out _);
         if (op is null)
             return false;
         op.Commit();
@@ -409,13 +409,23 @@ public static class CsprojRewriter
     /// Used by <c>InjectProjectRefsForLibrary</c> for two-phase batched commit:
     /// every product is prepared first, then committed in a second loop.
     /// </summary>
+    /// <param name="carriedForwardModules">
+    /// Modules that end up in the rewritten auto-block even though
+    /// <paramref name="hits"/> did not contain them — i.e. references carried
+    /// forward from the previous auto-block (or migrated in from a
+    /// hand-authored ItemGroup) rather than re-detected by the scan. Surfaced
+    /// so the caller can log them: a permanently-carried reference that the
+    /// scan never reproduces is the signal that the reference is stale, and
+    /// silently retaining it without saying so would bury that.
+    /// </param>
     public static CsprojWriteOp? PrepareProjectRefs(
         AbsolutePath csprojPath,
         IReadOnlyList<DependencyHit> hits,
-        IReadOnlyList<DependencyHit> allSiblings)
+        IReadOnlyList<DependencyHit> allSiblings,
+        out IReadOnlyList<string> carriedForwardModules)
     {
         var (original, bom, lineEnding) = ReadCsproj(csprojPath);
-        var rewritten = ApplyProjectRefs(original, csprojPath, hits, allSiblings);
+        var rewritten = ApplyProjectRefs(original, csprojPath, hits, allSiblings, out carriedForwardModules);
         if (rewritten == original)
             return null;
         return new CsprojWriteOp(csprojPath, rewritten, bom, lineEnding);
@@ -427,6 +437,46 @@ public static class CsprojRewriter
         AbsolutePath csprojPath,
         IReadOnlyList<DependencyHit> hits,
         IReadOnlyList<DependencyHit> allSiblings)
+        => ApplyProjectRefs(original, csprojPath, hits, allSiblings, out _);
+
+    /// <summary>
+    /// Pure-function variant of <see cref="RewriteProjectRefs"/> that also
+    /// reports which modules were carried forward rather than re-detected.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>A zero-hit scan must never delete a reference.</b> The detection
+    /// pass behind <paramref name="hits"/> is a literal <c>\bModule\.</c> token
+    /// grep over freshly-generated wrapper C#. Any reference that does not
+    /// surface as that exact text — a sibling reached only through the Swift
+    /// wrapper, a type used solely in a generic constraint, generated output
+    /// that is missing or stale — reads as zero hits. Under the old
+    /// strip-then-decide sequence that scan result silently deleted the
+    /// reference, which is a hard downstream failure (SWIFTBIND081: the managed
+    /// assembly the binding needs is simply not referenced). Retaining a
+    /// reference that is no longer needed costs one redundant restore edge.
+    /// The trade is therefore deliberately asymmetric: this method takes the
+    /// UNION of the fresh hits, the references the previous run put inside the
+    /// auto-block, and any hand-authored sibling reference that
+    /// <see cref="MigrateSiblingProjectRefs"/> removed from an unmarked
+    /// ItemGroup.</para>
+    /// <para><b>Bounded by the canonical sibling set.</b> The union cannot grow
+    /// without limit: a carried-forward include whose basename no longer
+    /// matches any entry in <paramref name="allSiblings"/> (the product was
+    /// removed from <c>library.json</c>, renamed, or marked internal) is
+    /// pruned. Same semantics the SwiftFrameworkDependency side already uses in
+    /// <see cref="OrderInBlockIncludes"/>.</para>
+    /// <para><b>Never double-declares.</b> Sibling references that are still
+    /// present outside the auto-block after migration (e.g. inside a
+    /// conditioned <c>&lt;ItemGroup Condition="..."&gt;</c>, which the
+    /// line-based migration deliberately does not touch) suppress their own
+    /// emission inside the block.</para>
+    /// </remarks>
+    public static string ApplyProjectRefs(
+        string original,
+        AbsolutePath csprojPath,
+        IReadOnlyList<DependencyHit> hits,
+        IReadOnlyList<DependencyHit> allSiblings,
+        out IReadOnlyList<string> carriedForwardModules)
     {
         var hasBegin = original.Contains(PrBeginMarker);
         var hasEnd = original.Contains(PrEndMarker);
@@ -440,55 +490,100 @@ public static class CsprojRewriter
         }
         var hadAutoBlock = hasBegin && hasEnd;
 
-        // Always strip the auto-block first; surrounding whitespace becomes
+        // Capture what the PREVIOUS run put inside the auto-block before the
+        // block is stripped. Read first, decide later: the strip below is
+        // unconditional, so anything not captured here is unrecoverable.
+        var previousBlockIncludes = hadAutoBlock
+            ? ExtractAutoBlockProjectRefs(original)
+            : (IReadOnlyList<string>)Array.Empty<string>();
+
+        // Always strip the auto-block; surrounding whitespace becomes
         // a single "\n\n" gap, which is what the re-insertion below expects.
         var content = StripPrAutoBlock(original);
 
-        var siblingBasenames = new HashSet<string>(
-            allSiblings.Select(s => Path.GetFileName((string)s.Csproj)),
-            StringComparer.Ordinal);
+        // Canonical sibling lookup, keyed by csproj basename — the same key
+        // the migration and out-of-block scans use.
+        var siblingByBasename = new Dictionary<string, DependencyHit>(StringComparer.Ordinal);
+        foreach (var sib in allSiblings)
+        {
+            var basename = Path.GetFileName((string)sib.Csproj);
+            // First declaration wins; a duplicate basename inside one library
+            // would already be ambiguous for the migration path too.
+            if (!siblingByBasename.ContainsKey(basename))
+                siblingByBasename.Add(basename, sib);
+        }
+        var siblingBasenames = new HashSet<string>(siblingByBasename.Keys, StringComparer.Ordinal);
 
-        var filteredHits = new List<DependencyHit>(hits);
+        // Hand-authored sibling refs living OUTSIDE the auto-block, sampled
+        // before migration so we can tell "migration moved it into the block"
+        // (carry it forward) from "migration left it alone" (suppress ours).
+        var manualBefore = ExtractOutsideSiblingRefs(content, siblingBasenames);
 
         if (!hadAutoBlock)
         {
-            // First run: union hand-authored sibling refs INTO the detection
-            // hits BEFORE stripping them, so refs grep missed are carried
-            // forward rather than silently deleted.
-            var manualBasenames = ExtractOutsideSiblingRefs(content, siblingBasenames);
-            var existingModules = new HashSet<string>(
-                filteredHits.Select(h => h.Module),
-                StringComparer.Ordinal);
-            foreach (var sib in allSiblings)
-            {
-                if (manualBasenames.Contains(Path.GetFileName((string)sib.Csproj))
-                    && !existingModules.Contains(sib.Module))
-                {
-                    filteredHits.Add(sib);
-                    existingModules.Add(sib.Module);
-                }
-            }
-
+            // First run: hand-authored sibling refs in unmarked ItemGroups are
+            // migrated into the managed block. They are unioned back in below,
+            // so the move is never a deletion.
             content = MigrateSiblingProjectRefs(content, siblingBasenames);
         }
-        else
+
+        // Whatever sibling refs survive out-of-block are user-authored and
+        // stay exactly where they are (subsequent runs never migrate; the
+        // line-based migration also skips attributed/conditioned ItemGroups).
+        var manualAfter = ExtractOutsideSiblingRefs(content, siblingBasenames);
+
+        var union = new List<DependencyHit>();
+        var seenModules = new HashSet<string>(StringComparer.Ordinal);
+        var carried = new List<string>();
+
+        void AddCandidate(DependencyHit hit, bool isCarryForward)
         {
-            // Subsequent runs: preserve out-of-block hand-authored refs as
-            // an escape hatch. De-dupe by suppressing detection hits that
-            // duplicate a preserved ref.
-            var preservedBasenames = ExtractOutsideSiblingRefs(content, siblingBasenames);
-            var preservedModules = new HashSet<string>(
-                allSiblings
-                    .Where(s => preservedBasenames.Contains(Path.GetFileName((string)s.Csproj)))
-                    .Select(s => s.Module),
-                StringComparer.Ordinal);
-            if (preservedModules.Count > 0)
-            {
-                filteredHits = filteredHits
-                    .Where(h => !preservedModules.Contains(h.Module))
-                    .ToList();
-            }
+            if (string.IsNullOrEmpty(hit.Module))
+                return;
+            if (hit.Csproj == csprojPath)
+                return; // never self-reference
+            if (!seenModules.Add(hit.Module))
+                return;
+            union.Add(hit);
+            if (isCarryForward)
+                carried.Add(hit.Module);
         }
+
+        // 1. Freshly-detected hits.
+        foreach (var hit in hits)
+            AddCandidate(hit, isCarryForward: false);
+
+        // 2. References the previous run managed. Pruned against the canonical
+        //    sibling set so a removed/renamed product cannot pin itself forever.
+        foreach (var include in previousBlockIncludes)
+        {
+            if (siblingByBasename.TryGetValue(Path.GetFileName(include), out var sib))
+                AddCandidate(sib, isCarryForward: true);
+        }
+
+        // 3. Hand-authored refs the migration above just removed.
+        foreach (var basename in manualBefore)
+        {
+            if (manualAfter.Contains(basename))
+                continue; // still declared out-of-block — handled by the suppression below
+            if (siblingByBasename.TryGetValue(basename, out var sib))
+                AddCandidate(sib, isCarryForward: true);
+        }
+
+        // Suppress emission for siblings still declared outside the block so
+        // the reference is never declared twice.
+        var preservedModules = new HashSet<string>(
+            allSiblings
+                .Where(s => manualAfter.Contains(Path.GetFileName((string)s.Csproj)))
+                .Select(s => s.Module),
+            StringComparer.Ordinal);
+
+        var filteredHits = preservedModules.Count > 0
+            ? union.Where(h => !preservedModules.Contains(h.Module)).ToList()
+            : union;
+        carriedForwardModules = preservedModules.Count > 0
+            ? carried.Where(m => !preservedModules.Contains(m)).ToList()
+            : carried;
 
         var newBlock = BuildPrBlock(csprojPath, filteredHits);
         if (newBlock.Length > 0)
@@ -517,6 +612,56 @@ public static class CsprojRewriter
     }
 
     /// <summary>
+    /// Match a <c>&lt;ProjectReference ... /&gt;</c> element (self-closing or
+    /// not) and capture its attribute span. Order-agnostic on purpose:
+    /// hand-edited csprojs write <c>Condition</c> or <c>PrivateAssets</c>
+    /// before <c>Include</c>, and a ref we fail to see out-of-block would be
+    /// emitted a second time inside the auto-block.
+    /// </summary>
+    private static readonly Regex ProjectRefElementRegex =
+        new(@"<ProjectReference\b([^>]*?)/?>", RegexOptions.Singleline);
+
+    private static readonly Regex XmlAttrRegex = new(@"(\w+)\s*=\s*""([^""]*)""");
+
+    /// <summary>
+    /// Pull the <c>Include</c> attribute value of every
+    /// <c>&lt;ProjectReference&gt;</c> element in <paramref name="span"/>,
+    /// in document order.
+    /// </summary>
+    private static List<string> ExtractProjectRefIncludes(string span)
+    {
+        var includes = new List<string>();
+        foreach (Match m in ProjectRefElementRegex.Matches(span))
+        {
+            foreach (Match a in XmlAttrRegex.Matches(m.Groups[1].Value))
+            {
+                if (a.Groups[1].Value == "Include")
+                {
+                    includes.Add(a.Groups[2].Value);
+                    break;
+                }
+            }
+        }
+        return includes;
+    }
+
+    /// <summary>
+    /// Return the <c>Include</c> paths of every <c>&lt;ProjectReference&gt;</c>
+    /// inside the auto-detected block of <paramref name="content"/>, in
+    /// document order. Must be called on the ORIGINAL content, before
+    /// <see cref="StripPrAutoBlock"/> removes the block.
+    /// </summary>
+    private static List<string> ExtractAutoBlockProjectRefs(string content)
+    {
+        var blockMatch = new Regex(
+            Regex.Escape(PrBeginMarker) + "(.*?)" + Regex.Escape(PrEndMarker),
+            RegexOptions.Singleline).Match(content);
+        return blockMatch.Success
+            ? ExtractProjectRefIncludes(blockMatch.Groups[1].Value)
+            : new List<string>();
+    }
+
+    /// <summary>
     /// Return the basenames of every <c>&lt;ProjectReference&gt;</c> in
     /// <paramref name="content"/> that points at one of the
     /// <paramref name="siblingBasenames"/>. Caller is expected to pass content
@@ -526,10 +671,8 @@ public static class CsprojRewriter
     private static HashSet<string> ExtractOutsideSiblingRefs(string content, HashSet<string> siblingBasenames)
     {
         var refs = new HashSet<string>(StringComparer.Ordinal);
-        var pattern = new Regex(@"<ProjectReference\s+Include=""([^""]+)""");
-        foreach (Match m in pattern.Matches(content))
+        foreach (var include in ExtractProjectRefIncludes(content))
         {
-            var include = m.Groups[1].Value;
             var bn = Path.GetFileName(include);
             if (siblingBasenames.Contains(bn))
                 refs.Add(bn);
@@ -612,6 +755,14 @@ public static class CsprojRewriter
         return string.Join("\n", output);
     }
 
+    /// <summary>
+    /// Emit the ProjectReference auto-block for <paramref name="hits"/>.
+    /// An empty list yields an empty string — i.e. no block at all.
+    /// <b>Callers must pass the full union</b> (fresh hits + carried-forward
+    /// refs), never a raw scan result: an empty return re-inserts nothing, so
+    /// handing this method a zero-hit scan is exactly how a needed reference
+    /// gets dropped. See <see cref="ApplyProjectRefs(string, AbsolutePath, IReadOnlyList{DependencyHit}, IReadOnlyList{DependencyHit}, out IReadOnlyList{string})"/>.
+    /// </summary>
     private static string BuildPrBlock(AbsolutePath csprojPath, IReadOnlyList<DependencyHit> hits)
     {
         if (hits.Count == 0)
