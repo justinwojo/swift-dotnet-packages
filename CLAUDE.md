@@ -79,6 +79,7 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 - `PackValidate --library X` — CI smoke pack with version `0.0.0-ci`.
 - `BuildAndPackRelease --library X --version V [--output dir] [--dry-run]` — release build at `-c Release`, then pack, then write `release-manifest.json`.
 - `PublishRelease --packages-dir dir --nuget-api-key K` — push `.nupkg` files to nuget.org (parallelism=5, `--skip-duplicate`).
+- `ReleaseWave --wave-spec "Lib=1.2.3,…" | --libraries A,B --auto-version | --all --auto-version` — run the **whole release pipeline locally** (build → pack → sim-validate → publish) for 1..N libraries in one process, dependency-ordered, bounded-parallel. **Dry run by default** — see "Local release waves" under Release Process.
 - `RegressionValidate --version V [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS and MacCatalyst run binaries directly. Only tvOS remains BUILD-ONLY (no validator yet).
 - `ListChangedLibraries [--base-sha S --head-sha S | --all] [--json]` — emit the CI matrix (newline-delimited or GHA `{"include":[...]}` JSON).
 - `ListSims` / `BootSim` / `ShutdownSim` — simulator fleet management.
@@ -326,6 +327,52 @@ A few packages depend on a sibling package via a **published `<PackageReference>
 - `SwiftBindings.Apple.RealityKit` → `SwiftBindings.Apple.RealityFoundation`
 
 To check the surface before a wave: `grep -rn '<PackageReference Include="SwiftBindings\.' apple-frameworks libraries --include='SwiftBindings.*.csproj'` (excluding `tests/`). Either dispatch the base(s) first and wait for the nuget.org index to show the new version, or just dispatch everything and re-dispatch the dependents at the end (they restore fine once the base has published). Stripe's intra-library cross-refs are `<ProjectReference>` within one dispatch, so they build together and are unaffected.
+
+**On the GHA path only.** `ReleaseWave` (below) does not have this problem at all: it stages each base's freshly packed `.nupkg` into `local-packages/`, which `NuGet.config` lists ahead of nuget.org, and blocks the dependent until that's done — so the dependent restores the base from disk and nuget.org index timing never touches the build.
+
+### Local release waves (`ReleaseWave`)
+
+`dotnet nuke ReleaseWave` runs the entire release pipeline — Release-config build → pack → iOS-simulator validate → nuget push — locally, in **one** Nuke process, for one library or the whole catalog. It's the local equivalent of dispatching a wave of `release.yml` runs, minus the NU1102 ordering dance and minus the macOS-runner queue.
+
+```bash
+# Explicit versions (dry run — the default; builds, packs, validates, publishes nothing)
+dotnet nuke ReleaseWave --wave-spec "Matter=26.2.9,MatterSupport=26.2.9"
+
+# Computed versions, three libraries at a time
+dotnet nuke ReleaseWave --libraries Nuke,Lottie,Kingfisher --auto-version --max-parallel 3
+
+# The published catalog, for real
+NUGET_API_KEY=… dotnet nuke ReleaseWave --all --auto-version --apple-version 26.2.9 --dry-run false
+```
+
+**Selection** — exactly one of `--wave-spec`, `--libraries … --auto-version`, or `--all --auto-version`. `--all` means *every already-published library*: `AppIntents` is hard-excluded (do-not-ship, rejected even if named explicitly), and libraries that exist in the repo but have never shipped (Facebook, MapLibre today) are excluded too — first-time publication must be an explicit act, so name them in `--wave-spec`/`--libraries`.
+
+**`--auto-version`** applies the convention documented above: third-party libraries ship at `library.json`'s version when it's newer than the last published NuGet version, otherwise last-published patch + 1; Apple frameworks all share one version from `--apple-version`, else highest-published-Apple + 1 patch. Every lookup is a live nuget.org flat-container query and is printed in the plan.
+
+**`--dry-run` defaults to TRUE.** Publishing requires `--dry-run false` *and* a key in `NUGET_API_KEY` or `--nuget-api-key` (checked in preflight, never logged). Publish is skipped entirely if any library failed, unless `--publish-partial`.
+
+**Ordering and parallelism** — up to `--max-parallel` (default 3) libraries run concurrently, each holding one leased simulator from the fleet. The dependency graph is built from *all three* intra-repo reference forms in non-test csprojs, because all three make one library's build touch another's tree:
+
+| Form | Creates ordering edge | Version re-pinned by the wave |
+|---|---|---|
+| `<PackageReference Include="SwiftBindings.*" Version="V">` | yes | yes (`Version`) |
+| `<SwiftFrameworkDependency … PackageId="SwiftBindings.*" PackageVersion="V">` | yes (cross-library) | yes (`PackageVersion`), **including intra-library siblings** |
+| `<ProjectReference Include="../Other/X.csproj">` | yes (cross-library) | n/a — `dotnet pack` derives it |
+
+Today that's `MatterSupport→Matter`, `RealityKit→RealityFoundation`, and `BlinkIDUX→BlinkID` (which carries all three forms at once). A dependent does not start until its base's whole unit — pack **and** sim-validate — has finished, because dependents' *test apps* `ProjectReference` the base and would otherwise write into the base's `obj/` while the base is still building. Cycles are a hard error naming the members.
+
+**Pin rewrites are automatic and visible.** When a base is in the wave at a version different from the pin, the wave rewrites the consumer's `Version`/`PackageVersion` attribute before building and lists every rewrite under `PIN BUMPS` in the plan and in `wave-manifest.json`. This also covers the intra-library case `/p:Version` misses: releasing Stripe at `26.0.1` re-pins the sibling `PackageVersion="26.0.0"` attributes, so `SwiftBindings.Stripe.Payments 26.0.1` doesn't ship declaring a dependency on `…Core 26.0.0`. **These are real working-tree edits — `git diff` and commit them after the wave.** A planned pin bump that rewrites nothing (csproj shape changed between plan and apply) is a hard abort *before any build* — the wave never ships a package whose plan claimed a re-pin that didn't happen.
+
+**`local-packages/` is written, including on a dry run.** Staging each library's `.nupkg` there is *how* the NU1102 fix works — `NuGet.config` lists `local` ahead of nuget.org, so an in-wave dependent restores its base from disk and never consults the index. Consequences worth knowing:
+- A **successful dry run** leaves versions in the preferred local feed that do not exist on nuget.org. The wave warns about this by name at the end; delete them if the wave isn't going to ship.
+- A library that **fails after packing** (sim validation red) has its own staged nupkgs removed again, so a red wave can't leave an unvalidated artifact outranking the real package. Only files the wave itself created are removed; if staging overwrote a pre-existing nupkg of the same id+version, the previous bytes are parked in a `.<name>.wave-backup` sidecar and restored on failure (deleted on success).
+- A **real wave that publishes nothing or only part of the set** — a library failed and `--publish-partial` wasn't passed, or a push failed — leaves the successfully-packed libraries staged. Those are warned by name at the end and listed under `stagedUnpublished` in `wave-manifest.json`. They are deliberately **not** auto-deleted: they are exactly what a `--publish-partial` re-run pushes, and re-packing them costs a full build + sim validation. Re-run the wave to ship them (`--skip-duplicate` no-ops what already shipped) or delete them by hand.
+
+**Publish order is two-dimensional.** Across libraries, one dependency level at a time (a base's packages go live before its dependents' are announced). *Within* a library, the sibling refs are topo-sorted too and pushed in tiers — so on Stripe, `…Core` lands before `…Payments`, which lands before `…PaymentSheet`, rather than all 14 racing at once. Parallelism stays capped at 5 inside a tier. A failed push aborts the rest of that library's tiers and the dependent levels; every package that was consequently never attempted is recorded in `wave-manifest.json` with `attempted: false` and does **not** count as a push failure.
+
+**Index-poll timeouts are recorded, not fatal — by design.** Between tiers/levels the wave polls the flat-container index for up to 15 min so a base is visible before its dependent is announced. If it times out the wave **warns and proceeds**: propagation genuinely takes 10–15 min ("Index lag is not a failure" below), the only exposure is a consumer installing the dependent inside that window, and re-running the wave to finish is cheap because every push is `--skip-duplicate`. Blocking instead would strand publishable packages over a condition that resolves itself. Each timed-out package is listed under `indexTimeouts` in `wave-manifest.json`.
+
+**Output** — everything lands under `--wave-output` (default `artifacts/release-wave/<runId>/`): `wave-plan.json` (written before any build), `packages/<Library>/*.nupkg` (per-library, so each `release-manifest.json` describes only its own library), `logs/<Library>.log` (all child-process and Serilog output, routed per library so parallel builds don't interleave — the console gets one START and one result line each), and `wave-manifest.json`. Re-using the same `--wave-output` across runs is safe: each library's `packages/<Library>/` directory is cleared before packing, and staging + publishing additionally accept only the exact `<PackageId>.<Version>.nupkg` names the plan calls for, so a stray or stale file can never be staged or pushed. Exit codes: `2` = one or more libraries failed, `3` = preflight/orchestrator abort, `4` = every library built but a push failed (re-run the same wave; `--skip-duplicate` makes what already shipped a no-op).
 
 ### Recovering a partially-failed publish (+ index lag)
 

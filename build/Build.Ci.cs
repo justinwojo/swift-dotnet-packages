@@ -14,7 +14,14 @@ partial class Build
     [Parameter("Head SHA for ListChangedLibraries diff")]
     readonly string? HeadSha;
 
-    [Parameter("ListChangedLibraries: ignore the diff and return every library")]
+    /// <summary>
+    /// Shared by two targets with the same meaning ("everything, not a subset"),
+    /// scoped differently by each: <see cref="ListChangedLibraries"/> returns every
+    /// library in the repo; <see cref="ReleaseWave"/> selects every ALREADY
+    /// PUBLISHED library (see <see cref="ResolvePublishedCatalogAsync"/>) so a
+    /// deliberately unpublished one is never swept into a release.
+    /// </summary>
+    [Parameter("ListChangedLibraries: every library. ReleaseWave: every already-published library")]
     readonly bool All;
 
     [Parameter("ListChangedLibraries: emit GHA matrix JSON instead of newline-delimited names")]

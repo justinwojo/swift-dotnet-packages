@@ -27,8 +27,24 @@ partial class Build
         ? RootDirectory / "artifacts" / "release"
         : (AbsolutePath)Path.GetFullPath(Output);
 
-    [Parameter("Mark this release as a dry run (build + pack, skip publish)")]
-    readonly bool DryRun;
+    /// <summary>
+    /// Dry-run flag. NULLABLE on purpose: <see cref="ReleaseWave"/> defaults to
+    /// dry-run <b>true</b> (publishing must be opted into with
+    /// <c>--dry-run false</c>), while <see cref="BuildAndPackRelease"/> /
+    /// <see cref="PublishRelease"/> keep their historical default of "not a dry
+    /// run". A plain <c>bool</c> can't express both, and Nuke has no per-target
+    /// parameter defaults.
+    ///
+    /// <para>
+    /// Absent (<c>null</c>) is exactly equivalent to the old <c>false</c> for the
+    /// two pre-existing consumers — they test <c>DryRun == true</c> /
+    /// <c>DryRun != true</c>. <c>release.yml:144</c> only ever passes the bare
+    /// <c>--dry-run</c> flag (when dry_run is true) and omits it otherwise, so the
+    /// workflow's behaviour is unchanged.
+    /// </para>
+    /// </summary>
+    [Parameter("Mark this release as a dry run (build + pack, skip publish). ReleaseWave defaults to true; pass --dry-run false to publish.")]
+    readonly bool? DryRun;
 
     [Parameter("Directory containing .nupkg files for PublishRelease (artifact-staged)")]
     readonly string? PackagesDir;
@@ -89,48 +105,72 @@ partial class Build
         .Requires(() => Library, () => Version)
         .Executes(() =>
         {
-            var library = Library!;
-            var version = Version!;
             var outputDir = ReleaseOutputDir;
-            outputDir.CreateDirectory();
-
-            Log.Information("=== BuildAndPackRelease {Library} v{Version} (dry_run={DryRun}) ===",
-                library, version, DryRun);
-
-            // Dispatch on kind: third-party libraries follow the multi-product
-            // library.json flow; Apple frameworks are single-csproj, no
-            // library.json, no xcframework build (the SDK reads the system
-            // framework target directly).
-            var (kind, dir) = ResolveLibrary(library);
-            if (kind == LibraryKind.AppleFramework)
-            {
-                BuildAndPackAppleFramework(dir, version, outputDir);
-            }
-            else
-            {
-                // Step 1: full build at Release.
-                // We invoke the implementation directly rather than going
-                // through the Nuke target graph because we need to override
-                // the Configuration parameter in this scope. The runtime
-                // Configuration field stays at Debug (its declared default)
-                // unless the caller passes --configuration Release explicitly,
-                // so we forward it via a local helper that mirrors what the
-                // BuildLibrary target's executor does.
-                BuildLibraryAtConfiguration(library, "Release");
-
-                // Step 2: pack at Release into the release output dir.
-                // Same Configuration override note: pack --no-build needs to
-                // see Release-built artifacts.
-                PackAtConfiguration(library, "Release", version, outputDir);
-            }
-
-            // Step 3: generate release-manifest.json — exact JSON shape
-            // from release.yml:219–228, including the boolean dry_run and
-            // ISO-8601 UTC timestamp.
-            GenerateReleaseManifest(library, version, outputDir, DryRun);
-
-            Log.Information("=== BuildAndPackRelease complete: {Output} ===", outputDir);
+            BuildAndPackReleaseForLibrary(Library!, Version!, outputDir, DryRun == true, onLine: null);
         });
+
+    /// <summary>
+    /// The whole body of <see cref="BuildAndPackRelease"/>, extracted so
+    /// <see cref="ReleaseWave"/> can drive it per-library IN-PROCESS. Shelling out
+    /// to a nested <c>dotnet nuke BuildAndPackRelease</c> is not an option: two
+    /// concurrent Nuke processes collide on the same <c>build.log</c> lock and one
+    /// silently skips its target.
+    ///
+    /// <para>
+    /// <paramref name="onLine"/> routes every child-process line to a per-library
+    /// tee (the wave writes one log file per library so N parallel builds don't
+    /// interleave on the console). <c>null</c> keeps the historical behaviour of
+    /// streaming into the global Serilog sink, which is what the single-library
+    /// target and <c>release.yml</c> want.
+    /// </para>
+    /// </summary>
+    void BuildAndPackReleaseForLibrary(
+        string library, string version, AbsolutePath outputDir, bool dryRun, Action<string>? onLine)
+    {
+        void Info(string message)
+        {
+            if (onLine is null) Log.Information("{Line}", message);
+            else onLine(message);
+        }
+
+        outputDir.CreateDirectory();
+
+        Info($"=== BuildAndPackRelease {library} v{version} (dry_run={dryRun}) ===");
+
+        // Dispatch on kind: third-party libraries follow the multi-product
+        // library.json flow; Apple frameworks are single-csproj, no
+        // library.json, no xcframework build (the SDK reads the system
+        // framework target directly).
+        var (kind, dir) = ResolveLibrary(library);
+        if (kind == LibraryKind.AppleFramework)
+        {
+            BuildAndPackAppleFramework(dir, version, outputDir, onLine);
+        }
+        else
+        {
+            // Step 1: full build at Release.
+            // We invoke the implementation directly rather than going
+            // through the Nuke target graph because we need to override
+            // the Configuration parameter in this scope. The runtime
+            // Configuration field stays at Debug (its declared default)
+            // unless the caller passes --configuration Release explicitly,
+            // so we forward it via a local helper that mirrors what the
+            // BuildLibrary target's executor does.
+            BuildLibraryAtConfiguration(library, "Release", onLine);
+
+            // Step 2: pack at Release into the release output dir.
+            // Same Configuration override note: pack --no-build needs to
+            // see Release-built artifacts.
+            PackAtConfiguration(library, "Release", version, outputDir, onLine);
+        }
+
+        // Step 3: generate release-manifest.json — exact JSON shape
+        // from release.yml:219–228, including the boolean dry_run and
+        // ISO-8601 UTC timestamp.
+        GenerateReleaseManifest(library, version, outputDir, dryRun, onLine);
+
+        Info($"=== BuildAndPackRelease complete: {outputDir} ===");
+    }
 
     /// <summary>
     /// Apple-framework variant of the third-party build+pack pair. Single
@@ -138,19 +178,25 @@ partial class Build
     /// from <c>SwiftAppleFrameworkTarget</c> in one shot, all TFMs at once),
     /// then <c>dotnet pack --no-build</c> with the version override.
     /// </summary>
-    static void BuildAndPackAppleFramework(AbsolutePath dir, string version, AbsolutePath outputDir)
+    static void BuildAndPackAppleFramework(
+        AbsolutePath dir, string version, AbsolutePath outputDir, Action<string>? onLine = null)
     {
+        void Info(string message)
+        {
+            if (onLine is null) Log.Information("{Line}", message);
+            else onLine(message);
+        }
+
         var csproj = dir.GlobFiles("SwiftBindings.*.csproj").SingleOrDefault()
             ?? throw new InvalidOperationException(
                 $"No SwiftBindings.*.csproj found in {dir}");
 
-        Log.Information("BuildAndPackRelease (Apple framework): build {Csproj} -c Release", csproj);
-        var buildExit = RunDotnet(new[] { "build", (string)csproj, "-c", "Release" });
+        Info($"BuildAndPackRelease (Apple framework): build {csproj} -c Release");
+        var buildExit = RunDotnet(new[] { "build", (string)csproj, "-c", "Release" }, onLine);
         if (buildExit != 0)
             throw new InvalidOperationException($"dotnet build failed (exit {buildExit}) for {csproj}");
 
-        Log.Information("BuildAndPackRelease (Apple framework): pack {Csproj} -p:Version={Version} → {Output}",
-            csproj, version, outputDir);
+        Info($"BuildAndPackRelease (Apple framework): pack {csproj} -p:Version={version} → {outputDir}");
         var packExit = RunDotnet(new[]
         {
             "pack", (string)csproj,
@@ -158,7 +204,7 @@ partial class Build
             "-c", "Release",
             $"/p:Version={version}",
             "-o", (string)outputDir,
-        });
+        }, onLine);
         if (packExit != 0)
             throw new InvalidOperationException($"dotnet pack failed (exit {packExit}) for {csproj}");
     }
@@ -195,7 +241,9 @@ partial class Build
     Target PublishRelease => _ => _
         .Description("Push .nupkg files in --packages-dir to nuget.org (publish job)")
         .Requires(() => PackagesDir)
-        .OnlyWhenStatic(() => !DryRun)
+        // DryRun is nullable (see the field doc): absent ≡ "not a dry run", which
+        // is exactly the pre-nullable behaviour of `!DryRun` on a plain bool.
+        .OnlyWhenStatic(() => DryRun != true)
         .Executes(async () =>
         {
             if (string.IsNullOrEmpty(NuGetApiKey))
@@ -231,13 +279,16 @@ partial class Build
                 async (pkg, ct) =>
                 {
                     Log.Information("Pushing {Name}...", pkg.Name);
+                    // `secrets` keeps the key out of RunDotnet's argv echo. On
+                    // GHA the key is a masked secret anyway; this makes a local
+                    // `dotnet nuke PublishRelease` safe too.
                     var exit = await Task.Run(() => RunDotnet(new[]
                     {
                         "nuget", "push", (string)pkg,
                         "--source", "https://api.nuget.org/v3/index.json",
                         "--api-key", NuGetApiKey!,
                         "--skip-duplicate",
-                    }), ct);
+                    }, onLine: null, secrets: new[] { NuGetApiKey! }), ct);
                     if (exit != 0)
                         throw new InvalidOperationException(
                             $"dotnet nuget push failed (exit {exit}) for {pkg.Name}");
@@ -254,7 +305,7 @@ partial class Build
     /// instance, so we re-implement the per-pass dotnet build invocations
     /// here with the explicit config rather than mutating shared state.
     /// </summary>
-    void BuildLibraryAtConfiguration(string library, string configuration)
+    void BuildLibraryAtConfiguration(string library, string configuration, Action<string>? onLine = null)
     {
         var libraryDir = LibraryDir(library);
         var config = LibraryConfigLoader.Load(LibraryConfigPath(library));
@@ -264,6 +315,12 @@ partial class Build
 
         Log.Information("BuildAndPackRelease: BuildLibrary {Library} -c {Config} --all-products",
             library, configuration);
+        // NOTE on onLine: the xcframework + injection steps below still log
+        // through Serilog. ReleaseWave installs an ambient log router
+        // (WaveLogRouter) for the duration of each per-library task, so those
+        // Serilog lines land in the same per-library file as the child-process
+        // output routed explicitly via onLine. Threading onLine through every
+        // helper would be equivalent but far more invasive.
 
         // Step 0: cross-library xcframework prerequisites (see
         // BuildLibraryEndToEnd for rationale — release path needs the same
@@ -279,18 +336,18 @@ partial class Build
 
         if (!multiProduct)
         {
-            DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false);
+            DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false, onLine);
             return;
         }
 
         // Multi-product two-pass orchestration with the explicit config.
         InjectFrameworkDepsForLibrary(library, Array.Empty<string>(), allProducts: true);
         Log.Information("=== Pass 1: dotnet build -c {Config} (wrapper failures tolerated) ===", configuration);
-        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: true);
+        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: true, onLine);
 
         InjectProjectRefsForLibrary(library, Array.Empty<string>(), allProducts: true, configurationOverride: configuration);
         Log.Information("=== Pass 2: dotnet build -c {Config} (must succeed) ===", configuration);
-        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false);
+        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false, onLine);
     }
 
     /// <summary>
@@ -300,7 +357,8 @@ partial class Build
         AbsolutePath libraryDir,
         IReadOnlyList<SwiftBindings.Build.Models.Product> selected,
         string configuration,
-        bool tolerateFailure)
+        bool tolerateFailure,
+        Action<string>? onLine = null)
     {
         foreach (var product in selected)
         {
@@ -310,7 +368,7 @@ partial class Build
             var csproj = product.CsprojPath(libraryDir);
             Log.Information("dotnet build -c {Config} {Csproj}", configuration, csproj);
 
-            var exit = RunDotnet(new[] { "build", (string)csproj, "-c", configuration });
+            var exit = RunDotnet(new[] { "build", (string)csproj, "-c", configuration }, onLine);
             if (exit != 0)
             {
                 if (tolerateFailure)
@@ -328,7 +386,8 @@ partial class Build
     /// the release path can build at Release without flipping the global
     /// <see cref="Configuration"/> field.
     /// </summary>
-    void PackAtConfiguration(string library, string configuration, string version, AbsolutePath outputDir)
+    void PackAtConfiguration(
+        string library, string configuration, string version, AbsolutePath outputDir, Action<string>? onLine = null)
     {
         var libraryDir = LibraryDir(library);
         var config = LibraryConfigLoader.Load(LibraryConfigPath(library));
@@ -351,7 +410,7 @@ partial class Build
                 "-c", configuration,
                 $"/p:Version={version}",
                 "-o", (string)outputDir,
-            });
+            }, onLine);
             if (exit != 0)
                 throw new InvalidOperationException(
                     $"dotnet pack failed (exit {exit}) for {csproj}");
@@ -364,7 +423,8 @@ partial class Build
     /// to <c>{outputDir}/release-manifest.json</c> next to the <c>.nupkg</c>
     /// files; the artifact-upload step picks up the whole directory.
     /// </summary>
-    void GenerateReleaseManifest(string library, string version, AbsolutePath outputDir, bool dryRun)
+    void GenerateReleaseManifest(
+        string library, string version, AbsolutePath outputDir, bool dryRun, Action<string>? onLine = null)
     {
         var nupkgs = outputDir.GlobFiles("*.nupkg")
             .OrderBy(p => p.Name, StringComparer.Ordinal)
@@ -426,8 +486,16 @@ partial class Build
 
         var manifestPath = outputDir / "release-manifest.json";
         File.WriteAllText(manifestPath, json);
-        Log.Information("Wrote {Path}", manifestPath);
-        Log.Information("\n{Json}", json);
+        if (onLine is null)
+        {
+            Log.Information("Wrote {Path}", manifestPath);
+            Log.Information("\n{Json}", json);
+        }
+        else
+        {
+            onLine($"Wrote {manifestPath}");
+            onLine(json);
+        }
     }
 
     /// <summary>

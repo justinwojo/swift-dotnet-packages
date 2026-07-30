@@ -295,7 +295,10 @@ partial class Build
     /// to <c>build/</c>.
     /// </summary>
     Target TestHarness => _ => _
-        .Description("Run every in-process harness self-test (rewriter + dependency injection + regression artifacts)")
-        .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts)
+        .Description(
+            "Run every in-process harness self-test " +
+            "(rewriter + dependency injection + regression artifacts + release-wave planning)")
+        .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts,
+            TestReleaseWave)
         .Executes(() => Log.Information("Harness self-tests complete."));
 }

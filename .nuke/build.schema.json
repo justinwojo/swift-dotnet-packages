@@ -47,6 +47,7 @@
         "PackValidateAppleFramework",
         "PublishRelease",
         "RegressionValidate",
+        "ReleaseWave",
         "Restore",
         "RunCiSimTest",
         "ShutdownSim",
@@ -55,6 +56,7 @@
         "TestProjectRefInjection",
         "TestProjectRefRewriter",
         "TestRegressionArtifacts",
+        "TestReleaseWave",
         "ValidateDevice",
         "ValidateMac",
         "ValidateMacCatalyst",
@@ -136,7 +138,7 @@
       "properties": {
         "All": {
           "type": "boolean",
-          "description": "ListChangedLibraries: ignore the diff and return every library"
+          "description": "ListChangedLibraries: every library. ReleaseWave: every already-published library"
         },
         "AllProducts": {
           "type": "boolean",
@@ -149,6 +151,10 @@
         "AppleVersion": {
           "type": "string",
           "description": "Apple package version (separate train from SDK, e.g. 26.2.3)"
+        },
+        "AutoVersion": {
+          "type": "boolean",
+          "description": "ReleaseWave: compute each version from nuget.org + library.json per the documented convention"
         },
         "BaseSha": {
           "type": "string",
@@ -179,8 +185,11 @@
           "description": "Diagnostics dir for sim diagnostics (default: /tmp/sim-diagnostics)"
         },
         "DryRun": {
-          "type": "boolean",
-          "description": "Mark this release as a dry run (build + pack, skip publish)"
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Mark this release as a dry run (build + pack, skip publish). ReleaseWave defaults to true; pass --dry-run false to publish"
         },
         "Filter": {
           "type": "string",
@@ -194,6 +203,13 @@
           "type": "boolean",
           "description": "ListChangedLibraries: emit GHA matrix JSON instead of newline-delimited names"
         },
+        "Libraries": {
+          "type": "array",
+          "description": "ReleaseWave: libraries to release (comma-separated); needs --auto-version",
+          "items": {
+            "type": "string"
+          }
+        },
         "Library": {
           "type": "string",
           "description": "Library name (matches libraries/<name>/)"
@@ -201,6 +217,14 @@
         "MaxInfraRetries": {
           "type": "integer",
           "description": "Max retries for infrastructure failures (RunCiSimTest)",
+          "format": "int32"
+        },
+        "MaxParallel": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "ReleaseWave: how many libraries to build concurrently (default 3)",
           "format": "int32"
         },
         "MaxTestRetries": {
@@ -234,6 +258,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "PublishPartial": {
+          "type": "boolean",
+          "description": "ReleaseWave: publish the libraries that succeeded even though others failed"
         },
         "RegressionJobs": {
           "type": "integer",
@@ -269,6 +297,14 @@
         "Version": {
           "type": "string",
           "description": "Package version override"
+        },
+        "WaveOutput": {
+          "type": "string",
+          "description": "ReleaseWave: output directory (default artifacts/release-wave/<runId>)"
+        },
+        "WaveSpec": {
+          "type": "string",
+          "description": "ReleaseWave: explicit library=version assignments, e.g. \"Nuke=13.0.10,Stripe=26.0.1\""
         }
       }
     },
