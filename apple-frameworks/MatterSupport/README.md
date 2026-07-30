@@ -15,7 +15,8 @@ dotnet add package SwiftBindings.Apple.MatterSupport
 ## Requirements
 
 - .NET 10.0+
-- iOS 16.1+ / macOS 13.3+ / Mac Catalyst 16.4+ (`MatterAddDeviceRequest.isSupported` requires iOS 17+)
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). MatterSupport's own runtime floor is iOS 16.1+ / macOS 13.3+ / Mac Catalyst 16.4+ (`MatterAddDeviceRequest.isSupported` requires iOS 17+); individual APIs that need a newer OS are gated by generated `[SupportedOSPlatform]` attributes, and the C# compiler flags a call that isn't valid for your target.
 - A Matter entitlement on the consuming app and the corresponding
   `com.apple.developer.matter.allow-setup-payload` capability
 
@@ -27,7 +28,7 @@ using MatterSupport;
 
 using var payload = new MTRSetupPayload("MT:U9VJ0OMV172PX813000");
 using var home = new MatterAddDeviceRequest.Home("Living Room");
-using var topology = new MatterAddDeviceRequest.TopologyType("My Ecosystem", new[] { home });
+using var topology = new MatterAddDeviceRequest.TopologyInfo("My Ecosystem", new[] { home });
 using var request = new MatterAddDeviceRequest(topology, setupPayload: payload);
 await request.PerformAsync();
 ```

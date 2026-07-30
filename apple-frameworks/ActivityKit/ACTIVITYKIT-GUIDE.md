@@ -24,7 +24,7 @@ This guide covers the one design constraint that makes it possible, the complete
 ## Requirements & install
 
 - .NET 10.0+
-- Target framework: any `net10.0-ios` TFM — set your minimum with `<SupportedOSPlatformVersion>`; the package itself is built against the iOS 26.2 supplement. Live Activities are an iOS/iPadOS surface only — there is no macOS, Mac Catalyst, or tvOS leg
+- **Target framework: `net10.0-ios26.2` or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. Set your deployment minimum separately with `<SupportedOSPlatformVersion>` (the attributes type is 16.1+; `Request`/`Update`/`End` need iOS 16.2+ at runtime). Live Activities are an iOS/iPadOS surface only — there is no macOS, Mac Catalyst, or tvOS leg
 - **iOS 16.2+** at runtime for `Request` / `Update` / `End` (the attributes type itself is 16.1+)
 - macOS host for development
 - The host app must be **foreground-active** when it calls `Request` — ActivityKit throws otherwise (an Apple rule, not a binding limitation)

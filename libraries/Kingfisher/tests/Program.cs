@@ -206,7 +206,7 @@ public class MainViewController : UIViewController
         logger.Info("=== Section 13: CallbackQueue Discriminated Union ===");
         RunCallbackQueueTests(logger, results);
 
-        logger.Info("=== Section 14: RepeatCountType Discriminated Union ===");
+        logger.Info("=== Section 14: RepeatCountKind Discriminated Union ===");
         RunRepeatCountTypeTests(logger, results);
 
         logger.Info("=== Section 15: DelayRetryStrategy ===");
@@ -1217,69 +1217,69 @@ public class MainViewController : UIViewController
     }
 
     // ──────────────────────────────────────────────
-    // Section 14: RepeatCountType Discriminated Union
+    // Section 14: RepeatCountKind Discriminated Union
     // ──────────────────────────────────────────────
 
     private void RunRepeatCountTypeTests(TestLogger logger, TestResults results)
     {
-        // RepeatCountType.Once
+        // RepeatCountKind.Once
         try
         {
-            var rc = AnimatedImageView.RepeatCountType.Once;
+            var rc = AnimatedImageView.RepeatCountKind.Once;
             var tag = rc.Tag;
-            logger.Pass($"RepeatCountType.Once: Tag={tag}");
+            logger.Pass($"RepeatCountKind.Once: Tag={tag}");
             results.Pass("RepeatCountType_Once");
         }
         catch (Exception ex)
         {
-            logger.Fail($"RepeatCountType.Once: {ex.GetType().Name}: {ex.Message}");
+            logger.Fail($"RepeatCountKind.Once: {ex.GetType().Name}: {ex.Message}");
             results.Fail("RepeatCountType_Once", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // RepeatCountType.Infinite
+        // RepeatCountKind.Infinite
         try
         {
-            var rc = AnimatedImageView.RepeatCountType.Infinite;
+            var rc = AnimatedImageView.RepeatCountKind.Infinite;
             var tag = rc.Tag;
-            logger.Pass($"RepeatCountType.Infinite: Tag={tag}");
+            logger.Pass($"RepeatCountKind.Infinite: Tag={tag}");
             results.Pass("RepeatCountType_Infinite");
         }
         catch (Exception ex)
         {
-            logger.Fail($"RepeatCountType.Infinite: {ex.GetType().Name}: {ex.Message}");
+            logger.Fail($"RepeatCountKind.Infinite: {ex.GetType().Name}: {ex.Message}");
             results.Fail("RepeatCountType_Infinite", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // RepeatCountType.Finite(count)
+        // RepeatCountKind.Finite(count)
         try
         {
-            using var rc = AnimatedImageView.RepeatCountType.Finite(5);
+            using var rc = AnimatedImageView.RepeatCountKind.Finite(5);
             var tag = rc.Tag;
-            logger.Pass($"RepeatCountType.Finite(5): Tag={tag}");
+            logger.Pass($"RepeatCountKind.Finite(5): Tag={tag}");
             results.Pass("RepeatCountType_Finite");
         }
         catch (Exception ex)
         {
-            logger.Fail($"RepeatCountType.Finite: {ex.GetType().Name}: {ex.Message}");
+            logger.Fail($"RepeatCountKind.Finite: {ex.GetType().Name}: {ex.Message}");
             results.Fail("RepeatCountType_Finite", $"{ex.GetType().Name}: {ex.Message}");
         }
 
         // Tag value verification
         try
         {
-            using var finite = AnimatedImageView.RepeatCountType.Finite(3);
-            var once = AnimatedImageView.RepeatCountType.Once;
-            var infinite = AnimatedImageView.RepeatCountType.Infinite;
+            using var finite = AnimatedImageView.RepeatCountKind.Finite(3);
+            var once = AnimatedImageView.RepeatCountKind.Once;
+            var infinite = AnimatedImageView.RepeatCountKind.Infinite;
 
-            bool ok = finite.Tag == AnimatedImageView.RepeatCountType.CaseTag.Finite
-                   && once.Tag == AnimatedImageView.RepeatCountType.CaseTag.Once
-                   && infinite.Tag == AnimatedImageView.RepeatCountType.CaseTag.Infinite;
-            logger.Pass($"RepeatCountType tag values correct: {ok}");
+            bool ok = finite.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Finite
+                   && once.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Once
+                   && infinite.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Infinite;
+            logger.Pass($"RepeatCountKind tag values correct: {ok}");
             results.Pass("RepeatCountType_tag_values");
         }
         catch (Exception ex)
         {
-            logger.Fail($"RepeatCountType tag values: {ex.GetType().Name}: {ex.Message}");
+            logger.Fail($"RepeatCountKind tag values: {ex.GetType().Name}: {ex.Message}");
             results.Fail("RepeatCountType_tag_values", $"{ex.GetType().Name}: {ex.Message}");
         }
     }
@@ -2617,7 +2617,7 @@ public class MainViewController : UIViewController
             ("KingfisherParsedOptionsInfo", () => SwiftObjectHelper<KingfisherParsedOptionsInfo>.GetTypeMetadata()),
             ("Source", () => SwiftObjectHelper<Source>.GetTypeMetadata()),
             ("DelayRetryStrategy.Interval", () => SwiftObjectHelper<DelayRetryStrategy.Interval>.GetTypeMetadata()),
-            ("AnimatedImageView.RepeatCountType", () => SwiftObjectHelper<Kingfisher.AnimatedImageView.RepeatCountType>.GetTypeMetadata()),
+            ("AnimatedImageView.RepeatCountKind", () => SwiftObjectHelper<Kingfisher.AnimatedImageView.RepeatCountKind>.GetTypeMetadata()),
             ("ImageProgressive.UpdatingStrategy", () => SwiftObjectHelper<ImageProgressive.UpdatingStrategy>.GetTypeMetadata()),
         };
 

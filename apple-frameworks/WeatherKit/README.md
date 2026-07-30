@@ -13,7 +13,8 @@ dotnet add package SwiftBindings.Apple.WeatherKit
 ## Requirements
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2` / `-tvos26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - WeatherKit capability enabled and a paid Apple Developer Program membership (WeatherKit usage is metered and requires entitlement)
 
@@ -29,7 +30,7 @@ var attribution = await service.GetAttributionAsync();
 
 // Localised condition / phase descriptions
 var phase = MoonPhase.Full.GetDescription();
-var direction = Wind.CompassDirectionType.North.GetDescription();
+var direction = Wind.CompassDirectionKind.North.GetDescription();
 ```
 
 ### Iterating a forecast

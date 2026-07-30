@@ -1,12 +1,13 @@
-<Project Sdk="SwiftBindings.Sdk/0.16.0">
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
-    <SwiftWrapperRequired>false</SwiftWrapperRequired>
+    <!-- Required: the generated binding emits a Swift wrapper (SBW_* @_cdecl) that its P/Invokes call; a wrapper build failure must hard-fail rather than silently ship broken APIs. -->
+    <SwiftWrapperRequired>true</SwiftWrapperRequired>
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.CardScan</PackageId>
-    <Version>25.15.0</Version>
+    <Version>26.0.0</Version>
     <Description>.NET bindings for the StripeCardScan Swift library</Description>
     <PackageTags>$(CommonPackageTags);stripe;stripecardscan;card-scanning;payments;ocr</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,7 +20,7 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="25.15.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.0.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

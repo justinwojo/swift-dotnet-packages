@@ -28,7 +28,8 @@
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2` / `-tvos26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - Products configured in App Store Connect for live flows (Sandbox/Production), or a `.storekit` file for local testing **launched from Xcode** — see [Testing](#testing-storekit-sandbox-and-production) for what each path supports
 
@@ -249,8 +250,8 @@ Key `Transaction` members:
 | `PurchaseDate` | `DateTimeOffset` | |
 | `ExpirationDate` | `DateTimeOffset?` | subscriptions |
 | `RevocationDate` | `DateTimeOffset?` | non-null if refunded/revoked |
-| `RevocationReason` | `Transaction.RevocationReasonType?` | |
-| `OwnershipType` | `Transaction.OwnershipTypeType` | `Purchased` / `FamilyShared` |
+| `RevocationReason` | `Transaction.RevocationReasonInfo?` | |
+| `OwnershipType` | `Transaction.OwnershipTypeInfo` | `Purchased` / `FamilyShared` |
 | `AppAccountToken` | `Guid?` | the token you passed at purchase |
 | `Environment` | `AppStore.Environment` | `Production` / `Sandbox` / `Xcode` |
 | `PurchasedQuantity` | `int` | |

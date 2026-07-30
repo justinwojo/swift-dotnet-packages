@@ -308,6 +308,43 @@ internal static class Tests
             Fail("Tips.ParameterOption.Transient", ex.Message);
         }
 
+        // Test 21: AnyTip.GetShouldDisplay — regen-proof pin.
+        //
+        // GetShouldDisplay() wraps TipKit's real AnyTip.shouldDisplay (SBW_AnyTip_shouldDisplay).
+        // Pinned two ways so a future regen that silently drops or reshapes it goes red:
+        //   (1) compile-time binding — the method group / nameof below fail to compile if the
+        //       member disappears, which fails this test app's build (the compile gate);
+        //   (2) a runtime shape assertion (public, zero params, returns bool).
+        try
+        {
+            // (1) compile-time binding of the accessor and its only producer (the CSM init).
+            System.Func<AnyTip, bool> boundAccessor = t => t.GetShouldDisplay();
+            System.Func<AnyTip, AnyTip> boundProducer = AnyTip.FromTipKitAnyTip;
+            _ = boundAccessor;
+            _ = boundProducer;
+
+            // (2) runtime shape assertion.
+            var mi = typeof(AnyTip).GetMethod(nameof(AnyTip.GetShouldDisplay), System.Type.EmptyTypes);
+            if (mi is null)
+                throw new InvalidOperationException("GetShouldDisplay() not found");
+            if (mi.ReturnType != typeof(bool))
+                throw new InvalidOperationException($"GetShouldDisplay returns {mi.ReturnType}, expected bool");
+            Pass("AnyTip.GetShouldDisplay present (bool, 0 params)");
+        }
+        catch (Exception ex)
+        {
+            Fail("AnyTip.GetShouldDisplay present", ex.Message);
+        }
+
+        // Test 22: round-trip deferral, recorded explicitly rather than silently omitted.
+        // Invoking GetShouldDisplay() needs a live AnyTip, and AnyTip has no C#-constructible
+        // instance off-device: its only producer is the circular FromTipKitAnyTip(AnyTip) CSM,
+        // and Swift's generic AnyTip.init<T: Tip> (erasing a concrete Tip) is unsupported in C#
+        // (generic constructors with method-own type parameters). A real AnyTip only reaches a
+        // consumer through TipKit's own tip machinery on-device, which this smoke cannot synthesize.
+        Skip("AnyTip.GetShouldDisplay round-trip",
+            "no C#-constructible AnyTip off-device (only producer FromTipKitAnyTip(AnyTip) is circular; generic init<T: Tip> unsupported)");
+
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
         if (failed == 0)

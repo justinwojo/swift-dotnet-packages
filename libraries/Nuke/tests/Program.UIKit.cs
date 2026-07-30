@@ -433,11 +433,11 @@ public class MainViewController : UIViewController
         logger.Info("--- Priority Enum ---");
         try
         {
-            var veryLow = ImageRequest.PriorityType.VeryLow;
-            var low = ImageRequest.PriorityType.Low;
-            var normal = ImageRequest.PriorityType.Normal;
-            var high = ImageRequest.PriorityType.High;
-            var veryHigh = ImageRequest.PriorityType.VeryHigh;
+            var veryLow = ImageRequest.PriorityKind.VeryLow;
+            var low = ImageRequest.PriorityKind.Low;
+            var normal = ImageRequest.PriorityKind.Normal;
+            var high = ImageRequest.PriorityKind.High;
+            var veryHigh = ImageRequest.PriorityKind.VeryHigh;
 
             var values = new[]
             {
@@ -467,8 +467,8 @@ public class MainViewController : UIViewController
         // Priority cast from invalid raw value
         try
         {
-            var invalid = (ImageRequest.PriorityType)999;
-            if (!Enum.IsDefined(typeof(ImageRequest.PriorityType), invalid))
+            var invalid = (ImageRequest.PriorityKind)999;
+            if (!Enum.IsDefined(typeof(ImageRequest.PriorityKind), invalid))
             {
                 logger.Pass("Priority cast(999) is not a defined enum value");
                 results.Pass("Priority_InvalidRawValue");
@@ -489,10 +489,10 @@ public class MainViewController : UIViewController
         logger.Info("--- Options ---");
         try
         {
-            var disableMemoryReads = ImageRequest.OptionsType.DisableMemoryCacheReads;
-            var disableMemoryWrites = ImageRequest.OptionsType.DisableMemoryCacheWrites;
-            var disableDiskReads = ImageRequest.OptionsType.DisableDiskCacheReads;
-            var disableDiskWrites = ImageRequest.OptionsType.DisableDiskCacheWrites;
+            var disableMemoryReads = ImageRequest.OptionsInfo.DisableMemoryCacheReads;
+            var disableMemoryWrites = ImageRequest.OptionsInfo.DisableMemoryCacheWrites;
+            var disableDiskReads = ImageRequest.OptionsInfo.DisableDiskCacheReads;
+            var disableDiskWrites = ImageRequest.OptionsInfo.DisableDiskCacheWrites;
 
             logger.Info($"DisableMemoryCacheReads: {disableMemoryReads.GetType().Name}");
             logger.Info($"DisableMemoryCacheWrites: {disableMemoryWrites.GetType().Name}");
@@ -613,8 +613,8 @@ public class MainViewController : UIViewController
         // ImageResponse.CacheType enum
         try
         {
-            var memory = ImageResponse.CacheTypeType.Memory;
-            var disk = ImageResponse.CacheTypeType.Disk;
+            var memory = ImageResponse.CacheTypeKind.Memory;
+            var disk = ImageResponse.CacheTypeKind.Disk;
             logger.Info($"CacheType: Memory={memory}, Disk={disk}");
             if (memory != disk)
             {
@@ -636,9 +636,9 @@ public class MainViewController : UIViewController
         // ImageTask.State enum
         try
         {
-            var running = ImageTask.StateType.Running;
-            var cancelled = ImageTask.StateType.Cancelled;
-            var completed = ImageTask.StateType.Completed;
+            var running = ImageTask.StateKind.Running;
+            var cancelled = ImageTask.StateKind.Cancelled;
+            var completed = ImageTask.StateKind.Completed;
             logger.Info($"ImageTask.State: Running={running}, Cancelled={cancelled}, Completed={completed}");
             var distinct = new HashSet<int> { (int)running, (int)cancelled, (int)completed };
             if (distinct.Count == 3)
@@ -973,7 +973,7 @@ public class MainViewController : UIViewController
         logger.Info("--- Custom Pipeline ---");
         try
         {
-            var pipeline = new ImagePipeline(new ImagePipeline.ConfigurationType());
+            var pipeline = new ImagePipeline(new ImagePipeline.ConfigurationInfo());
             if (pipeline != null)
             {
                 logger.Pass("ImagePipeline(Configuration()) constructor");
@@ -994,7 +994,7 @@ public class MainViewController : UIViewController
         // Pipeline Invalidate
         try
         {
-            var pipeline = new ImagePipeline(new ImagePipeline.ConfigurationType());
+            var pipeline = new ImagePipeline(new ImagePipeline.ConfigurationInfo());
             pipeline.Invalidate();
             logger.Pass("ImagePipeline.Invalidate()");
             results.Pass("Pipeline_Invalidate");
@@ -1124,9 +1124,9 @@ public class MainViewController : UIViewController
                 logger.Pass($"ImagePrefetcher.Priority get: {priority}");
                 results.Pass("Prefetcher_PriorityGet");
 
-                prefetcher.Priority = ImageRequest.PriorityType.High;
+                prefetcher.Priority = ImageRequest.PriorityKind.High;
                 var updated = prefetcher.Priority;
-                if (updated == ImageRequest.PriorityType.High)
+                if (updated == ImageRequest.PriorityKind.High)
                 {
                     logger.Pass("ImagePrefetcher.Priority set/get roundtrip");
                     results.Pass("Prefetcher_PrioritySet");
@@ -1248,9 +1248,9 @@ public class MainViewController : UIViewController
             var pipeline = ImagePipeline.Shared;
             var request = new ImageRequest(TestImageUrl("priorityset"));
             var task = pipeline.ImageTask(request);
-            task.Priority = ImageRequest.PriorityType.VeryHigh;
+            task.Priority = ImageRequest.PriorityKind.VeryHigh;
             var priority = task.Priority;
-            if (priority == ImageRequest.PriorityType.VeryHigh)
+            if (priority == ImageRequest.PriorityKind.VeryHigh)
             {
                 logger.Pass("ImageTask.Priority set/get: VeryHigh");
                 results.Pass("ImageTask_PrioritySet");

@@ -52,22 +52,22 @@ internal static class Tests
         // ARView.Scene / Environment / CameraTransform reads, which return
         // RealityFoundation types through RealityKit @_cdecl wrappers.
         MetadataTest<ARView>("ARView");
-        MetadataTest<ARView.EnvironmentType>("ARView.EnvironmentType");
-        MetadataTest<ARView.DebugOptionsType>("ARView.DebugOptionsType");
-        MetadataTest<ARView.RenderOptionsType>("ARView.RenderOptionsType");
+        MetadataTest<ARView.EnvironmentInfo>("ARView.EnvironmentInfo");
+        MetadataTest<ARView.DebugOptionsInfo>("ARView.DebugOptionsInfo");
+        MetadataTest<ARView.RenderOptionsInfo>("ARView.RenderOptionsInfo");
         MetadataTest<EntityTranslationGestureRecognizer>("EntityTranslationGestureRecognizer");
 
-        // Plain-enum case values — pin Swift case order. ARView.CameraModeType
+        // Plain-enum case values — pin Swift case order. ARView.CameraModeKind
         // is iOS 13.0+ so safely under the deployment floor.
         try
         {
-            if ((int)ARView.CameraModeType.Ar != 0)
-                throw new InvalidOperationException($"Ar expected 0, got {(int)ARView.CameraModeType.Ar}");
-            if ((int)ARView.CameraModeType.NonAR != 1)
-                throw new InvalidOperationException($"NonAR expected 1, got {(int)ARView.CameraModeType.NonAR}");
-            Pass("ARView.CameraModeType case values");
+            if ((int)ARView.CameraModeKind.Ar != 0)
+                throw new InvalidOperationException($"Ar expected 0, got {(int)ARView.CameraModeKind.Ar}");
+            if ((int)ARView.CameraModeKind.NonAR != 1)
+                throw new InvalidOperationException($"NonAR expected 1, got {(int)ARView.CameraModeKind.NonAR}");
+            Pass("ARView.CameraModeKind case values");
         }
-        catch (Exception ex) { Fail("ARView.CameraModeType case values", ex.Message); }
+        catch (Exception ex) { Fail("ARView.CameraModeKind case values", ex.Message); }
 
         // ARView lifecycle. The class is a UIView subclass; constructing it on
         // a simulator does not start an ARSession (that requires a back camera),
@@ -78,7 +78,7 @@ internal static class Tests
         try
         {
             var bounds = new CGRect(0, 0, 320, 240);
-            arView = new ARView(bounds, ARView.CameraModeType.NonAR, automaticallyConfigureSession: false);
+            arView = new ARView(bounds, ARView.CameraModeKind.NonAR, automaticallyConfigureSession: false);
             if (arView is null)
                 throw new InvalidOperationException("ARView ctor returned null");
             Pass("ARView(CGRect, .NonAR, false) constructor");

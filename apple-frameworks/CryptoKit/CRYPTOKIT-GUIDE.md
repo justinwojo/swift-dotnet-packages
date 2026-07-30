@@ -21,7 +21,8 @@
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2` / `-tvos26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 
 ```
@@ -217,9 +218,9 @@ Available hash functions and their digest types:
 | `SHA256` | `new SHA256()` | `SHA256Digest` | `SHA256.ByteCount`, `SHA256.BlockByteCount` |
 | `SHA384` | `new SHA384()` | `SHA384Digest` | `SHA384.ByteCount`, … |
 | `SHA512` | `new SHA512()` | `SHA512Digest` | `SHA512.ByteCount`, … |
-| `Sha3256` | `new Sha3256()` | `SHA3_256Digest` | `Sha3256.ByteCount`, … |
-| `Sha3384` | `new Sha3384()` | `SHA3_384Digest` | `Sha3384.ByteCount`, … |
-| `Sha3512` | `new Sha3512()` | `SHA3_512Digest` | `Sha3512.ByteCount`, … |
+| `SHA3_256` | `new SHA3_256()` | `SHA3_256Digest` | `SHA3_256.ByteCount`, … |
+| `SHA3_384` | `new SHA3_384()` | `SHA3_384Digest` | `SHA3_384.ByteCount`, … |
+| `SHA3_512` | `new SHA3_512()` | `SHA3_512Digest` | `SHA3_512.ByteCount`, … |
 | `Insecure.MD5` | `new Insecure.MD5()` | `Insecure.MD5Digest` | legacy / interop only |
 | `Insecure.SHA1` | `new Insecure.SHA1()` | `Insecure.SHA1Digest` | legacy / interop only |
 

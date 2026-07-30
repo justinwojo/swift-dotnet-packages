@@ -11,7 +11,7 @@ dotnet add package SwiftBindings.Kingfisher
 ## Requirements
 
 - .NET 10.0+
-- iOS 13.0+
+- iOS 15.0+ — the binding's enforced deployment floor. Upstream Kingfisher supports iOS 13.0, but the .NET binding's `SupportedOSPlatformVersion` is clamped up to the .NET iOS platform floor (15.0), so that is the effective minimum for consumers.
 - macOS host for development
 
 ## Usage

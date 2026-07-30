@@ -41,6 +41,8 @@ Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](htt
 | [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkIDUX.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) |
 | [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Mappedin.svg)](https://www.nuget.org/packages/SwiftBindings.Mappedin) |
 
+> [`SwiftBindings.Facebook.*`](libraries/Facebook/) (facebook-ios-sdk 18.1.0: Core, CoreBasics, AEM, Login, Share) and [`SwiftBindings.MapLibre`](libraries/MapLibre/README.md) (MapLibre Native iOS 6.27.0) are bound and validated in this repo but **not yet published** to NuGet.
+
 ## Stripe
 
 Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stripe-ios](https://github.com/stripe/stripe-ios) release. Most apps depend on a specific sub-package (`Stripe.PaymentSheet`, `Stripe.ApplePay`, etc.) rather than the umbrella.
@@ -58,9 +60,8 @@ Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stri
 | [`SwiftBindings.Stripe.Issuing`](libraries/Stripe/StripeIssuing/README.md) | Push-provisioning to Apple Wallet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.Issuing.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.Issuing) |
 | [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CardScan.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CardScan) |
 | [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.FinancialConnections.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.FinancialConnections) |
-| [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) | Shared UI primitives consumed by sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.UICore.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.UICore) |
-| [`SwiftBindings.Stripe.ThreeDS2`](libraries/Stripe/Stripe3DS2/README.md) | 3-D Secure 2 transitive dependency for sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.ThreeDS2.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.ThreeDS2) |
-| [`SwiftBindings.Stripe.CameraCore`](libraries/Stripe/StripeCameraCore/README.md) | Camera-scanning transitive dependency for sibling Stripe packages (do not use directly) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CameraCore.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CameraCore) |
+
+**Transitive support packages** — pulled in automatically by the products above; **do not install directly**: [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) (shared UI primitives), [`SwiftBindings.Stripe.ThreeDS2`](libraries/Stripe/Stripe3DS2/README.md) (3-D Secure 2), and [`SwiftBindings.Stripe.CameraCore`](libraries/Stripe/StripeCameraCore/README.md) (camera-capture infrastructure). These are SPI/native carriers with no standalone entry-point API; NuGet resolves them for you.
 
 ## Apple framework support
 
@@ -74,7 +75,7 @@ Apple-framework packages bind the system SDK directly. There is no SPM checkout 
 
 **Consumer requirements** (apps that install these NuGets):
 
-- Application targets must be on `net10.0-ios26.2` (or the matching macOS / Mac Catalyst / tvOS TFM) or later. Older TFMs are not supported because the bound APIs are only available against the iOS 26.2 SDK surface.
+- Application targets must be on `net10.0-ios26.2` (or the matching macOS / Mac Catalyst / tvOS TFM) or later — the packages are packed at `lib/net10.0-ios26.2/`, so an app whose TFM platform version is below 26.2 (an explicit lower TPV, or a bare `net10.0-ios` whose installed workload defaults below 26.2) fails NuGet restore with `NU1202`. This TFM is the compile-SDK pin, **not** your app's deployment floor — set that independently with `<SupportedOSPlatformVersion>`.
 
 ## Sample app
 

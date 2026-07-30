@@ -32,10 +32,11 @@ runtime gaps you must work around.
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+
+- **Target framework: `net10.0-ios26.2` or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - AR features require a physical device with a back camera; a simulator can host a
-  **non-AR** `ARView` (use `CameraModeType.NonAR`) for view/scene wiring.
+  **non-AR** `ARView` (use `CameraModeKind.NonAR`) for view/scene wiring.
 
 ```
 dotnet add package SwiftBindings.Apple.RealityKit
@@ -51,15 +52,16 @@ using RealityFoundation;   // Entity, Scene, Transform, … (sibling package)
 | Swift | C# | Rule |
 |---|---|---|
 | `arView.scene` | `arView.Scene` | properties are PascalCase |
-| `enum CameraMode` (plain) | `ARView.CameraModeType` enum | nested enums gain a `Type` suffix; cases keep their order |
-| `ARView.DebugOptions` (OptionSet) | `ARView.DebugOptionsType` | nested option-set/struct types gain a `Type` suffix |
-| `ARView.Environment` | `ARView.EnvironmentType` | (same `Type` suffix rule) |
+| `enum CameraMode` (plain) | `ARView.CameraModeKind` enum | nested enums gain a `Kind` suffix; cases keep their order |
+| `ARView.DebugOptions` (OptionSet) | `ARView.DebugOptionsInfo` | nested option-set/struct types gain an `Info` suffix |
+| `ARView.Environment` | `ARView.EnvironmentInfo` | (same `Info` suffix rule) |
 | `view.hitTest(_:)` | `view.HitTest(point)` | first label dropped |
 | `view.project(_:)` | `view.Project(point)` returning `Swift.CGPoint?` | optionals project to `T?` / `Swift.SwiftOptional<T>` |
 
-The `…Type` suffix on `CameraModeType`, `DebugOptionsType`, `RenderOptionsType`,
-`EnvironmentType`, etc. is the generator disambiguating a nested type from a
-same-named member on `ARView`.
+The `…Kind` / `…Info` suffix on `CameraModeKind`, `DebugOptionsInfo`,
+`RenderOptionsInfo`, `EnvironmentInfo`, etc. is the generator disambiguating a
+nested type from a same-named member on `ARView`. Enum-like nested types take
+`Kind`; struct- and option-set-like nested types take `Info`.
 
 ## Quick start: create an ARView and read its scene
 
@@ -74,7 +76,7 @@ using CGRect = Swift.CGRect;   // disambiguate from UIKit's CoreGraphics.CGRect
 // NonAR avoids starting an ARSession (no back camera needed)
 using var arView = new ARView(
     new CGRect(0, 0, 320, 240),
-    ARView.CameraModeType.NonAR,
+    ARView.CameraModeKind.NonAR,
     automaticallyConfigureSession: false);
 
 // Scene is a RealityFoundation.Scene reached across the module boundary
@@ -97,10 +99,10 @@ using var render = arView.RenderOptions;
 
 ```csharp
 new ARView(CGRect frame);
-new ARView(CGRect frame, ARView.CameraModeType cameraMode, bool automaticallyConfigureSession);
+new ARView(CGRect frame, ARView.CameraModeKind cameraMode, bool automaticallyConfigureSession);
 ```
 
-`ARView.CameraModeType` is a plain enum: `Ar` (0), `NonAR` (1).
+`ARView.CameraModeKind` is a plain enum: `Ar` (0), `NonAR` (1).
 
 Key properties:
 
@@ -108,11 +110,11 @@ Key properties:
 |---|---|---|
 | `Scene` | `RealityFoundation.Scene` | the entity scene graph |
 | `CameraTransform` | `RealityFoundation.Transform` | current camera transform (read) |
-| `CameraMode` | `ARView.CameraModeType` | |
-| `Environment` | `ARView.EnvironmentType` | background, lighting, scene-understanding, reverb |
-| `DebugOptions` | `ARView.DebugOptionsType` | |
-| `RenderOptions` | `ARView.RenderOptionsType` | |
-| `RenderCallbacks` | `ARView.RenderCallbacksType` | |
+| `CameraMode` | `ARView.CameraModeKind` | |
+| `Environment` | `ARView.EnvironmentInfo` | background, lighting, scene-understanding, reverb |
+| `DebugOptions` | `ARView.DebugOptionsInfo` | |
+| `RenderOptions` | `ARView.RenderOptionsInfo` | |
+| `RenderCallbacks` | `ARView.RenderCallbacksInfo` | |
 | `Session` | `ARKit.ARSession` | underlying AR session |
 | `AudioListener` | `RealityFoundation.Entity?` | |
 | `PhysicsOrigin` | `RealityFoundation.Entity?` | |
@@ -170,23 +172,23 @@ in the test suite.
 
 ## Render, debug & environment options
 
-`ARView.DebugOptionsType` and `ARView.RenderOptionsType` are option-set value types
+`ARView.DebugOptionsInfo` and `ARView.RenderOptionsInfo` are option-set value types
 with static members you combine:
 
-- `DebugOptionsType`: `None`, `ShowPhysics`, `ShowStatistics`, `ShowWorldOrigin`,
+- `DebugOptionsInfo`: `None`, `ShowPhysics`, `ShowStatistics`, `ShowWorldOrigin`,
   `ShowAnchorOrigins`, `ShowAnchorGeometry`, `ShowFeaturePoints`,
   `ShowSceneUnderstanding`.
-- `RenderOptionsType`: `DisableCameraGrain`, `DisableGroundingShadows`,
+- `RenderOptionsInfo`: `DisableCameraGrain`, `DisableGroundingShadows`,
   `DisableMotionBlur`, `DisableDepthOfField`, `DisableHDR`,
   `DisablePersonOcclusion`, `DisableAREnvironmentLighting`, `DisableFaceMesh`.
 
-`ARView.EnvironmentType` exposes the scene's `Background`, `SceneUnderstanding`
-(`SceneUnderstandingType`), `Reverb` (`ReverbType`), and image-based lighting via
+`ARView.EnvironmentInfo` exposes the scene's `Background`, `SceneUnderstanding`
+(`SceneUnderstandingInfo`), `Reverb` (`ReverbKind`), and image-based lighting via
 the `Lighting` property (type `ImageBasedLight`) — all readable:
 
 ```csharp
 using var env = arView.Environment;
-using var su = env.SceneUnderstanding;   // ARView.EnvironmentType.SceneUnderstandingType
+using var su = env.SceneUnderstanding;   // ARView.EnvironmentInfo.SceneUnderstandingInfo
 using var bg = env.Background;
 ```
 
@@ -225,7 +227,7 @@ using var env = arView.Environment;
 ```
 
 - `ARView` is a `UIView` — create and drive it on the main thread.
-- The option/environment views (`DebugOptionsType`, `EnvironmentType`, etc.) wrap
+- The option/environment views (`DebugOptionsInfo`, `EnvironmentInfo`, etc.) wrap
   Swift structs; dispose them deterministically.
 - Note the `using CGRect = Swift.CGRect;` alias in the examples: `ARView`'s
   constructor takes the Swift-marshalled `Swift.CGRect`, which would otherwise

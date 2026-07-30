@@ -4,6 +4,17 @@
 <dict>
     <key>UILaunchScreen</key>
     <dict/>
+    <!-- MusicAuthorization usage string. NOTE: present here for a FUTURE interactive /
+         pre-authorized TCC host, NOT because it makes the request path runnable in this
+         suite. Empirically (see MusicKit Tests.cs Test 41), MusicAuthorization.request()
+         still hard-aborts via __TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__ in the headless
+         CLI simulator EVEN WITH this key present — a headless sim has no agent to service
+         the TCC prompt, so the request traps rather than resolving to Denied. The awaited
+         RequestAsync test therefore stays a documented Skip; do NOT re-enable it on the
+         strength of this key alone. The status-QUERY path (CurrentStatus) needs no key and
+         is covered separately. No entitlement is required for the request path itself. -->
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Used by the SwiftBindings MusicKit test app to exercise MusicAuthorization.</string>
     <key>UIStatusBarStyle</key>
     <string>UIStatusBarStyleDefault</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>

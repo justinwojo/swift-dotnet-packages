@@ -81,32 +81,32 @@ internal static class Tests
             Fail("WorkoutAlertMetric values", ex.Message);
         }
 
-        // IntervalStep.PurposeType enum values
+        // IntervalStep.PurposeKind enum values
         try
         {
-            if ((int)IntervalStep.PurposeType.Work != 0 ||
-                (int)IntervalStep.PurposeType.Recovery != 1)
-                throw new InvalidOperationException("IntervalStep.PurposeType values mismatch");
-            Pass("IntervalStep.PurposeType values");
+            if ((int)IntervalStep.PurposeKind.Work != 0 ||
+                (int)IntervalStep.PurposeKind.Recovery != 1)
+                throw new InvalidOperationException("IntervalStep.PurposeKind values mismatch");
+            Pass("IntervalStep.PurposeKind values");
         }
         catch (Exception ex)
         {
-            Fail("IntervalStep.PurposeType values", ex.Message);
+            Fail("IntervalStep.PurposeKind values", ex.Message);
         }
 
-        // WorkoutScheduler.AuthorizationStateType enum values
+        // WorkoutScheduler.AuthorizationStateKind enum values
         try
         {
-            if ((long)WorkoutScheduler.AuthorizationStateType.NotDetermined != 0 ||
-                (long)WorkoutScheduler.AuthorizationStateType.Restricted != 1 ||
-                (long)WorkoutScheduler.AuthorizationStateType.Denied != 2 ||
-                (long)WorkoutScheduler.AuthorizationStateType.Authorized != 3)
-                throw new InvalidOperationException("WorkoutScheduler.AuthorizationStateType values mismatch");
-            Pass("WorkoutScheduler.AuthorizationStateType values");
+            if ((long)WorkoutScheduler.AuthorizationStateKind.NotDetermined != 0 ||
+                (long)WorkoutScheduler.AuthorizationStateKind.Restricted != 1 ||
+                (long)WorkoutScheduler.AuthorizationStateKind.Denied != 2 ||
+                (long)WorkoutScheduler.AuthorizationStateKind.Authorized != 3)
+                throw new InvalidOperationException("WorkoutScheduler.AuthorizationStateKind values mismatch");
+            Pass("WorkoutScheduler.AuthorizationStateKind values");
         }
         catch (Exception ex)
         {
-            Fail("WorkoutScheduler.AuthorizationStateType values", ex.Message);
+            Fail("WorkoutScheduler.AuthorizationStateKind values", ex.Message);
         }
 
         // WorkoutGoal.CaseTag enum values
@@ -124,19 +124,19 @@ internal static class Tests
             Fail("WorkoutGoal.CaseTag values", ex.Message);
         }
 
-        // WorkoutPlan.WorkoutType.CaseTag enum values
+        // WorkoutPlan.WorkoutKind.CaseTag enum values
         try
         {
-            if ((uint)WorkoutPlan.WorkoutType.CaseTag.Goal != 0u ||
-                (uint)WorkoutPlan.WorkoutType.CaseTag.Custom != 1u ||
-                (uint)WorkoutPlan.WorkoutType.CaseTag.Pacer != 2u ||
-                (uint)WorkoutPlan.WorkoutType.CaseTag.SwimBikeRun != 3u)
-                throw new InvalidOperationException("WorkoutPlan.WorkoutType.CaseTag values mismatch");
-            Pass("WorkoutPlan.WorkoutType.CaseTag values");
+            if ((uint)WorkoutPlan.WorkoutKind.CaseTag.Goal != 0u ||
+                (uint)WorkoutPlan.WorkoutKind.CaseTag.Custom != 1u ||
+                (uint)WorkoutPlan.WorkoutKind.CaseTag.Pacer != 2u ||
+                (uint)WorkoutPlan.WorkoutKind.CaseTag.SwimBikeRun != 3u)
+                throw new InvalidOperationException("WorkoutPlan.WorkoutKind.CaseTag values mismatch");
+            Pass("WorkoutPlan.WorkoutKind.CaseTag values");
         }
         catch (Exception ex)
         {
-            Fail("WorkoutPlan.WorkoutType.CaseTag values", ex.Message);
+            Fail("WorkoutPlan.WorkoutKind.CaseTag values", ex.Message);
         }
 
         // SwimBikeRunWorkout.Activity.CaseTag enum values
@@ -218,13 +218,13 @@ internal static class Tests
             Fail("WorkoutStep default constructor", ex.Message);
         }
 
-        // IntervalStep constructor with PurposeType only
+        // IntervalStep constructor with PurposeKind only
         try
         {
-            var step = new IntervalStep(IntervalStep.PurposeType.Work);
+            var step = new IntervalStep(IntervalStep.PurposeKind.Work);
             if (step is null)
                 throw new InvalidOperationException("IntervalStep(Work) returned null");
-            if (step.Purpose != IntervalStep.PurposeType.Work)
+            if (step.Purpose != IntervalStep.PurposeKind.Work)
                 throw new InvalidOperationException($"Purpose mismatch: {step.Purpose}");
             Pass("IntervalStep constructor + Purpose roundtrip");
         }

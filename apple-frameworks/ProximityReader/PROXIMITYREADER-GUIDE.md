@@ -21,7 +21,8 @@ This is an orientation guide: it covers the few entry points you build a flow ar
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, Mac Catalyst 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - iPhone XS or later (Tap to Pay is device-only — not available in the simulator)
 - **Tap to Pay on iPhone entitlement** (Apple-issued), merchant onboarding, and account linking before any live read will succeed
@@ -43,8 +44,8 @@ using ProximityReader;
 | `func prepare(...) async throws` | `PrepareAsync(...)` | `async` methods gain an `Async` suffix and return `Task`/`Task<T>` |
 | trailing `completion:` / event closures | `Action<…>? handler` overloads | a closure parameter becomes an optional `Action<>`; a parameterless overload is also emitted |
 | `static var isSupported` | `PaymentCardReader.IsSupported` | static Swift members become static C# properties |
-| nested `enum Event` / `struct Options` | `PaymentCardReader.Event`, `PaymentCardReader.OptionsType` | nested types that collide with a member get a `Type` suffix |
-| `enum CardEffectiveState` | `PaymentCardReadResult.CardEffectiveStateType` (returned as nullable) | optional enum results project to `…Type?` |
+| nested `enum Event` / `struct Options` | `PaymentCardReader.Event`, `PaymentCardReader.OptionsInfo` | nested types that collide with a member get a suffix — `Info` for struct-like types, `Kind` for enum-like ones |
+| `enum CardEffectiveState` | `PaymentCardReadResult.CardEffectiveStateKind` (returned as nullable) | optional enum results project to `…Type?` |
 
 Every async method also accepts a trailing `CancellationToken` (defaulted).
 
@@ -89,10 +90,10 @@ public partial class PaymentCardReader
     public static bool IsSupported { get; }
     public string Id { get; }
     public IAsyncEnumerable<PaymentCardReader.Event> Events { get; }
-    public PaymentCardReader.OptionsType Options { get; }
+    public PaymentCardReader.OptionsInfo Options { get; }
 
     public PaymentCardReader();
-    public PaymentCardReader(PaymentCardReader.OptionsType options);
+    public PaymentCardReader(PaymentCardReader.OptionsInfo options);
 
     public virtual Task<string> GetReaderIdentifierAsync(CancellationToken ct = default);
 
@@ -177,12 +178,12 @@ public partial class PaymentCardReadResult
     public string? ApplicationTypeIdentifier { get; }
     public bool PinBypassed { get; }
     public bool IsPINFallback { get; }
-    public PaymentCardReadResult.CardEffectiveStateType? CardEffectiveState { get; }   // Active/Inactive/Invalid/Unknown
-    public PaymentCardReadResult.CardExpirationStateType? CardExpirationState { get; } // NotExpired/Expired/Invalid/Unknown
+    public PaymentCardReadResult.CardEffectiveStateKind? CardEffectiveState { get; }   // Active/Inactive/Invalid/Unknown
+    public PaymentCardReadResult.CardExpirationStateKind? CardExpirationState { get; } // NotExpired/Expired/Invalid/Unknown
 }
 ```
 
-`VASReadResult` carries `ReadEntry` items (each with a `StatusType`). The store-and-forward flow (`StoreAndForwardPaymentCardReaderSession`, `StoreAndForwardBatch`, `StoreAndForwardStatus`, `StoreAndForwardBatchDeletionToken`, and the `PaymentCardReaderStore` batch APIs — `FetchStoredPaymentCardReadResultCountAsync`, `FetchStoredPaymentCardReadResultBatchAsync`, `ResolveBatchAsync`, `ResetBatchStateAsync`) lets you queue reads offline and resolve them later.
+`VASReadResult` carries `ReadEntry` items (each with a `StatusKind`). The store-and-forward flow (`StoreAndForwardPaymentCardReaderSession`, `StoreAndForwardBatch`, `StoreAndForwardStatus`, `StoreAndForwardBatchDeletionToken`, and the `PaymentCardReaderStore` batch APIs — `FetchStoredPaymentCardReadResultCountAsync`, `FetchStoredPaymentCardReadResultBatchAsync`, `ResolveBatchAsync`, `ResetBatchStateAsync`) lets you queue reads offline and resolve them later.
 
 ## Mobile documents
 
@@ -190,7 +191,7 @@ ProximityReader also reads mobile identity documents (mobile driver's license, n
 
 ```csharp
 using var docReader = new MobileDocumentReader();
-MobileDocumentReader.ConfigurationType config = await docReader.GetConfigurationAsync();
+MobileDocumentReader.ConfigurationInfo config = await docReader.GetConfigurationAsync();
 using MobileDocumentReaderSession docSession = await docReader.PrepareAsync(/* token */ null);
 ```
 

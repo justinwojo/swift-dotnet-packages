@@ -13,7 +13,8 @@ dotnet add package SwiftBindings.Apple.WorkoutKit
 ## Requirements
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - A paired Apple Watch and the companion watchOS app for scheduling to actually deliver
 
@@ -23,12 +24,12 @@ dotnet add package SwiftBindings.Apple.WorkoutKit
 using WorkoutKit;
 
 // Inspect scheduler authorization and capability
-var status = WorkoutScheduler.AuthorizationStateType.Authorized;
+var status = WorkoutScheduler.AuthorizationStateKind.Authorized;
 // var maxScheduled = WorkoutScheduler.Shared.MaxAllowedScheduledWorkoutCount;
 // var isSupported = WorkoutScheduler.IsSupported;
 
 // Build workout primitives
-var step = new IntervalStep(IntervalStep.PurposeType.Work);
+var step = new IntervalStep(IntervalStep.PurposeKind.Work);
 ```
 
 `CustomWorkout`, `SingleGoalWorkout`, `PacerWorkout`, `SwimBikeRunWorkout`, `IntervalBlock`, `IntervalStep`, `WorkoutPlan`, `ScheduledWorkoutPlan`, the alert types, and `WorkoutScheduler` are all bound. See Apple's documentation for the full builder/scheduling flow.

@@ -24,8 +24,8 @@ device-only, LiDAR-only API, so most of what you can exercise off-device is the
 ## Requirements & install
 
 - .NET 10.0+
-- Built against the .NET 10 iOS 26.2 SDK; RoomPlan runtime availability follows
-  Apple's framework (iOS 16/17+).
+- **Target framework: `net10.0-ios26.2` or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). RoomPlan's own runtime availability follows Apple's framework (iOS 16/17+); individual APIs that need a newer OS are gated by generated `[SupportedOSPlatform]` attributes, and the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - **A LiDAR-equipped iPhone or iPad Pro for live capture** — there is no simulator
   path for scanning. Only the result/export types (`CapturedRoom` and friends)
@@ -47,7 +47,7 @@ using RoomPlan;
 | `func capturedRoom(from:) async throws` | `CapturedRoomAsync(...)` | `async` methods gain an `Async` suffix and return `Task<T>` plus a trailing `CancellationToken` |
 | `session.run(configuration:)` | `session.Run(configuration)` | first argument label dropped |
 | `enum CaptureError` (plain) | `RoomCaptureSession.CaptureError` C# `enum` | plain Swift enums project to C# enums with the same case order |
-| `enum Category { case wall(...) }` | nested `CategoryType` class with `.Tag` + `.CaseTag` | enums-with-payload become a class carrying a `CaseTag` discriminator |
+| `enum Category { case wall(...) }` | nested `CategoryKind` class with `.Tag` + `.CaseTag` | enums-with-payload become a class carrying a `CaseTag` discriminator |
 | `error.errorDescription` | `error.GetErrorDescription()` | localized strings surface as extension methods, e.g. `RoomCaptureSessionCaptureErrorExtensions.GetErrorDescription` |
 | `struct ConfigurationOptions: OptionSet` | `RoomBuilder.ConfigurationOptions` | an `OptionSet`, **not** a settable struct — see below |
 
@@ -103,25 +103,30 @@ session.Run(config);
 session.Stop();                 // or session.Stop(pauseARSession: true)
 ```
 
-Implement `IRoomCaptureSessionDelegate` to receive results. Note that all four
-callbacks are Swift overloads of `captureSession(_:...)`, so they project to a
-set of overloaded `CaptureSession(...)` methods discriminated by their second
-parameter:
+Implement `IRoomCaptureSessionDelegate` to receive results. It has **seven**
+callbacks, all Swift overloads of `captureSession(_:...)`. Because overloads that
+differ only by argument label would collide in C#, every one of the seven carries
+its Swift label as a method-name suffix — `CaptureSessionDidUpdate`, `DidAdd`,
+`DidChange`, `DidRemove`, `DidProvide`, `DidStartWith`, `DidEndWithError`. There
+is no plain `CaptureSession(...)` overload on the interface:
 
 ```csharp
 internal sealed class MyCaptureDelegate : IRoomCaptureSessionDelegate
 {
-    // live re-localization / partial room updates
-    public void CaptureSession(RoomCaptureSession session, CapturedRoom room) { }
+    // partial-room updates during scanning (didUpdate / didAdd / didChange / didRemove)
+    public void CaptureSessionDidUpdate(RoomCaptureSession session, CapturedRoom room) { }
+    public void CaptureSessionDidAdd(RoomCaptureSession session, CapturedRoom room) { }
+    public void CaptureSessionDidChange(RoomCaptureSession session, CapturedRoom room) { }
+    public void CaptureSessionDidRemove(RoomCaptureSession session, CapturedRoom room) { }
 
     // user-guidance instruction (move closer to wall, slow down, …)
-    public void CaptureSession(RoomCaptureSession session, RoomCaptureSession.Instruction instruction) { }
+    public void CaptureSessionDidProvide(RoomCaptureSession session, RoomCaptureSession.Instruction instruction) { }
 
-    // configuration applied
-    public void CaptureSession(RoomCaptureSession session, RoomCaptureSession.Configuration configuration) { }
+    // configuration the session started with
+    public void CaptureSessionDidStartWith(RoomCaptureSession session, RoomCaptureSession.Configuration configuration) { }
 
     // final result + optional error — feed `data` into RoomBuilder.CapturedRoomAsync
-    public void CaptureSession(RoomCaptureSession session, CapturedRoomData data, Swift.Foundation.AnyError? error) { }
+    public void CaptureSessionDidEndWithError(RoomCaptureSession session, CapturedRoomData data, Swift.Foundation.AnyError? error) { }
 }
 ```
 
@@ -177,7 +182,7 @@ Each `CapturedRoom.Surface` carries:
 
 | Member | Type | |
 |---|---|---|
-| `Category` | `CapturedRoom.Surface.CategoryType` | Door / Wall / Opening / Window / Floor — discriminate via `.Tag` (a `CaseTag`) |
+| `Category` | `CapturedRoom.Surface.CategoryKind` | Door / Wall / Opening / Window / Floor — discriminate via `.Tag` (a `CaseTag`) |
 | `Confidence` | `CapturedRoom.Confidence` | `High` / `Medium` / `Low` |
 | `Dimensions` | `System.Numerics.Vector3` | |
 | `Transform` | `System.Numerics.Matrix4x4` | world placement |
@@ -185,9 +190,9 @@ Each `CapturedRoom.Surface` carries:
 | `PolygonCorners` | `IReadOnlyList<System.Numerics.Vector3>` | |
 | `Identifier` / `ParentIdentifier` | `System.Guid` / `System.Guid?` | |
 | `Story` | `int` | |
-| `Curve` | `CapturedRoom.Surface.CurveType?` | non-null for curved walls |
+| `Curve` | `CapturedRoom.Surface.CurveInfo?` | non-null for curved walls |
 
-`CapturedRoom.Object` is similar (`Category` is `CapturedRoom.Object.CategoryType`,
+`CapturedRoom.Object` is similar (`Category` is `CapturedRoom.Object.CategoryKind`,
 plus `Confidence`, `Dimensions`, `Transform`, `Identifier`, `ParentIdentifier`,
 `Story`). Object subcategory detail is modeled by the top-level value types
 `ChairType`, `SofaType`, `TableType`, `StorageType`, `TableShapeType`,
@@ -198,7 +203,7 @@ static cases (e.g. `ChairType.Dining`, `SofaType.LShaped`) and a `.Tag`.
 foreach (var wall in room.Walls)
 {
     Console.WriteLine($"wall {wall.Identifier} {wall.Dimensions} conf={wall.Confidence}");
-    if (wall.Category.Tag == CapturedRoom.Surface.CategoryType.CaseTag.Window)
+    if (wall.Category.Tag == CapturedRoom.Surface.CategoryKind.CaseTag.Window)
         Console.WriteLine("  (this surface is a window)");
 }
 ```

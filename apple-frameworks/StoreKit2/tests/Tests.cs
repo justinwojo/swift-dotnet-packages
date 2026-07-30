@@ -217,23 +217,23 @@ internal static class Tests
             Fail("StoreKitError singletons", ex.Message);
         }
 
-        // Test 13: Product.SubscriptionPeriod.UnitType.CaseTag enum values
+        // Test 13: Product.SubscriptionPeriod.UnitKind.CaseTag enum values
         try
         {
-            if ((uint)Product.SubscriptionPeriod.UnitType.CaseTag.Day != 0)
-                throw new InvalidOperationException($"Day tag expected 0, got {(uint)Product.SubscriptionPeriod.UnitType.CaseTag.Day}");
-            if ((uint)Product.SubscriptionPeriod.UnitType.CaseTag.Week != 1)
-                throw new InvalidOperationException($"Week tag expected 1, got {(uint)Product.SubscriptionPeriod.UnitType.CaseTag.Week}");
-            if ((uint)Product.SubscriptionPeriod.UnitType.CaseTag.Month != 2)
-                throw new InvalidOperationException($"Month tag expected 2, got {(uint)Product.SubscriptionPeriod.UnitType.CaseTag.Month}");
-            if ((uint)Product.SubscriptionPeriod.UnitType.CaseTag.Year != 3)
-                throw new InvalidOperationException($"Year tag expected 3, got {(uint)Product.SubscriptionPeriod.UnitType.CaseTag.Year}");
-            Log($"Product.SubscriptionPeriod.UnitType.CaseTag values verified");
-            Pass("Product.SubscriptionPeriod.UnitType.CaseTag");
+            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Day != 0)
+                throw new InvalidOperationException($"Day tag expected 0, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Day}");
+            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Week != 1)
+                throw new InvalidOperationException($"Week tag expected 1, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Week}");
+            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Month != 2)
+                throw new InvalidOperationException($"Month tag expected 2, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Month}");
+            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Year != 3)
+                throw new InvalidOperationException($"Year tag expected 3, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Year}");
+            Log($"Product.SubscriptionPeriod.UnitKind.CaseTag values verified");
+            Pass("Product.SubscriptionPeriod.UnitKind.CaseTag");
         }
         catch (Exception ex)
         {
-            Fail("Product.SubscriptionPeriod.UnitType.CaseTag", ex.Message);
+            Fail("Product.SubscriptionPeriod.UnitKind.CaseTag", ex.Message);
         }
 
         // Test 14: Product.PurchaseResult.CaseTag enum values
@@ -301,34 +301,34 @@ internal static class Tests
             Fail("AppStore.Platform singletons", ex.Message);
         }
 
-        // Test 18: Transaction.ReasonType static singletons (Purchase, Renewal)
+        // Test 18: Transaction.ReasonInfo static singletons (Purchase, Renewal)
         try
         {
-            var purchase = Transaction.ReasonType.Purchase;
-            var renewal = Transaction.ReasonType.Renewal;
+            var purchase = Transaction.ReasonInfo.Purchase;
+            var renewal = Transaction.ReasonInfo.Renewal;
             if (purchase is null || renewal is null)
-                throw new InvalidOperationException("a ReasonType singleton was null");
-            Log($"Transaction.ReasonType: Purchase={purchase.RawValue}, Renewal={renewal.RawValue}");
-            Pass("Transaction.ReasonType singletons");
+                throw new InvalidOperationException("a ReasonInfo singleton was null");
+            Log($"Transaction.ReasonInfo: Purchase={purchase.RawValue}, Renewal={renewal.RawValue}");
+            Pass("Transaction.ReasonInfo singletons");
         }
         catch (Exception ex)
         {
-            Fail("Transaction.ReasonType singletons", ex.Message);
+            Fail("Transaction.ReasonInfo singletons", ex.Message);
         }
 
-        // Test 19: Transaction.OwnershipTypeType static singletons (Purchased, FamilyShared)
+        // Test 19: Transaction.OwnershipTypeInfo static singletons (Purchased, FamilyShared)
         try
         {
-            var purchased = Transaction.OwnershipTypeType.Purchased;
-            var familyShared = Transaction.OwnershipTypeType.FamilyShared;
+            var purchased = Transaction.OwnershipTypeInfo.Purchased;
+            var familyShared = Transaction.OwnershipTypeInfo.FamilyShared;
             if (purchased is null || familyShared is null)
-                throw new InvalidOperationException("an OwnershipTypeType singleton was null");
-            Log($"Transaction.OwnershipTypeType: Purchased={purchased.RawValue}, FamilyShared={familyShared.RawValue}");
-            Pass("Transaction.OwnershipTypeType singletons");
+                throw new InvalidOperationException("an OwnershipTypeInfo singleton was null");
+            Log($"Transaction.OwnershipTypeInfo: Purchased={purchased.RawValue}, FamilyShared={familyShared.RawValue}");
+            Pass("Transaction.OwnershipTypeInfo singletons");
         }
         catch (Exception ex)
         {
-            Fail("Transaction.OwnershipTypeType singletons", ex.Message);
+            Fail("Transaction.OwnershipTypeInfo singletons", ex.Message);
         }
 
         // Test 20: Product.ProductType static singletons (Consumable, NonConsumable, NonRenewable, AutoRenewable)
@@ -348,20 +348,20 @@ internal static class Tests
             Fail("Product.ProductType singletons", ex.Message);
         }
 
-        // Test 21: Transaction.OfferTypeTypeType static singletons
+        // Test 21: Transaction.OfferTypeInfo static singletons
         try
         {
-            var introductory = Transaction.OfferTypeTypeType.Introductory;
-            var promotional = Transaction.OfferTypeTypeType.Promotional;
-            var code = Transaction.OfferTypeTypeType.Code;
+            var introductory = Transaction.OfferTypeInfo.Introductory;
+            var promotional = Transaction.OfferTypeInfo.Promotional;
+            var code = Transaction.OfferTypeInfo.Code;
             if (introductory is null || promotional is null || code is null)
-                throw new InvalidOperationException("an OfferTypeTypeType singleton was null");
-            Log($"Transaction.OfferTypeTypeType: Introductory={introductory.RawValue}, Promotional={promotional.RawValue}, Code={code.RawValue}");
-            Pass("Transaction.OfferTypeTypeType singletons");
+                throw new InvalidOperationException("an OfferTypeInfo singleton was null");
+            Log($"Transaction.OfferTypeInfo: Introductory={introductory.RawValue}, Promotional={promotional.RawValue}, Code={code.RawValue}");
+            Pass("Transaction.OfferTypeInfo singletons");
         }
         catch (Exception ex)
         {
-            Fail("Transaction.OfferTypeTypeType singletons", ex.Message);
+            Fail("Transaction.OfferTypeInfo singletons", ex.Message);
         }
 
         // Test 22: Metadata loads for key types
@@ -447,19 +447,19 @@ internal static class Tests
             Fail("AppTransaction.GetSharedAsync dispatch", ex.Message);
         }
 
-        // Test 28: Transaction.RevocationReasonType singletons (raw-value type, not CaseTag)
+        // Test 28: Transaction.RevocationReasonInfo singletons (raw-value type, not CaseTag)
         try
         {
-            var devIssue = Transaction.RevocationReasonType.DeveloperIssue;
-            var other = Transaction.RevocationReasonType.Other;
+            var devIssue = Transaction.RevocationReasonInfo.DeveloperIssue;
+            var other = Transaction.RevocationReasonInfo.Other;
             if (devIssue is null || other is null)
-                throw new InvalidOperationException("a RevocationReasonType singleton was null");
-            Log($"RevocationReasonType: DeveloperIssue.RawValue={devIssue.RawValue}, Other.RawValue={other.RawValue}");
-            Pass("Transaction.RevocationReasonType singletons");
+                throw new InvalidOperationException("a RevocationReasonInfo singleton was null");
+            Log($"RevocationReasonInfo: DeveloperIssue.RawValue={devIssue.RawValue}, Other.RawValue={other.RawValue}");
+            Pass("Transaction.RevocationReasonInfo singletons");
         }
         catch (Exception ex)
         {
-            Fail("Transaction.RevocationReasonType singletons", ex.Message);
+            Fail("Transaction.RevocationReasonInfo singletons", ex.Message);
         }
 
         // Test 29: Product.SubscriptionOffer.OfferType singletons (raw-value type, not CaseTag)
@@ -515,6 +515,32 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail("VerificationResult<T>.TryGetVerified/TryGetUnverified shape", ex.Message);
+        }
+
+        // Test 31: Product.ProductsAsync — a REAL awaited StoreKit query. Unknown product IDs
+        // with no .storekit configuration (unavailable outside Xcode — the App Store returns
+        // no products; documented not-our-bug) resolve to an EMPTY list. We assert the full
+        // semantic outcome: a non-null IReadOnlyList<Product> that is empty (Count == 0). This
+        // proves the async Swift->C# bridge marshalled the real [Product] payload back — an
+        // empty array, not a phantom/garbage list — rather than merely firing dispatch. A
+        // non-empty result here would mean the marshaller materialized products that StoreKit
+        // never returned, so we fail closed on it.
+        try
+        {
+            var products = Product.ProductsAsync(new[] { "com.swiftbindings.storekit2.tests.nonexistent" })
+                .GetAwaiter().GetResult();
+            if (products is null)
+                throw new InvalidOperationException("ProductsAsync returned a null list");
+            Log($"Product.ProductsAsync returned {products.Count} product(s) for unknown IDs (0 expected without a .storekit config)");
+            if (products.Count != 0)
+                throw new InvalidOperationException(
+                    $"Unknown product IDs must resolve to an empty list; got {products.Count} product(s) — " +
+                    "the marshaller materialized entries StoreKit never returned.");
+            Pass("Product.ProductsAsync awaited (empty-list result)");
+        }
+        catch (Exception ex)
+        {
+            Fail("Product.ProductsAsync awaited (empty-list result)", ex.Message);
         }
 
         // Summary

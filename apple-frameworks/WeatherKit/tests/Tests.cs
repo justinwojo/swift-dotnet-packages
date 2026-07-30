@@ -321,35 +321,35 @@ internal static class Tests
             Fail("UVIndex.ExposureCategory.Moderate.GetDescription", ex.Message);
         }
 
-        // Test 23: Wind.CompassDirectionType enum values and AllCases.
+        // Test 23: Wind.CompassDirectionKind enum values and AllCases.
         try
         {
-            if ((int)Wind.CompassDirectionType.North != 0)
-                throw new InvalidOperationException($"North expected 0, got {(int)Wind.CompassDirectionType.North}");
-            if ((int)Wind.CompassDirectionType.NorthNorthwest != 15)
-                throw new InvalidOperationException($"NNW expected 15, got {(int)Wind.CompassDirectionType.NorthNorthwest}");
-            var allCases = WindCompassDirectionTypeExtensions.AllCases;
+            if ((int)Wind.CompassDirectionKind.North != 0)
+                throw new InvalidOperationException($"North expected 0, got {(int)Wind.CompassDirectionKind.North}");
+            if ((int)Wind.CompassDirectionKind.NorthNorthwest != 15)
+                throw new InvalidOperationException($"NNW expected 15, got {(int)Wind.CompassDirectionKind.NorthNorthwest}");
+            var allCases = WindCompassDirectionKindExtensions.AllCases;
             if (allCases.Count != 16)
                 throw new InvalidOperationException($"Expected 16 compass directions, got {allCases.Count}");
-            Pass("Wind.CompassDirectionType values + AllCases");
+            Pass("Wind.CompassDirectionKind values + AllCases");
         }
         catch (Exception ex)
         {
-            Fail("Wind.CompassDirectionType values + AllCases", ex.Message);
+            Fail("Wind.CompassDirectionKind values + AllCases", ex.Message);
         }
 
-        // Test 24: Wind.CompassDirectionType.GetDescription cdecl round-trip.
+        // Test 24: Wind.CompassDirectionKind.GetDescription cdecl round-trip.
         try
         {
-            var desc = Wind.CompassDirectionType.North.GetDescription();
+            var desc = Wind.CompassDirectionKind.North.GetDescription();
             if (string.IsNullOrEmpty(desc))
                 throw new InvalidOperationException("empty description");
-            Log($"Wind.CompassDirectionType.North description = {desc}");
-            Pass("Wind.CompassDirectionType.North.GetDescription");
+            Log($"Wind.CompassDirectionKind.North description = {desc}");
+            Pass("Wind.CompassDirectionKind.North.GetDescription");
         }
         catch (Exception ex)
         {
-            Fail("Wind.CompassDirectionType.North.GetDescription", ex.Message);
+            Fail("Wind.CompassDirectionKind.North.GetDescription", ex.Message);
         }
 
         // Test 25a: Forecast<HourWeather> implements IReadOnlyList<HourWeather>.
@@ -421,6 +421,17 @@ internal static class Tests
         {
             Fail("WeatherService.GetAttributionAsync dispatch", ex.Message);
         }
+
+        // Test 27 (Skip): WeatherService.WeatherAsync(CLLocation) — the real weather fetch.
+        // The binding surface exists (Task<Weather> WeatherAsync(CLLocation, CancellationToken)),
+        // but the call requires the com.apple.developer.weatherkit entitlement + a provisioned
+        // WeatherKit API key + network; in the autonomous CLI simulator it resolves to a
+        // WeatherDaemon/authentication error rather than real data, so an assertion here would
+        // prove only dispatch — which this suite deliberately does not count as coverage.
+        // First-class documented Skip; revisit with a keyed, provisioned test host that has
+        // the entitlement, then assert a real Weather value (e.g. CurrentWeather.Temperature).
+        Skip("WeatherService.WeatherAsync(CLLocation) real fetch",
+            "needs com.apple.developer.weatherkit entitlement + API key + network; not autonomous-CLI-sim runnable (revisit under entitlement follow-up)");
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

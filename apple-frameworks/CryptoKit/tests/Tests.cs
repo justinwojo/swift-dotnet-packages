@@ -69,8 +69,8 @@ internal static class Tests
         // Test 3: SHA512 metadata loads.
         MetadataTest<SHA512>("SHA512");
 
-        // Test 4: Sha3256 metadata loads.
-        MetadataTest<Sha3256>("Sha3256");
+        // Test 4: SHA3_256 metadata loads.
+        MetadataTest<SHA3_256>("SHA3_256");
 
         // Test 5: SHA256Digest metadata loads.
         MetadataTest<SHA256Digest>("SHA256Digest");
@@ -104,12 +104,12 @@ internal static class Tests
         // Test 11: HPKE.KDF plain enum values are correct.
         try
         {
-            if ((int)HPKE.KDF.HkdfSha256 != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KDF.HkdfSha256}");
-            if ((int)HPKE.KDF.HkdfSha384 != 1)
-                throw new InvalidOperationException($"expected 1, got {(int)HPKE.KDF.HkdfSha384}");
-            if ((int)HPKE.KDF.HkdfSha512 != 2)
-                throw new InvalidOperationException($"expected 2, got {(int)HPKE.KDF.HkdfSha512}");
+            if ((int)HPKE.KDF.HkdfSHA256 != 0)
+                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KDF.HkdfSHA256}");
+            if ((int)HPKE.KDF.HkdfSHA384 != 1)
+                throw new InvalidOperationException($"expected 1, got {(int)HPKE.KDF.HkdfSHA384}");
+            if ((int)HPKE.KDF.HkdfSHA512 != 2)
+                throw new InvalidOperationException($"expected 2, got {(int)HPKE.KDF.HkdfSHA512}");
             Pass("HPKE.KDF values");
         }
         catch (Exception ex)
@@ -120,8 +120,8 @@ internal static class Tests
         // Test 12: HPKE.KEM plain enum values are correct.
         try
         {
-            if ((int)HPKE.KEM.P256HkdfSha256 != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KEM.P256HkdfSha256}");
+            if ((int)HPKE.KEM.P256HkdfSHA256 != 0)
+                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KEM.P256HkdfSHA256}");
             if ((int)HPKE.KEM.Curve25519_HKDF_SHA256 != 3)
                 throw new InvalidOperationException($"expected 3, got {(int)HPKE.KEM.Curve25519_HKDF_SHA256}");
             if ((int)HPKE.KEM.XWingMLKEM768X25519 != 4)
@@ -600,6 +600,63 @@ internal static class Tests
         {
             Fail("Curve25519.Signing sign + verify round-trip", ex.Message);
         }
+
+        // Test 34: NIST P-curve ECDSA signing keys — key generation + public-key
+        // serialization round-trip with curve-defined byte lengths (a real semantic
+        // invariant, not construct-and-read-metadata). Each key's public-key raw
+        // representation is x||y (2 * field-size bytes); X9.63 is a 0x04 prefix + raw;
+        // compressed is a 1-byte prefix + x-coordinate (field-size + 1).
+        //
+        // NOTE: the full P256/P384/P521 ECDSA sign -> verify known-answer test is Skipped
+        // just below — the generator does not yet emit a callable sign entrypoint for
+        // these curves (see that Skip for the exact gap).
+        try
+        {
+            using var p256 = new P256.Signing.PrivateKey();
+            using var p256Pub = p256.PublicKey;
+            if (p256Pub.RawRepresentation.Length != 64)
+                throw new InvalidOperationException($"P256 raw len {p256Pub.RawRepresentation.Length} != 64");
+            if (p256Pub.X963Representation.Length != 65)
+                throw new InvalidOperationException($"P256 x963 len {p256Pub.X963Representation.Length} != 65");
+            if (p256Pub.CompressedRepresentation.Length != 33)
+                throw new InvalidOperationException($"P256 compressed len {p256Pub.CompressedRepresentation.Length} != 33");
+
+            using var p384 = new P384.Signing.PrivateKey();
+            using var p384Pub = p384.PublicKey;
+            if (p384Pub.RawRepresentation.Length != 96)
+                throw new InvalidOperationException($"P384 raw len {p384Pub.RawRepresentation.Length} != 96");
+            if (p384Pub.X963Representation.Length != 97)
+                throw new InvalidOperationException($"P384 x963 len {p384Pub.X963Representation.Length} != 97");
+            if (p384Pub.CompressedRepresentation.Length != 49)
+                throw new InvalidOperationException($"P384 compressed len {p384Pub.CompressedRepresentation.Length} != 49");
+
+            using var p521 = new P521.Signing.PrivateKey();
+            using var p521Pub = p521.PublicKey;
+            if (p521Pub.RawRepresentation.Length != 132)
+                throw new InvalidOperationException($"P521 raw len {p521Pub.RawRepresentation.Length} != 132");
+            if (p521Pub.X963Representation.Length != 133)
+                throw new InvalidOperationException($"P521 x963 len {p521Pub.X963Representation.Length} != 133");
+            if (p521Pub.CompressedRepresentation.Length != 67)
+                throw new InvalidOperationException($"P521 compressed len {p521Pub.CompressedRepresentation.Length} != 67");
+
+            Pass("P256/P384/P521 signing key generation + public-key serialization");
+        }
+        catch (Exception ex)
+        {
+            Fail("P256/P384/P521 signing key generation + public-key serialization", ex.Message);
+        }
+
+        // Test 35 (Skip): P256/P384/P521 ECDSA sign -> verify known-answer test. Blocked by a
+        // generator capability gap: PrivateKey.signature(for:) and PublicKey.isValidSignature
+        // surface ONLY as the uncallable [Obsolete] open-generic Signature<D>/IsValidSignature<D>
+        // (constrained to Swift DataProtocol; no witness wiring from C#). The CSM engine emits a
+        // closed byte[]/Data sign overload for Curve25519 (whose sign returns Data — see Test 33),
+        // but NOT for the P-curves, whose sign returns the nested ECDSASignature struct and for
+        // which no closed overload nor a byte-array ECDSASignature ctor is emitted. Revisit when
+        // the generator emits closed sign/verify overloads for generic-DataProtocol methods
+        // returning a nested value type; then clone Test 33's sign/verify/tamper shape per curve.
+        Skip("P256/P384/P521 ECDSA sign+verify known-answer test",
+            "generator gap: signature(for:)/isValidSignature only as uncallable [Obsolete] open-generic; no closed byte[]/Data overload for ECDSASignature-returning sign");
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

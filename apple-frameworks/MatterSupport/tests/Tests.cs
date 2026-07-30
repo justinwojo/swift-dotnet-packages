@@ -49,7 +49,7 @@ internal static class Tests
         // structs / enums; SwiftObjectHelper exercises the type-metadata
         // accessor symbol from MatterSupport.framework + the wrapper xcframework.
         MetadataTest<MatterAddDeviceRequest>("MatterAddDeviceRequest");
-        MetadataTest<MatterAddDeviceRequest.TopologyType>("MatterAddDeviceRequest.Topology");
+        MetadataTest<MatterAddDeviceRequest.TopologyInfo>("MatterAddDeviceRequest.Topology");
         MetadataTest<MatterAddDeviceRequest.Home>("MatterAddDeviceRequest.Home");
         MetadataTest<MatterAddDeviceRequest.Room>("MatterAddDeviceRequest.Room");
         MetadataTest<MatterAddDeviceRequest.DeviceCriteria>("MatterAddDeviceRequest.DeviceCriteria");
@@ -85,7 +85,7 @@ internal static class Tests
             uint originalPasscode = payload.SetupPasscode.UInt32Value;
 
             using var home = new MatterAddDeviceRequest.Home("Test Home");
-            using var topology = new MatterAddDeviceRequest.TopologyType("Test Ecosystem", new[] { home });
+            using var topology = new MatterAddDeviceRequest.TopologyInfo("Test Ecosystem", new[] { home });
 
             using var request = new MatterAddDeviceRequest(topology, setupPayload: payload);
 
@@ -107,7 +107,7 @@ internal static class Tests
         {
             using var payload = new MTRSetupPayload(canonicalQrPayload);
             using var home = new MatterAddDeviceRequest.Home("Test Home 2");
-            using var topology = new MatterAddDeviceRequest.TopologyType("Test Ecosystem 2", new[] { home });
+            using var topology = new MatterAddDeviceRequest.TopologyInfo("Test Ecosystem 2", new[] { home });
             using var criteria = MatterAddDeviceRequest.DeviceCriteria.AllDevices;
 
             using var request = new MatterAddDeviceRequest(topology, setupPayload: payload, deviceCriteria: criteria);
@@ -124,7 +124,7 @@ internal static class Tests
         {
             using var payload = new MTRSetupPayload(canonicalQrPayload);
             using var home = new MatterAddDeviceRequest.Home("Test Home 3");
-            using var topology = new MatterAddDeviceRequest.TopologyType("Test Ecosystem 3", new[] { home });
+            using var topology = new MatterAddDeviceRequest.TopologyInfo("Test Ecosystem 3", new[] { home });
             using var request = new MatterAddDeviceRequest(topology, setupPayload: payload);
             using var criteria = request.ShowDeviceCriteria;
             // The default criteria for the two-arg ctor is .allDevices.

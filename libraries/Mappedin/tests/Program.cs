@@ -254,7 +254,7 @@ public class MainViewController : UIViewController
             ("AnimationOptions", () => SwiftObjectHelper<AnimationOptions>.GetTypeMetadata()),
             ("AntialiasingOptions", () => SwiftObjectHelper<AntialiasingOptions>.GetTypeMetadata()),
             // Nested string-enum classes (covers nested-type metadata emission)
-            ("AntialiasingOptions.QualityType", () => SwiftObjectHelper<AntialiasingOptions.QualityType>.GetTypeMetadata()),
+            ("AntialiasingOptions.QualityKind", () => SwiftObjectHelper<AntialiasingOptions.QualityKind>.GetTypeMetadata()),
             // String-enum value-style classes
             ("ActionType", () => SwiftObjectHelper<ActionType>.GetTypeMetadata()),
             ("BearingType", () => SwiftObjectHelper<BearingType>.GetTypeMetadata()),
@@ -387,16 +387,16 @@ public class MainViewController : UIViewController
         TestStringEnumCase(logger, results, "CollisionRankingTier", "High", () => CollisionRankingTier.High);
         TestStringEnumCase(logger, results, "CollisionRankingTier", "AlwaysVisible", () => CollisionRankingTier.AlwaysVisible);
 
-        // --- Nested string-enum: AntialiasingOptions.QualityType ---
+        // --- Nested string-enum: AntialiasingOptions.QualityKind ---
         // Exercises the nested-type singleton dispatch + cdecl wrapper layout.
-        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Low",
-            () => AntialiasingOptions.QualityType.Low);
-        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Medium",
-            () => AntialiasingOptions.QualityType.Medium);
-        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "High",
-            () => AntialiasingOptions.QualityType.High);
-        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityType", "Ultra",
-            () => AntialiasingOptions.QualityType.Ultra);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityKind", "Low",
+            () => AntialiasingOptions.QualityKind.Low);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityKind", "Medium",
+            () => AntialiasingOptions.QualityKind.Medium);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityKind", "High",
+            () => AntialiasingOptions.QualityKind.High);
+        TestStringEnumCase(logger, results, "AntialiasingOptions.QualityKind", "Ultra",
+            () => AntialiasingOptions.QualityKind.Ultra);
     }
 
     private void TestStringEnumCase<T>(TestLogger logger, TestResults results,
@@ -620,7 +620,7 @@ public class MainViewController : UIViewController
             results.Fail("Constructor_BlueDotDeviceOrientationUpdatePayload", ex.Message);
         }
 
-        // --- AntialiasingOptions(bool?, QualityType?) — non-null nested-enum marshaling ---
+        // --- AntialiasingOptions(bool?, QualityKind?) — non-null nested-enum marshaling ---
         // Passing a non-null nested string-enum singleton and reading it back through
         // the Quality getter exercises the full Optional<nested-enum-class> round-trip,
         // not just the constructor call path.
@@ -628,10 +628,10 @@ public class MainViewController : UIViewController
         {
             using var opts = new AntialiasingOptions(
                 enabled: true,
-                quality: AntialiasingOptions.QualityType.High);
+                quality: AntialiasingOptions.QualityKind.High);
             var readBack = opts.Quality;
             var readBackRaw = readBack?.RawValue;
-            var expectedRaw = AntialiasingOptions.QualityType.High.RawValue;
+            var expectedRaw = AntialiasingOptions.QualityKind.High.RawValue;
             if (readBack is not null && readBackRaw == expectedRaw)
             {
                 logger.Pass($"AntialiasingOptions.Quality round-trip = {readBackRaw}");
@@ -711,10 +711,10 @@ public class MainViewController : UIViewController
         TestRawValue(logger, results, "BlueDotStatus", "Active", () => BlueDotStatus.Active.RawValue);
         TestRawValue(logger, results, "CollisionRankingTier", "Medium", () => CollisionRankingTier.Medium.RawValue);
         // Nested-enum RawValue access:
-        TestRawValue(logger, results, "AntialiasingOptions.QualityType", "Medium",
-            () => AntialiasingOptions.QualityType.Medium.RawValue);
-        TestRawValue(logger, results, "AntialiasingOptions.QualityType", "Ultra",
-            () => AntialiasingOptions.QualityType.Ultra.RawValue);
+        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Medium",
+            () => AntialiasingOptions.QualityKind.Medium.RawValue);
+        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Ultra",
+            () => AntialiasingOptions.QualityKind.Ultra.RawValue);
 
         // --- FromRawValue round-trip ---
         TestFromRawValueRoundTrip(logger, results, "BearingType", "straight",
@@ -728,10 +728,10 @@ public class MainViewController : UIViewController
         TestFromRawValueRoundTrip(logger, results, "BlueDotStatus", "active",
             BlueDotStatus.Active.RawValue, () => BlueDotStatus.FromRawValue(BlueDotStatus.Active.RawValue)?.RawValue);
         // Nested-enum FromRawValue round-trip:
-        TestFromRawValueRoundTrip(logger, results, "AntialiasingOptions.QualityType", "medium",
-            AntialiasingOptions.QualityType.Medium.RawValue,
-            () => AntialiasingOptions.QualityType.FromRawValue(
-                AntialiasingOptions.QualityType.Medium.RawValue)?.RawValue);
+        TestFromRawValueRoundTrip(logger, results, "AntialiasingOptions.QualityKind", "medium",
+            AntialiasingOptions.QualityKind.Medium.RawValue,
+            () => AntialiasingOptions.QualityKind.FromRawValue(
+                AntialiasingOptions.QualityKind.Medium.RawValue)?.RawValue);
 
         // --- FromRawValue with invalid input ---
         TestFromRawValueInvalid(logger, results, "BearingType",

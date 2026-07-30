@@ -37,7 +37,7 @@ internal static class MacEntry
         }
 
         Check<ImagePipeline>("ImagePipeline");
-        Check<ImagePipeline.ConfigurationType>("ImagePipeline.ConfigurationType");
+        Check<ImagePipeline.ConfigurationInfo>("ImagePipeline.ConfigurationInfo");
         Check<ImageRequest>("ImageRequest");
         Check<ImageCache>("ImageCache");
         Check<DataLoader>("DataLoader");

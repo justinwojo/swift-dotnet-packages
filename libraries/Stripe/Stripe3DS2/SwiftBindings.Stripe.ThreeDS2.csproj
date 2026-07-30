@@ -1,15 +1,21 @@
-<Project Sdk="SwiftBindings.Sdk/0.16.0">
+<Project Sdk="SwiftBindings.Sdk/0.18.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
+    <!-- Stripe3DS2 ships as a pure ObjC framework — no .swiftinterface. Both
+         properties must be in the csproj body so the .NET iOS workload's
+         bgen pipeline engages at evaluation time. -->
     <SwiftFrameworkType>ObjC</SwiftFrameworkType>
+    <IsBindingProject>true</IsBindingProject>
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Stripe.ThreeDS2</PackageId>
-    <Version>25.15.0</Version>
-    <Description>Transitive support package for SwiftBindings.Stripe.* — pulled in automatically by sibling Stripe packages that need 3-D Secure 2 support. Not an entry point; do not install directly. Wraps Stripe's ObjC-only Stripe3DS2.xcframework.</Description>
+    <Version>26.0.0</Version>
+    <Description>[Transitive] Support package for SwiftBindings.Stripe.* — pulled in automatically by sibling Stripe packages that need 3-D Secure 2 support. Not an entry point; do not install directly. Wraps Stripe's ObjC-only Stripe3DS2.xcframework.</Description>
     <PackageTags>$(CommonPackageTags);stripe;stripe3ds2;payments;3ds</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Not required: this module's binding emits no Swift wrapper that its P/Invokes reference. -->
+    <SwiftWrapperRequired>false</SwiftWrapperRequired>
   </PropertyGroup>
 
   <!-- Package the README -->

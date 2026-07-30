@@ -26,8 +26,8 @@
 ## Requirements & install
 
 - .NET 10.0+
-- Target frameworks: `net10.0-ios26.2`, `net10.0-macos26.2`, `net10.0-maccatalyst26.2`, `net10.0-tvos26.2`
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2` / `-tvos26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - A paid Apple Developer Program membership with the **WeatherKit** capability enabled. WeatherKit data is metered and entitlement-gated; calls fail without a provisioned app. The bindings themselves load and dispatch on the simulator, but live data requires the entitlement.
 
@@ -262,18 +262,18 @@ if (sun.Sunrise is { } rise) { /* DateTimeOffset */ }
 
 | Property | Type |
 |---|---|
-| `CompassDirection` | `Wind.CompassDirectionType` |
+| `CompassDirection` | `Wind.CompassDirectionKind` |
 | `Direction` | `Measurement<NSUnitAngle>` |
 | `Speed` | `Measurement<NSUnitSpeed>` |
 | `Gust` | `Measurement<NSUnitSpeed>?` |
 
-`Wind.CompassDirectionType` is a C# `enum` with all 16 points (`North`=0 … `NorthNorthwest`=15). Helpers live on `WindCompassDirectionTypeExtensions`:
+`Wind.CompassDirectionKind` is a C# `enum` with all 16 points (`North`=0 … `NorthNorthwest`=15). Helpers live on `WindCompassDirectionKindExtensions`:
 
 ```csharp
 Wind wind = weather.CurrentWeather.Wind;
 Console.WriteLine($"{wind.Speed.Value} m/s from {wind.CompassDirection.GetDescription()}");
 string abbr = wind.CompassDirection.GetAbbreviation();    // e.g. "NNW"
-var allDirs = WindCompassDirectionTypeExtensions.AllCases; // 16 entries
+var allDirs = WindCompassDirectionKindExtensions.AllCases; // 16 entries
 ```
 
 `UVIndex`:

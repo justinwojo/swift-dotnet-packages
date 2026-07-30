@@ -677,6 +677,23 @@ internal static class Tests
             Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
         }
 
+        // Test 41 (Skip): MusicAuthorization.RequestAsync — the interactive authorization
+        // REQUEST. The binding surface exists (Task<Status> RequestAsync(CancellationToken))
+        // and the usage string is present (NSAppleMusicUsageDescription in Info.plist), but
+        // invoking request() in an autonomous CLI simulator does NOT resolve to Denied — it
+        // hard-aborts the process inside Apple's TCC.framework
+        // (__TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__) because a protected-resource request
+        // cannot go through an interactive TCC grant/deny flow in a headless sim. This is an
+        // Apple-side environmental limitation (same class as StoreKit .storekit config and
+        // LiveActivity foreground preconditions), not a binding/marshalling defect: the
+        // status-QUERY path MusicAuthorization.CurrentStatus is exercised and passes above,
+        // and MusicSubscription.GetCurrentAsync round-trips a framework .permissionDenied.
+        // The awaited REQUEST itself is not callable here — do NOT invoke it (it crashes the
+        // whole app, taking every later test with it). Revisit under the entitlement/Sandbox
+        // follow-up with an interactive or pre-authorized TCC host, then assert the Status.
+        Skip("MusicAuthorization.RequestAsync awaited status",
+            "request() aborts via TCC (__TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__) in headless CLI sim even with NSAppleMusicUsageDescription; status-query path CurrentStatus covered above; revisit with an interactive/pre-authorized TCC host");
+
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
         if (failed == 0)

@@ -681,36 +681,23 @@ public class MainViewController : UIViewController
             results.Fail("StripeCore_STPAppInfo_NullOptionals", ex.Message);
         }
 
-        // STPAPIClient.AppInfo assignment
-        // Known issue: string corruption on AppInfo roundtrip via getter path.
-        // The AppInfo property getter triggers ARC operations (passRetained in Swift,
-        // InitializeWithCopy + Arc.Retain in C#) that corrupt the NSString ivar data
-        // by +2 at byte offset 4, cumulatively. Affects all string values — "TestApp"
-        // becomes "TestCpp", "ABCDEFG" becomes "ABCDGFG", etc. Corruption is persistent
-        // on the Swift object (same handle, both original and readBack wrappers see it).
-        // The setter path (which also uses NewSome) does NOT corrupt.
-        // Hypothesis: swift_retain on NSString tagged pointers corrupts inline data.
+        // STPAPIClient.AppInfo assignment + getter round-trip. Hard-asserts the string
+        // value survives the getter's ARC path (Optional<ObjC-rooted class> accessor,
+        // GetINativeObject<T>(ptr, owns: true)). This previously read back corrupted
+        // ("TestApp" -> "TestCpp") and was Skip-masked; the getter IntPtr path fix makes
+        // it a real value assertion — no Skip branch.
         try
         {
             var client = new StripeCore.STPAPIClient();
             var appInfo = new StripeCore.STPAppInfo("TestApp", null, "2.0", null);
             client.AppInfo = appInfo;
             var readBack = client.AppInfo;
-            if (readBack != null && readBack.Name == "TestApp")
-            {
-                logger.Pass("STPAPIClient.AppInfo roundtrip");
-                results.Pass("StripeCore_STPAPIClient_AppInfo");
-            }
-            else if (readBack != null)
-            {
-                logger.Skip($"STPAPIClient.AppInfo: known string corruption (got '{readBack.Name}')");
-                results.Skip("StripeCore_STPAPIClient_AppInfo", $"String corruption: got '{readBack.Name}'");
-            }
-            else
-            {
-                logger.Skip("STPAPIClient.AppInfo: getter returned null after set");
-                results.Skip("StripeCore_STPAPIClient_AppInfo", "Getter returned null");
-            }
+            if (readBack == null)
+                throw new InvalidOperationException("AppInfo getter returned null after set");
+            if (readBack.Name != "TestApp")
+                throw new InvalidOperationException($"AppInfo.Name round-trip corruption: got '{readBack.Name}', expected 'TestApp'");
+            logger.Pass("STPAPIClient.AppInfo roundtrip");
+            results.Pass("StripeCore_STPAPIClient_AppInfo");
         }
         catch (Exception ex)
         {
@@ -943,13 +930,13 @@ public class MainViewController : UIViewController
         {
             var values = new[]
             {
-                (StripeCore.STPErrorCode.ConnectionError, "ConnectionError", 0L),
-                (StripeCore.STPErrorCode.InvalidRequestError, "InvalidRequestError", 1L),
-                (StripeCore.STPErrorCode.AuthenticationError, "AuthenticationError", 2L),
-                (StripeCore.STPErrorCode.ApiError, "ApiError", 3L),
-                (StripeCore.STPErrorCode.CardError, "CardError", 4L),
-                (StripeCore.STPErrorCode.CancellationError, "CancellationError", 5L),
-                (StripeCore.STPErrorCode.EphemeralKeyDecodingError, "EphemeralKeyDecodingError", 6L),
+                (StripeCore.STPErrorCode.ConnectionError, "ConnectionError", 40L),
+                (StripeCore.STPErrorCode.InvalidRequestError, "InvalidRequestError", 50L),
+                (StripeCore.STPErrorCode.AuthenticationError, "AuthenticationError", 51L),
+                (StripeCore.STPErrorCode.ApiError, "ApiError", 60L),
+                (StripeCore.STPErrorCode.CardError, "CardError", 70L),
+                (StripeCore.STPErrorCode.CancellationError, "CancellationError", 80L),
+                (StripeCore.STPErrorCode.EphemeralKeyDecodingError, "EphemeralKeyDecodingError", 1000L),
             };
 
             var allCorrect = true;
@@ -1962,7 +1949,7 @@ public class MainViewController : UIViewController
         // Shadow.Disabled static property
         try
         {
-            var disabled = StripePaymentSheet.PaymentSheet.Appearance.ShadowType.Disabled;
+            var disabled = StripePaymentSheet.PaymentSheet.Appearance.ShadowInfo.Disabled;
             if (disabled != null)
             {
                 logger.Pass($"Shadow.Disabled (opacity: {disabled.Opacity})");
@@ -2171,13 +2158,13 @@ public class MainViewController : UIViewController
         logger.Info("--- AddressViewController ---");
         try
         {
-            var addressType = new StripePaymentSheet.AddressViewController.AddressDetails.AddressType(
+            var addressType = new StripePaymentSheet.AddressViewController.AddressDetails.AddressInfo(
                 city: "San Francisco", country: "US", line1: "123 Market St",
                 line2: null, postalCode: "94107", state: "CA");
             var addr = new StripePaymentSheet.AddressViewController.AddressDetails(addressType, name: "Test User");
             if (addr != null)
             {
-                logger.Pass("AddressDetails construction with AddressType");
+                logger.Pass("AddressDetails construction with AddressInfo");
                 results.Pass("PaymentSheet_AddressDetails_Ctor");
             }
             else
@@ -2473,61 +2460,61 @@ public class MainViewController : UIViewController
         // Appearance typography and colors construction
         try
         {
-            var typography = new StripeConnect.EmbeddedComponentManager.Appearance.TypographyType();
+            var typography = new StripeConnect.EmbeddedComponentManager.Appearance.TypographyInfo();
             if (typography != null)
             {
-                logger.Pass("Appearance.TypographyType() constructor");
+                logger.Pass("Appearance.TypographyInfo() constructor");
                 results.Pass("Connect_Typography_Ctor");
             }
             else
             {
-                logger.Fail("TypographyType: null");
+                logger.Fail("TypographyInfo: null");
                 results.Fail("Connect_Typography_Ctor", "Null");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"TypographyType: {ex.Message}");
+            logger.Fail($"TypographyInfo: {ex.Message}");
             results.Fail("Connect_Typography_Ctor", ex.Message);
         }
 
         try
         {
-            var colorsType = new StripeConnect.EmbeddedComponentManager.Appearance.ColorsType();
+            var colorsType = new StripeConnect.EmbeddedComponentManager.Appearance.ColorsInfo();
             if (colorsType != null)
             {
-                logger.Pass("Appearance.ColorsType() constructor");
+                logger.Pass("Appearance.ColorsInfo() constructor");
                 results.Pass("Connect_ColorsType_Ctor");
             }
             else
             {
-                logger.Fail("ColorsType: null");
+                logger.Fail("ColorsInfo: null");
                 results.Fail("Connect_ColorsType_Ctor", "Null");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"ColorsType: {ex.Message}");
+            logger.Fail($"ColorsInfo: {ex.Message}");
             results.Fail("Connect_ColorsType_Ctor", ex.Message);
         }
 
         try
         {
-            var cornerRadius = new StripeConnect.EmbeddedComponentManager.Appearance.CornerRadiusType();
+            var cornerRadius = new StripeConnect.EmbeddedComponentManager.Appearance.CornerRadiusInfo();
             if (cornerRadius != null)
             {
-                logger.Pass("Appearance.CornerRadiusType() constructor");
+                logger.Pass("Appearance.CornerRadiusInfo() constructor");
                 results.Pass("Connect_CornerRadiusType_Ctor");
             }
             else
             {
-                logger.Fail("CornerRadiusType: null");
+                logger.Fail("CornerRadiusInfo: null");
                 results.Fail("Connect_CornerRadiusType_Ctor", "Null");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"CornerRadiusType: {ex.Message}");
+            logger.Fail($"CornerRadiusInfo: {ex.Message}");
             results.Fail("Connect_CornerRadiusType_Ctor", ex.Message);
         }
     }
@@ -3884,8 +3871,8 @@ public class MainViewController : UIViewController
     {
         // Appearance.Colors — extended UIColor properties (ObjC-bridged roundtrips)
         logger.Info("--- Appearance.Colors Extended (UIColor ObjC bridge) ---");
-        var colorTests = new (string Name, Func<StripePaymentSheet.PaymentSheet.Appearance.ColorsType, UIColor?> Getter,
-            Action<StripePaymentSheet.PaymentSheet.Appearance.ColorsType, UIColor> Setter)[]
+        var colorTests = new (string Name, Func<StripePaymentSheet.PaymentSheet.Appearance.ColorsInfo, UIColor?> Getter,
+            Action<StripePaymentSheet.PaymentSheet.Appearance.ColorsInfo, UIColor> Setter)[]
         {
             ("ComponentBackground", c => c.ComponentBackground, (c, v) => c.ComponentBackground = v),
             ("ComponentBorder", c => c.ComponentBorder, (c, v) => c.ComponentBorder = v),
@@ -4670,7 +4657,7 @@ public class MainViewController : UIViewController
         try
         {
             var appearance = StripeConnect.EmbeddedComponentManager.Appearance.Default;
-            var typography = new StripeConnect.EmbeddedComponentManager.Appearance.TypographyType();
+            var typography = new StripeConnect.EmbeddedComponentManager.Appearance.TypographyInfo();
             appearance.Typography = typography;
             var readBack = appearance.Typography;
             if (readBack != null)
@@ -4871,7 +4858,7 @@ public class MainViewController : UIViewController
         // MerchantDisplayName roundtrip
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.MerchantDisplayName = "Test Store";
             var readBack = config.MerchantDisplayName;
             if (readBack == "Test Store")
@@ -4894,7 +4881,7 @@ public class MainViewController : UIViewController
         // ReturnURL roundtrip (nullable string)
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.ReturnURL = "myapp://stripe-return";
             var readBack = config.ReturnURL;
             if (readBack == "myapp://stripe-return")
@@ -4917,7 +4904,7 @@ public class MainViewController : UIViewController
         // AllowsDelayedPaymentMethods roundtrip
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.AllowsDelayedPaymentMethods = true;
             var readBack = config.AllowsDelayedPaymentMethods;
             if (readBack == true)
@@ -4940,7 +4927,7 @@ public class MainViewController : UIViewController
         // AllowsPaymentMethodsRequiringShippingAddress roundtrip
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.AllowsPaymentMethodsRequiringShippingAddress = true;
             var readBack = config.AllowsPaymentMethodsRequiringShippingAddress;
             if (readBack == true)
@@ -4970,7 +4957,7 @@ public class MainViewController : UIViewController
         {
             try
             {
-                var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+                var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
                 config.SavePaymentMethodOptInBehavior = behavior;
                 var readBack = config.SavePaymentMethodOptInBehavior;
                 if (readBack == behavior)
@@ -5001,7 +4988,7 @@ public class MainViewController : UIViewController
         {
             try
             {
-                var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+                var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
                 config.PaymentMethodLayout = layout;
                 var readBack = config.PaymentMethodLayout;
                 if (readBack == layout)
@@ -5025,7 +5012,7 @@ public class MainViewController : UIViewController
         // BillingDetailsCollectionConfiguration — CollectionMode roundtrips
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             var bdcc = config.BillingDetailsCollectionConfiguration;
             bdcc.Name = StripePaymentSheet.PaymentSheet.BillingDetailsCollectionConfiguration.CollectionMode.Always;
             bdcc.Email = StripePaymentSheet.PaymentSheet.BillingDetailsCollectionConfiguration.CollectionMode.Never;
@@ -5067,7 +5054,7 @@ public class MainViewController : UIViewController
         {
             try
             {
-                var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+                var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
                 var bdcc = config.BillingDetailsCollectionConfiguration;
                 bdcc.Address = mode;
                 var addrTag = bdcc.Address.Tag;
@@ -5092,7 +5079,7 @@ public class MainViewController : UIViewController
         // DefaultBillingDetails — sub-object property roundtrips
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             var bd = config.DefaultBillingDetails;
             bd.Name = "Jane Doe";
             bd.Email = "jane@example.com";
@@ -5122,7 +5109,7 @@ public class MainViewController : UIViewController
         // DefaultBillingDetails.Address sub-object
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             var bd = config.DefaultBillingDetails;
             bd.Address = new StripePaymentSheet.PaymentSheet.Address(
                 city: "San Francisco", country: "US", line1: "123 Market St",
@@ -5151,7 +5138,7 @@ public class MainViewController : UIViewController
         // PrimaryButtonLabel nullable string
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.PrimaryButtonLabel = "Pay $25.00";
             var readBack = config.PrimaryButtonLabel;
             if (readBack == "Pay $25.00")
@@ -5174,7 +5161,7 @@ public class MainViewController : UIViewController
         // RemoveSavedPaymentMethodMessage nullable string
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.RemoveSavedPaymentMethodMessage = "Are you sure you want to remove this card?";
             var readBack = config.RemoveSavedPaymentMethodMessage;
             if (readBack == "Are you sure you want to remove this card?")
@@ -5197,7 +5184,7 @@ public class MainViewController : UIViewController
         // Appearance can be set on Config
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             var appearance = StripePaymentSheet.PaymentSheet.Appearance.Default;
             appearance.CornerRadius = 16.0;
             config.Appearance = appearance;
@@ -5223,7 +5210,7 @@ public class MainViewController : UIViewController
         // OpensCardScannerAutomatically bool
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             config.OpensCardScannerAutomatically = true;
             var readBack = config.OpensCardScannerAutomatically;
             if (readBack == true)
@@ -5718,7 +5705,7 @@ public class MainViewController : UIViewController
         // Set CardBrandAcceptance on Config
         try
         {
-            var config = new StripePaymentSheet.PaymentSheet.ConfigurationType();
+            var config = new StripePaymentSheet.PaymentSheet.ConfigurationInfo();
             var brands = new List<StripePaymentSheet.PaymentSheet.CardBrandAcceptance.BrandCategory>
             {
                 StripePaymentSheet.PaymentSheet.CardBrandAcceptance.BrandCategory.Visa,
@@ -5928,7 +5915,7 @@ public class MainViewController : UIViewController
         // MerchantDisplayName
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.MerchantDisplayName = "Embedded Store";
             var readBack = config.MerchantDisplayName;
             if (readBack == "Embedded Store")
@@ -5951,7 +5938,7 @@ public class MainViewController : UIViewController
         // ReturnURL
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.ReturnURL = "embedded://return";
             var readBack = config.ReturnURL;
             if (readBack == "embedded://return")
@@ -5974,7 +5961,7 @@ public class MainViewController : UIViewController
         // EmbeddedViewDisplaysMandateText
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.EmbeddedViewDisplaysMandateText = true;
             var readBack = config.EmbeddedViewDisplaysMandateText;
             if (readBack == true)
@@ -5997,7 +5984,7 @@ public class MainViewController : UIViewController
         // AllowsDelayedPaymentMethods
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.AllowsDelayedPaymentMethods = true;
             var readBack = config.AllowsDelayedPaymentMethods;
             if (readBack == true)
@@ -6020,7 +6007,7 @@ public class MainViewController : UIViewController
         // Appearance set/get
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             var appearance = StripePaymentSheet.PaymentSheet.Appearance.Default;
             appearance.CornerRadius = 8.0;
             config.Appearance = appearance;
@@ -6045,7 +6032,7 @@ public class MainViewController : UIViewController
         // BillingDetailsCollectionConfiguration on embedded config
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             var bdcc = config.BillingDetailsCollectionConfiguration;
             bdcc.Name = StripePaymentSheet.PaymentSheet.BillingDetailsCollectionConfiguration.CollectionMode.Always;
             bdcc.Address = StripePaymentSheet.PaymentSheet.BillingDetailsCollectionConfiguration.AddressCollectionMode.Full;
@@ -6072,8 +6059,8 @@ public class MainViewController : UIViewController
         // FormSheetAction.Continue singleton
         try
         {
-            var cont = StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType.FormSheetActionType.Continue;
-            if (cont.Tag == StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType.FormSheetActionType.CaseTag.Continue)
+            var cont = StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo.FormSheetActionKind.Continue;
+            if (cont.Tag == StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo.FormSheetActionKind.CaseTag.Continue)
             {
                 logger.Pass("FormSheetAction.Continue: tag=Continue");
                 results.Pass("EmbeddedConfig_FormSheetAction_Continue");
@@ -6093,8 +6080,8 @@ public class MainViewController : UIViewController
         // RowSelectionBehavior.Default singleton
         try
         {
-            var def = StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType.RowSelectionBehaviorType.Default;
-            if (def.Tag == StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType.RowSelectionBehaviorType.CaseTag.Default)
+            var def = StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo.RowSelectionBehaviorKind.Default;
+            if (def.Tag == StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo.RowSelectionBehaviorKind.CaseTag.Default)
             {
                 logger.Pass("RowSelectionBehavior.Default: tag=Default");
                 results.Pass("EmbeddedConfig_RowSelectionBehavior_Default");
@@ -6114,7 +6101,7 @@ public class MainViewController : UIViewController
         // DefaultBillingDetails on embedded config
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             var bd = config.DefaultBillingDetails;
             bd.Name = "Embedded User";
             bd.Email = "embedded@example.com";
@@ -6140,7 +6127,7 @@ public class MainViewController : UIViewController
         // SavePaymentMethodOptInBehavior on embedded config
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.SavePaymentMethodOptInBehavior = StripePaymentSheet.PaymentSheet.SavePaymentMethodOptInBehavior.RequiresOptOut;
             var readBack = config.SavePaymentMethodOptInBehavior;
             if (readBack == StripePaymentSheet.PaymentSheet.SavePaymentMethodOptInBehavior.RequiresOptOut)
@@ -6163,7 +6150,7 @@ public class MainViewController : UIViewController
         // OpensCardScannerAutomatically
         try
         {
-            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationType();
+            var config = new StripePaymentSheet.EmbeddedPaymentElement.ConfigurationInfo();
             config.OpensCardScannerAutomatically = true;
             var readBack = config.OpensCardScannerAutomatically;
             if (readBack == true)
@@ -6195,9 +6182,9 @@ public class MainViewController : UIViewController
         {
             var address = new StripePaymentSheet.PaymentSheet.Address(
                 city: "Chicago", country: "US", line1: "456 Elm St", postalCode: "60601", state: "IL");
-            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationType.DefaultAddressDetails(address);
-            var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType();
-            var config = new StripePaymentSheet.AddressViewController.ConfigurationType(defaults, fields);
+            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationInfo.DefaultAddressDetails(address);
+            var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo();
+            var config = new StripePaymentSheet.AddressViewController.ConfigurationInfo(defaults, fields);
 
             var readTitle = config.Title;
             if (readTitle != null)
@@ -6223,7 +6210,7 @@ public class MainViewController : UIViewController
             var address = new StripePaymentSheet.PaymentSheet.Address(
                 city: "Austin", country: "US", line1: "789 Oak Ave", line2: "Suite 100",
                 postalCode: "73301", state: "TX");
-            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationType.DefaultAddressDetails(
+            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationInfo.DefaultAddressDetails(
                 address, "John Smith", "+15551234567");
             var nameOk = defaults.Name == "John Smith";
             var phoneOk = defaults.Phone == "+15551234567";
@@ -6245,18 +6232,18 @@ public class MainViewController : UIViewController
             results.Fail("AddrConfig_DefaultAddressDetails", ex.Message);
         }
 
-        // AdditionalFieldsType with Phone=Required + CheckboxLabel
+        // AdditionalFieldsInfo with Phone=Required + CheckboxLabel
         try
         {
-            var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType(
-                StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType.FieldConfiguration.Required,
+            var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo(
+                StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo.FieldConfiguration.Required,
                 "Save as default");
             var phoneField = fields.Phone;
             var label = fields.CheckboxLabel;
-            if (phoneField == StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType.FieldConfiguration.Required &&
+            if (phoneField == StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo.FieldConfiguration.Required &&
                 label == "Save as default")
             {
-                logger.Pass("AdditionalFieldsType: Phone=Required, CheckboxLabel roundtrip");
+                logger.Pass("AdditionalFieldsInfo: Phone=Required, CheckboxLabel roundtrip");
                 results.Pass("AddrConfig_AdditionalFields");
             }
             else
@@ -6267,21 +6254,21 @@ public class MainViewController : UIViewController
         }
         catch (Exception ex)
         {
-            logger.Fail($"AdditionalFieldsType: {ex.Message}");
+            logger.Fail($"AdditionalFieldsInfo: {ex.Message}");
             results.Fail("AddrConfig_AdditionalFields", ex.Message);
         }
 
         // FieldConfiguration enum values
         var fieldConfigs = new[] {
-            (StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType.FieldConfiguration.Hidden, "Hidden"),
-            (StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType.FieldConfiguration.Optional, "Optional"),
-            (StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType.FieldConfiguration.Required, "Required"),
+            (StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo.FieldConfiguration.Hidden, "Hidden"),
+            (StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo.FieldConfiguration.Optional, "Optional"),
+            (StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo.FieldConfiguration.Required, "Required"),
         };
         foreach (var (val, name) in fieldConfigs)
         {
             try
             {
-                var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType(val);
+                var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo(val);
                 var readBack = fields.Phone;
                 if (readBack == val)
                 {
@@ -6305,10 +6292,10 @@ public class MainViewController : UIViewController
         try
         {
             var address = new StripePaymentSheet.PaymentSheet.Address(country: "US");
-            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationType.DefaultAddressDetails(address);
-            var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType();
+            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationInfo.DefaultAddressDetails(address);
+            var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo();
             var appearance = StripePaymentSheet.PaymentSheet.Appearance.Default;
-            var config = new StripePaymentSheet.AddressViewController.ConfigurationType(
+            var config = new StripePaymentSheet.AddressViewController.ConfigurationInfo(
                 defaults, fields, new List<string> { "US", "CA", "GB" }, appearance,
                 "Confirm Address", "Shipping Address");
             var btnTitle = config.ButtonTitle;
@@ -6334,10 +6321,10 @@ public class MainViewController : UIViewController
         try
         {
             var address = new StripePaymentSheet.PaymentSheet.Address(country: "US");
-            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationType.DefaultAddressDetails(address);
-            var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType();
+            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationInfo.DefaultAddressDetails(address);
+            var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo();
             var countries = new List<string> { "US", "CA", "MX" };
-            var config = new StripePaymentSheet.AddressViewController.ConfigurationType(defaults, fields, countries);
+            var config = new StripePaymentSheet.AddressViewController.ConfigurationInfo(defaults, fields, countries);
             var readBack = config.AllowedCountries;
             if (readBack != null && readBack.Count == 3)
             {
@@ -6360,11 +6347,11 @@ public class MainViewController : UIViewController
         try
         {
             var address = new StripePaymentSheet.PaymentSheet.Address(country: "GB");
-            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationType.DefaultAddressDetails(address);
-            var fields = new StripePaymentSheet.AddressViewController.ConfigurationType.AdditionalFieldsType();
+            var defaults = new StripePaymentSheet.AddressViewController.ConfigurationInfo.DefaultAddressDetails(address);
+            var fields = new StripePaymentSheet.AddressViewController.ConfigurationInfo.AdditionalFieldsInfo();
             var appearance = StripePaymentSheet.PaymentSheet.Appearance.Default;
             appearance.CornerRadius = 20.0;
-            var config = new StripePaymentSheet.AddressViewController.ConfigurationType(
+            var config = new StripePaymentSheet.AddressViewController.ConfigurationInfo(
                 defaults, fields, new List<string> { "GB" }, appearance);
             var readBack = config.Appearance;
             if (readBack.CornerRadius.HasValue && Math.Abs(readBack.CornerRadius.Value - 20.0) < 0.01)

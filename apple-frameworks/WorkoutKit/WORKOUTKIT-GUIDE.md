@@ -21,7 +21,8 @@ The mental model: build a workout (`CustomWorkout`, `SingleGoalWorkout`, `PacerW
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - A paired Apple Watch with your companion watchOS app installed for scheduling to actually deliver
 
@@ -42,7 +43,7 @@ Many WorkoutKit types also need HealthKit and Foundation unit types, so you will
 | `func schedule(_:at:) async throws` | `ScheduleAsync(workout, at, ct)` | `async` methods gain `Async`; argument labels mostly drop, keyword labels (`at:`) keep a parameter name |
 | `WorkoutScheduler.shared` | `WorkoutScheduler.Shared` (static property) | singletons are PascalCase static properties |
 | `enum WorkoutGoal { case distance(...) }` | `WorkoutGoal.Distance(...)` static factory + `.Tag` / `.CaseTag` | Swift enums-with-payload project to a class: static factories to build, discriminate with `Tag`/`CaseTag`. Only the compound `PoolSwimDistanceWithTime` case gets a `TryGet*` unpacker; simple cases are read via the factory + `Tag` |
-| `enum IntervalStep.Purpose` | `IntervalStep.PurposeType` (plain `int` enum) | payload-free nested enums become C# enums; `Purpose` → `PurposeType` to avoid clashing with the `Purpose` property |
+| `enum IntervalStep.Purpose` | `IntervalStep.PurposeKind` (plain `int` enum) | payload-free nested enums become C# enums; `Purpose` → `PurposeKind` to avoid clashing with the `Purpose` property |
 | `step.displayName` | `step.DisplayName` | properties are PascalCase |
 | `static func supports(activity:)` | `SupportsActivity(activity)` | static support-query helpers keep a descriptive name |
 
@@ -63,7 +64,7 @@ var workStep = new WorkoutStep(fiveMin);
 
 // 3. Wrap the step in an interval block, repeated 4 times.
 var block = new IntervalBlock(
-    new[] { new IntervalStep(IntervalStep.PurposeType.Work, fiveMin) },
+    new[] { new IntervalStep(IntervalStep.PurposeKind.Work, fiveMin) },
     iterations: 4);
 
 // 4. A custom workout. activity/location are HealthKit enums (from the
@@ -76,7 +77,7 @@ var workout = new CustomWorkout(
     blocks: new[] { block });
 
 // 5. Wrap in a plan.
-var plan = new WorkoutPlan(WorkoutPlan.WorkoutType.Custom(workout), Guid.NewGuid());
+var plan = new WorkoutPlan(WorkoutPlan.WorkoutKind.Custom(workout), Guid.NewGuid());
 
 // 6. Schedule it (requires authorization + a paired Watch — see "Scheduling").
 var when = /* a Swift.Foundation.DateComponents */;
@@ -137,14 +138,14 @@ Members: `Goal` (`WorkoutGoal`), `Alert` (`IWorkoutAlert?`), `DisplayName` (`str
 A step with a *purpose* — work or recovery — used inside interval blocks.
 
 ```csharp
-public IntervalStep(IntervalStep.PurposeType purpose);
-public IntervalStep(IntervalStep.PurposeType purpose, WorkoutStep step);
-public IntervalStep(IntervalStep.PurposeType purpose, WorkoutGoal goal, IWorkoutAlert? alert = null);
+public IntervalStep(IntervalStep.PurposeKind purpose);
+public IntervalStep(IntervalStep.PurposeKind purpose, WorkoutStep step);
+public IntervalStep(IntervalStep.PurposeKind purpose, WorkoutGoal goal, IWorkoutAlert? alert = null);
 
-public enum PurposeType : int { Work = 0, Recovery = 1 }
+public enum PurposeKind : int { Work = 0, Recovery = 1 }
 ```
 
-Members: `Purpose` (`PurposeType`), `Step` (`WorkoutStep`).
+Members: `Purpose` (`PurposeKind`), `Step` (`WorkoutStep`).
 
 ### `IntervalBlock`
 
@@ -264,30 +265,30 @@ Activity.Running(HKWorkoutSessionLocationType …);
 
 ## Plans
 
-`WorkoutPlan` wraps any of the four workout types via the nested `WorkoutPlan.WorkoutType` projected enum:
+`WorkoutPlan` wraps any of the four workout types via the nested `WorkoutPlan.WorkoutKind` projected enum:
 
 ```csharp
-public WorkoutPlan(WorkoutPlan.WorkoutType workout, System.Guid id);
+public WorkoutPlan(WorkoutPlan.WorkoutKind workout, System.Guid id);
 public WorkoutPlan(byte[] data);   // reconstruct from a serialized representation
 ```
 
-Members: `Workout` (`WorkoutPlan.WorkoutType`), `Id` (`System.Guid`), `DataRepresentation` (`byte[]` — serialize a plan for storage/transfer).
+Members: `Workout` (`WorkoutPlan.WorkoutKind`), `Id` (`System.Guid`), `DataRepresentation` (`byte[]` — serialize a plan for storage/transfer).
 
-`WorkoutPlan.WorkoutType` factories and cases:
+`WorkoutPlan.WorkoutKind` factories and cases:
 
 ```csharp
 public enum CaseTag : uint { Goal = 0, Custom = 1, Pacer = 2, SwimBikeRun = 3 }
 
-WorkoutType.Goal(SingleGoalWorkout …);
-WorkoutType.Custom(CustomWorkout …);
-WorkoutType.Pacer(PacerWorkout …);
-WorkoutType.SwimBikeRun(SwimBikeRunWorkout …);
+WorkoutKind.Goal(SingleGoalWorkout …);
+WorkoutKind.Custom(CustomWorkout …);
+WorkoutKind.Pacer(PacerWorkout …);
+WorkoutKind.SwimBikeRun(SwimBikeRunWorkout …);
 // TryGetGoal/TryGetCustom/TryGetPacer/TryGetSwimBikeRun(out …) to read back
 // .Activity exposes the resolved HKWorkoutActivityType
 ```
 
 ```csharp
-var plan = new WorkoutPlan(WorkoutPlan.WorkoutType.Pacer(pacer), Guid.NewGuid());
+var plan = new WorkoutPlan(WorkoutPlan.WorkoutKind.Pacer(pacer), Guid.NewGuid());
 
 // Persist / restore:
 byte[] data = plan.DataRepresentation;
@@ -303,8 +304,8 @@ var roundtripped = new WorkoutPlan(data);
 | `WorkoutScheduler.Shared` | static property | the scheduler singleton |
 | `WorkoutScheduler.IsSupported` | `static bool` | whether scheduling is available on this device |
 | `WorkoutScheduler.MaxAllowedScheduledWorkoutCount` | `static int` | upper bound on concurrently scheduled workouts |
-| `RequestAuthorizationAsync` | `Task<WorkoutScheduler.AuthorizationStateType> RequestAuthorizationAsync(CancellationToken ct = default)` | request permission |
-| `GetAuthorizationStateAsync` | `Task<WorkoutScheduler.AuthorizationStateType> GetAuthorizationStateAsync(CancellationToken ct = default)` | current permission state |
+| `RequestAuthorizationAsync` | `Task<WorkoutScheduler.AuthorizationStateKind> RequestAuthorizationAsync(CancellationToken ct = default)` | request permission |
+| `GetAuthorizationStateAsync` | `Task<WorkoutScheduler.AuthorizationStateKind> GetAuthorizationStateAsync(CancellationToken ct = default)` | current permission state |
 | `ScheduleAsync` | `Task ScheduleAsync(WorkoutPlan workout, Swift.Foundation.DateComponents at, CancellationToken ct = default)` | schedule a plan |
 | `RemoveAsync` | `Task RemoveAsync(WorkoutPlan workout, Swift.Foundation.DateComponents at, CancellationToken ct = default)` | remove one scheduled workout |
 | `RemoveAllWorkoutsAsync` | `Task RemoveAllWorkoutsAsync(CancellationToken ct = default)` | clear all |
@@ -317,7 +318,7 @@ var scheduler = WorkoutScheduler.Shared;
 if (WorkoutScheduler.IsSupported)
 {
     var state = await scheduler.RequestAuthorizationAsync();
-    if (state == WorkoutScheduler.AuthorizationStateType.Authorized)
+    if (state == WorkoutScheduler.AuthorizationStateKind.Authorized)
     {
         await scheduler.ScheduleAsync(plan, when);
         IReadOnlyList<ScheduledWorkoutPlan> scheduled =
@@ -327,7 +328,7 @@ if (WorkoutScheduler.IsSupported)
 ```
 
 ```csharp
-public enum AuthorizationStateType : long
+public enum AuthorizationStateKind : long
 {
     NotDetermined = 0, Restricted = 1, Denied = 2, Authorized = 3
 }

@@ -29,7 +29,8 @@ binding shape follows the [Matter guide](Matter), not the Swift conventions belo
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 16.1+, macOS 13.3+, Mac Catalyst 16.4+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). MatterSupport's own runtime floor is iOS 16.1+, macOS 13.3+, Mac Catalyst 16.4+; individual APIs that need a newer OS are gated by generated `[SupportedOSPlatform]` attributes, and the C# compiler flags a call that isn't valid for your target.
 - `MatterAddDeviceRequest.IsSupported` requires iOS 17+
 - macOS host for development
 - A Matter entitlement on the consuming app plus the
@@ -56,9 +57,9 @@ transforms apply:
 | `static var isSupported` | `MatterAddDeviceRequest.IsSupported` | properties are PascalCase; `static` is preserved |
 | `obj.ecosystemName` | `obj.EcosystemName` | properties are PascalCase |
 | `enum DeviceCriteria { case vendorID(Int) }` | `DeviceCriteria` class with `.Tag` + `TryGetVendorID(out …)` and a static `VendorID(nint)` factory | Swift enums-with-payload project to a class: a `CaseTag` discriminator, `TryGet*` accessors, and static case factories |
-| nested `MatterAddDeviceRequest.Topology` | `MatterAddDeviceRequest.TopologyType` | a nested type whose name would collide with a member gets a `Type` suffix |
+| nested `MatterAddDeviceRequest.Topology` | `MatterAddDeviceRequest.TopologyInfo` | a nested type whose name would collide with a member gets a suffix — `Info` for struct-like types, `Kind` for enum-like ones |
 
-> Note the nested topology type is `TopologyType` in C# (Swift's
+> Note the nested topology type is `TopologyInfo` in C# (Swift's
 > `MatterAddDeviceRequest.Topology`), to avoid clashing with the request's
 > `Topology` property.
 
@@ -73,7 +74,7 @@ using var payload = new MTRSetupPayload("MT:U9VJ0OMV172PX813000");
 
 // 2. Describe where the accessory will live.
 using var home     = new MatterAddDeviceRequest.Home("Living Room");
-using var topology = new MatterAddDeviceRequest.TopologyType("My Ecosystem", new[] { home });
+using var topology = new MatterAddDeviceRequest.TopologyInfo("My Ecosystem", new[] { home });
 
 // 3. Build the request and drive Apple's system commissioning UI.
 using var request = new MatterAddDeviceRequest(topology, setupPayload: payload);
@@ -92,22 +93,22 @@ simulator it has nothing to drive. Gate the call on `IsSupported`.
 
 ```csharp
 // topology + payload (criteria defaults to .allDevices, shouldScanNetworks = true)
-new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyType topology,
+new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyInfo topology,
                            Matter.MTRSetupPayload? setupPayload);
 
 // + an explicit device criteria
-new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyType topology,
+new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyInfo topology,
                            Matter.MTRSetupPayload? setupPayload,
                            MatterAddDeviceRequest.DeviceCriteria deviceCriteria);
 
 // + control over network scanning
-new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyType topology,
+new MatterAddDeviceRequest(MatterAddDeviceRequest.TopologyInfo topology,
                            Matter.MTRSetupPayload? setupPayload,
                            MatterAddDeviceRequest.DeviceCriteria deviceCriteria,
                            bool shouldScanNetworks = true);
 ```
 
-Request properties (read/write): `Topology` (`TopologyType`),
+Request properties (read/write): `Topology` (`TopologyInfo`),
 `SetupPayload` (`Matter.MTRSetupPayload?`), `ShowDeviceCriteria`
 (`DeviceCriteria`), and `ShouldScanNetworks` (`bool`, iOS 16.4+).
 
@@ -119,7 +120,7 @@ three nested types are constructed from a display name:
 ```csharp
 using var home     = new MatterAddDeviceRequest.Home("Living Room");      // .DisplayName
 using var room     = new MatterAddDeviceRequest.Room("Kitchen");          // .DisplayName
-using var topology = new MatterAddDeviceRequest.TopologyType(
+using var topology = new MatterAddDeviceRequest.TopologyInfo(
     "My Ecosystem",                                                       // .EcosystemName
     new[] { home });                                                      // .Homes
 ```
@@ -128,7 +129,7 @@ using var topology = new MatterAddDeviceRequest.TopologyType(
 |---|---|---|
 | `MatterAddDeviceRequest.Home` | `new Home(string displayName)` | `DisplayName` |
 | `MatterAddDeviceRequest.Room` | `new Room(string displayName)` | `DisplayName` |
-| `MatterAddDeviceRequest.TopologyType` | `new TopologyType(string ecosystemName, IEnumerable<Home> homes)` | `EcosystemName`, `Homes` |
+| `MatterAddDeviceRequest.TopologyInfo` | `new TopologyInfo(string ecosystemName, IEnumerable<Home> homes)` | `EcosystemName`, `Homes` |
 
 Each of these also exposes `EncodeToJson()` / static `DecodeFromJson(byte[])`
 for serializing the request shape.
@@ -220,7 +221,7 @@ double-Dispose is a no-op.
 
 ```csharp
 using var home     = new MatterAddDeviceRequest.Home("Living Room");
-using var topology = new MatterAddDeviceRequest.TopologyType("My Ecosystem", new[] { home });
+using var topology = new MatterAddDeviceRequest.TopologyInfo("My Ecosystem", new[] { home });
 using var request  = new MatterAddDeviceRequest(topology, setupPayload: payload);
 ```
 

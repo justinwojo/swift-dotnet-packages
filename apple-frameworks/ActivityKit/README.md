@@ -10,6 +10,16 @@ You can **start, update, and end Live Activities from C#.** The request/update/e
 dotnet add package SwiftBindings.Apple.ActivityKit
 ```
 
+## Requirements
+
+- .NET 10.0+
+- **Target framework: `net10.0-ios26.2` or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
+- macOS host for development
+- Live Activities are an iOS/iPadOS surface only — there is no macOS, Mac Catalyst, or tvOS leg
+
+## Usage
+
 The content crosses as a **JSON string**, but you never hand-write it — model each payload as a C# type and serialize it (camelCase keys match the Swift struct your widget decodes into). Your payload shape and your widget's UI are entirely yours:
 
 ```csharp

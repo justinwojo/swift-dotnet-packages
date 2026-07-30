@@ -205,37 +205,37 @@ internal static class Tests
             Fail("CapturedElementCategory.CaseTag values", ex.Message);
         }
 
-        // CapturedRoom.Surface.CategoryType.CaseTag — Door=0..Floor=4.
+        // CapturedRoom.Surface.CategoryKind.CaseTag — Door=0..Floor=4.
         try
         {
-            if ((uint)CapturedRoom.Surface.CategoryType.CaseTag.Door != 0u ||
-                (uint)CapturedRoom.Surface.CategoryType.CaseTag.Wall != 1u ||
-                (uint)CapturedRoom.Surface.CategoryType.CaseTag.Opening != 2u ||
-                (uint)CapturedRoom.Surface.CategoryType.CaseTag.Window != 3u ||
-                (uint)CapturedRoom.Surface.CategoryType.CaseTag.Floor != 4u)
-                throw new InvalidOperationException("Surface.CategoryType.CaseTag values mismatch");
-            Pass("CapturedRoom.Surface.CategoryType.CaseTag values");
+            if ((uint)CapturedRoom.Surface.CategoryKind.CaseTag.Door != 0u ||
+                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Wall != 1u ||
+                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Opening != 2u ||
+                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Window != 3u ||
+                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Floor != 4u)
+                throw new InvalidOperationException("Surface.CategoryKind.CaseTag values mismatch");
+            Pass("CapturedRoom.Surface.CategoryKind.CaseTag values");
         }
         catch (Exception ex)
         {
-            Fail("CapturedRoom.Surface.CategoryType.CaseTag values", ex.Message);
+            Fail("CapturedRoom.Surface.CategoryKind.CaseTag values", ex.Message);
         }
 
-        // CapturedRoom.Section.LabelType.CaseTag — LivingRoom=0..Unidentified=5.
+        // CapturedRoom.Section.LabelKind.CaseTag — LivingRoom=0..Unidentified=5.
         try
         {
-            if ((uint)CapturedRoom.Section.LabelType.CaseTag.LivingRoom != 0u ||
-                (uint)CapturedRoom.Section.LabelType.CaseTag.Bedroom != 1u ||
-                (uint)CapturedRoom.Section.LabelType.CaseTag.Bathroom != 2u ||
-                (uint)CapturedRoom.Section.LabelType.CaseTag.Kitchen != 3u ||
-                (uint)CapturedRoom.Section.LabelType.CaseTag.DiningRoom != 4u ||
-                (uint)CapturedRoom.Section.LabelType.CaseTag.Unidentified != 5u)
-                throw new InvalidOperationException("Section.LabelType.CaseTag values mismatch");
-            Pass("CapturedRoom.Section.LabelType.CaseTag values");
+            if ((uint)CapturedRoom.Section.LabelKind.CaseTag.LivingRoom != 0u ||
+                (uint)CapturedRoom.Section.LabelKind.CaseTag.Bedroom != 1u ||
+                (uint)CapturedRoom.Section.LabelKind.CaseTag.Bathroom != 2u ||
+                (uint)CapturedRoom.Section.LabelKind.CaseTag.Kitchen != 3u ||
+                (uint)CapturedRoom.Section.LabelKind.CaseTag.DiningRoom != 4u ||
+                (uint)CapturedRoom.Section.LabelKind.CaseTag.Unidentified != 5u)
+                throw new InvalidOperationException("Section.LabelKind.CaseTag values mismatch");
+            Pass("CapturedRoom.Section.LabelKind.CaseTag values");
         }
         catch (Exception ex)
         {
-            Fail("CapturedRoom.Section.LabelType.CaseTag values", ex.Message);
+            Fail("CapturedRoom.Section.LabelKind.CaseTag values", ex.Message);
         }
 
         // CapturedRoom.ModelProvider.Error.CaseTag — NonExistingFile=0, AttributeCombinationNotSupported=1.

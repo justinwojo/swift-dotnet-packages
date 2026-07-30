@@ -21,7 +21,8 @@ This is an orientation guide: it walks the few entry points you build a VoIP int
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - The LiveCommunicationKit / VoIP capability enabled on the app, plus a configured `Info.plist`
 
@@ -41,7 +42,7 @@ using LiveCommunicationKit;
 |---|---|---|
 | `func perform(...) async throws` | `PerformAsync(...)` | `async` methods gain an `Async` suffix and return `Task`/`Task<T>` |
 | `obj.localMember` | `obj.LocalMember` | properties are PascalCase |
-| nested `struct Configuration` / `enum State` | `ConversationManager.ConfigurationType`, `Conversation.StateType` | nested types that collide with a member get a `Type` suffix |
+| nested `struct Configuration` / `enum State` | `ConversationManager.ConfigurationInfo`, `Conversation.StateKind` | nested types that collide with a member get a suffix — `Info` for struct-like types, `Kind` for enum-like ones |
 | `static var sharedInstance` | `…SharedInstance` | Swift type-level singletons become static C# properties |
 | `protocol ConversationManagerDelegate` | `interface IConversationManagerDelegate` | Swift protocols project to `I`-prefixed C# interfaces |
 | `OptionSet` (`Conversation.Capabilities`) | static singletons + `==`/`!=`, not a flags enum | combine/compare with the provided members and operators |
@@ -56,7 +57,7 @@ You build the manager from a configuration, set a delegate, then report incoming
 using LiveCommunicationKit;
 
 // 1. Describe your VoIP app's capabilities
-using var config = new ConversationManager.ConfigurationType(
+using var config = new ConversationManager.ConfigurationInfo(
     ringtoneName: null,
     iconTemplateImageData: null,
     maximumConversationGroups: 1,
@@ -77,16 +78,16 @@ await manager.ReportNewIncomingConversationAsync(Guid.NewGuid(), update);
 
 ## The conversation manager
 
-`ConversationManager` is the central object. It is constructed from a `ConfigurationType`:
+`ConversationManager` is the central object. It is constructed from a `ConfigurationInfo`:
 
 ```csharp
 public partial class ConversationManager
 {
-    public ConversationManager(ConversationManager.ConfigurationType configuration);
+    public ConversationManager(ConversationManager.ConfigurationInfo configuration);
 
     public IReadOnlyList<Conversation> Conversations { get; }
     public IReadOnlyList<ConversationAction> PendingActions { get; }
-    public ConversationManager.ConfigurationType Configuration { get; }
+    public ConversationManager.ConfigurationInfo Configuration { get; }
     public IConversationManagerDelegate? Delegate { get; set; }
 
     public Task PerformAsync(IEnumerable<ConversationAction> actions, CancellationToken ct = default);
@@ -97,16 +98,16 @@ public partial class ConversationManager
 }
 ```
 
-`ConfigurationType` has two constructors (the second adds `supportsAudioTranslation`):
+`ConfigurationInfo` has two constructors (the second adds `supportsAudioTranslation`):
 
 ```csharp
-new ConversationManager.ConfigurationType(
+new ConversationManager.ConfigurationInfo(
     string? ringtoneName, byte[]? iconTemplateImageData,
     nint maximumConversationGroups, nint maximumConversationsPerConversationGroup,
     bool includesConversationInRecents, bool supportsVideo,
     IReadOnlySet<Handle.Kind> supportedHandleTypes);
 
-new ConversationManager.ConfigurationType(
+new ConversationManager.ConfigurationInfo(
     /* …same… */, bool supportsAudioTranslation);
 ```
 
@@ -131,7 +132,7 @@ public interface IConversationManagerDelegate
 public partial class Conversation
 {
     public Guid Uuid { get; }
-    public Conversation.StateType State { get; }   // Idle, Joining, Joined, Paused, Leaving, Left
+    public Conversation.StateKind State { get; }   // Idle, Joining, Joined, Paused, Leaving, Left
     public Handle? LocalMember { get; }
     public string DebugDescription { get; }
 }
@@ -162,7 +163,7 @@ All conversation operations are modeled as action structs; submit them with `man
 | `UnmergeConversationAction` | `new(Guid conversationUUID)` |
 | `MuteConversationAction` | `new(Guid conversationUUID, bool isMuted)` |
 | `PauseConversationAction` | `new(Guid conversationUUID, bool isPaused)` |
-| `PlayToneAction` | `new(Guid conversationUUID, string digits, PlayToneAction.ToneType tone)` |
+| `PlayToneAction` | `new(Guid conversationUUID, string digits, PlayToneAction.ToneKind tone)` |
 | `SetTranslatingAction` | `new(Guid conversationID, bool isTranslating, Swift.Foundation.Locale.Language localLanguage, Swift.Foundation.Locale.Language remoteLanguage)` |
 | `StartCellularConversationAction` | `new(Handle handle, CellularService? cellularService = null)` or `new(ConversationHistoryManager.RecentConversation recentConversation)` |
 
@@ -173,7 +174,7 @@ await manager.PerformAsync(new[] { end });
 
 The action types share a `ConversationAction` base exposing `Uuid`, `ConversationUUID`, `State` (a projected enum — `Failed`/`Idle`/`Running`/`Complete`), and `TimeoutDate`.
 
-`PlayToneAction.ToneType` = `Single` / `SoftPause` / `HardPause`.
+`PlayToneAction.ToneKind` = `Single` / `SoftPause` / `HardPause`.
 `SetTranslatingAction.TranslationEngine` = `Default` / `Custom`.
 
 ## Handles & capabilities
@@ -203,7 +204,7 @@ await history.MarkConversationAsReadAsync(recentConversation);
 await history.MarkConversationsAsReadAsync(recentConversations);
 ```
 
-`ConversationHistoryManager.RecentConversation` carries `StatusType` and `DirectionType` enums and a `DecodeFromJson(byte[])` helper; `CellularService` (with `Id` and `Label`) describes an available cellular line.
+`ConversationHistoryManager.RecentConversation` carries `StatusKind` and `DirectionKind` enums and a `DecodeFromJson(byte[])` helper; `CellularService` (with `Id` and `Label`) describes an available cellular line.
 
 ## Known limitations
 
@@ -218,7 +219,7 @@ await history.MarkConversationsAsReadAsync(recentConversations);
 Generated types implement `ISwiftObject` / `IDisposable`. The action and configuration types wrap Swift structs; `Conversation`, `ConversationManager`, and the singleton managers are class wrappers. `using var` is the recommended pattern for deterministic cleanup — `Dispose` is safe on every generated type and double-Dispose is a no-op. Do not dispose the `SharedInstance` singletons.
 
 ```csharp
-using var config = new ConversationManager.ConfigurationType(/* … */);
+using var config = new ConversationManager.ConfigurationInfo(/* … */);
 using var manager = new ConversationManager(config);
 ```
 

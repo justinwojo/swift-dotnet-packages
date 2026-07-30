@@ -2059,91 +2059,91 @@ public class MainViewController : UIViewController
             results.Fail("Focus_Cases", ex.Message);
         }
 
-        // LogPinglet.LogLevelType
+        // LogPinglet.LogLevelKind
         try
         {
-            var info = LogPinglet.LogLevelType.Info;
-            var warning = LogPinglet.LogLevelType.Warning;
+            var info = LogPinglet.LogLevelKind.Info;
+            var warning = LogPinglet.LogLevelKind.Warning;
             bool distinct = info.Tag != warning.Tag;
             if (distinct)
             {
-                logger.Pass($"LogPinglet.LogLevelType: Info={info.Tag}, Warning={warning.Tag}");
+                logger.Pass($"LogPinglet.LogLevelKind: Info={info.Tag}, Warning={warning.Tag}");
                 results.Pass("LogLevelType_Cases");
             }
             else
             {
-                logger.Fail("LogPinglet.LogLevelType: duplicate tags");
+                logger.Fail("LogPinglet.LogLevelKind: duplicate tags");
                 results.Fail("LogLevelType_Cases", "Duplicate tags");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"LogPinglet.LogLevelType: {ex.Message}");
+            logger.Fail($"LogPinglet.LogLevelKind: {ex.Message}");
             results.Fail("LogLevelType_Cases", ex.Message);
         }
 
-        // WrapperProductInfoPinglet.WrapperProductType
+        // WrapperProductInfoPinglet.WrapperProductKind
         try
         {
-            var flutter = WrapperProductInfoPinglet.WrapperProductType.Crossplatformflutter;
-            var reactNative = WrapperProductInfoPinglet.WrapperProductType.Crossplatformreactnative;
+            var flutter = WrapperProductInfoPinglet.WrapperProductKind.Crossplatformflutter;
+            var reactNative = WrapperProductInfoPinglet.WrapperProductKind.Crossplatformreactnative;
             if (flutter.Tag != reactNative.Tag)
             {
-                logger.Pass($"WrapperProductType: Flutter={flutter.Tag}, ReactNative={reactNative.Tag}");
+                logger.Pass($"WrapperProductKind: Flutter={flutter.Tag}, ReactNative={reactNative.Tag}");
                 results.Pass("WrapperProductType_Cases");
             }
             else
             {
-                logger.Fail("WrapperProductType: duplicate tags");
+                logger.Fail("WrapperProductKind: duplicate tags");
                 results.Fail("WrapperProductType_Cases", "Duplicate tags");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"WrapperProductType: {ex.Message}");
+            logger.Fail($"WrapperProductKind: {ex.Message}");
             results.Fail("WrapperProductType_Cases", ex.Message);
         }
 
-        // SdkInitStartPinglet.ProductType
+        // SdkInitStartPinglet.ProductKind
         try
         {
-            var blinkId = SdkInitStartPinglet.ProductType.Blinkid;
+            var blinkId = SdkInitStartPinglet.ProductKind.Blinkid;
             if (blinkId != null)
             {
-                logger.Pass($"SdkInitStartPinglet.ProductType.Blinkid tag={blinkId.Tag}");
+                logger.Pass($"SdkInitStartPinglet.ProductKind.Blinkid tag={blinkId.Tag}");
                 results.Pass("ProductType_Blinkid");
             }
             else
             {
-                logger.Fail("ProductType.Blinkid is null");
+                logger.Fail("ProductKind.Blinkid is null");
                 results.Fail("ProductType_Blinkid", "Null");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"SdkInitStartPinglet.ProductType: {ex.Message}");
+            logger.Fail($"SdkInitStartPinglet.ProductKind: {ex.Message}");
             results.Fail("ProductType_Blinkid", ex.Message);
         }
 
-        // SdkInitStartPinglet.PlatformType
+        // SdkInitStartPinglet.PlatformKind
         try
         {
-            var ios = SdkInitStartPinglet.PlatformType.Ios;
-            var android = SdkInitStartPinglet.PlatformType.Android;
+            var ios = SdkInitStartPinglet.PlatformKind.Ios;
+            var android = SdkInitStartPinglet.PlatformKind.Android;
             if (ios.Tag != android.Tag)
             {
-                logger.Pass($"PlatformType: iOS={ios.Tag}, Android={android.Tag}");
+                logger.Pass($"PlatformKind: iOS={ios.Tag}, Android={android.Tag}");
                 results.Pass("PlatformType_Cases");
             }
             else
             {
-                logger.Fail("PlatformType: iOS and Android have same tag");
+                logger.Fail("PlatformKind: iOS and Android have same tag");
                 results.Fail("PlatformType_Cases", "Same tag");
             }
         }
         catch (Exception ex)
         {
-            logger.Fail($"SdkInitStartPinglet.PlatformType: {ex.Message}");
+            logger.Fail($"SdkInitStartPinglet.PlatformKind: {ex.Message}");
             results.Fail("PlatformType_Cases", ex.Message);
         }
     }

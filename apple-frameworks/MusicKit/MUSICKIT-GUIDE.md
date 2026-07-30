@@ -25,7 +25,8 @@
 ## Requirements & install
 
 - .NET 10.0+
-- iOS 26.2+, macOS 26.2+, Mac Catalyst 26.2+, tvOS 26.2+
+- **Target framework: `net10.0-ios26.2` (or `-macos26.2` / `-maccatalyst26.2` / `-tvos26.2`) or higher.** The package is compiled against the iOS 26.2 SDK supplement, so your app's `<TargetFramework>` platform version must be **≥ 26.2** to restore it — an explicit lower TPV (e.g. `net10.0-ios18.0`) or a bare `net10.0-ios` whose installed workload defaults below 26.2 fails restore with `NU1202`. This is the compile-SDK pin, **not** your app's deployment minimum.
+- **Deployment minimum is separate** — set your app's real minimum OS with `<SupportedOSPlatformVersion>` (independent of the TFM above). Individual APIs that need a newer OS at runtime are gated by generated `[SupportedOSPlatform]` attributes; the C# compiler flags a call that isn't valid for your target.
 - macOS host for development
 - A `NSAppleMusicUsageDescription` key in your `Info.plist`, the MusicKit capability enabled for your App ID, and (for playback / catalog content) an active Apple Music subscription on the device
 
@@ -329,7 +330,7 @@ Playback state and tunables (`virtual` properties on `MusicPlayer`):
 
 | Member | Type | |
 |---|---|---|
-| `State` | `MusicPlayer.StateType` | live playback state object |
+| `State` | `MusicPlayer.StateInfo` | live playback state object |
 | `IsPreparedToPlay` | `bool` | |
 | `PlaybackTime` | `double` | current position, seconds (get/set to seek) |
 | `PlaybackStatus` | `MusicPlayer.PlaybackStatus` | `Stopped`/`Playing`/`Paused`/`Interrupted`/`SeekingForward`/`SeekingBackward` |
@@ -338,10 +339,10 @@ Playback state and tunables (`virtual` properties on `MusicPlayer`):
 | `ShuffleMode` | `MusicPlayer.ShuffleMode?` | `Off`/`Songs` |
 | `AudioVariant` | `AudioVariant?` | currently playing variant |
 
-`MusicPlayer.StateType` mirrors the live values (`PlaybackStatus`, `PlaybackRate`, `RepeatMode`, `ShuffleMode`, `AudioVariant`):
+`MusicPlayer.StateInfo` mirrors the live values (`PlaybackStatus`, `PlaybackRate`, `RepeatMode`, `ShuffleMode`, `AudioVariant`):
 
 ```csharp
-MusicPlayer.StateType state = player.State;
+MusicPlayer.StateInfo state = player.State;
 if (state.PlaybackStatus == MusicPlayer.PlaybackStatus.Playing) { /* … */ }
 ```
 
@@ -349,16 +350,16 @@ if (state.PlaybackStatus == MusicPlayer.PlaybackStatus.Playing) { /* … */ }
 
 ### Building & setting the queue
 
-`ApplicationMusicPlayer.Queue` is a settable `ApplicationMusicPlayer.QueueType` property. `QueueType` has two public constructors:
+`ApplicationMusicPlayer.Queue` is a settable `ApplicationMusicPlayer.QueueInfo` property. `QueueInfo` has two public constructors:
 
 ```csharp
 // Play an album starting from a specific track:
-using var queue = new ApplicationMusicPlayer.QueueType(album, startTrack);   // (Album, Track)
+using var queue = new ApplicationMusicPlayer.QueueInfo(album, startTrack);   // (Album, Track)
 ApplicationMusicPlayer.Shared.Queue = queue;
 await ApplicationMusicPlayer.Shared.PlayAsync();
 
 // Or a playlist starting from a specific entry:
-using var queue2 = new ApplicationMusicPlayer.QueueType(playlist, startPlaylistEntry); // (Playlist, Playlist.Entry)
+using var queue2 = new ApplicationMusicPlayer.QueueInfo(playlist, startPlaylistEntry); // (Playlist, Playlist.Entry)
 ```
 
 The base `MusicPlayer.Queue` type can also be built from arrays of playable items via static factories (`FromSwift_SwiftArray_MusicKit_Song_MusicKit_Song`, `…_Album_…`, `…_Playlist_…`, `…_Track_…`) when you already hold a `Swift.SwiftArray<T>`.
@@ -371,7 +372,7 @@ await player.Queue.InsertAsync(song, MusicPlayer.Queue.EntryInsertionPosition.Ta
 
 `EntryInsertionPosition`: `AfterCurrentEntry = 0`, `Tail = 1`.
 
-`QueueType.Entries` is an indexed collection of `MusicPlayer.Queue.Entry`; each `Entry` exposes `Id`, `Title`, `Subtitle` (`string?`), `Artwork` (`Artwork?`), `Item` (`MusicPlayer.Queue.Entry.ItemType?`, a `Song`/`MusicVideo` projected enum), `StartTime`/`EndTime` (`double?`), `IsTransient` (`bool`). The currently-playing entry is `player.Queue.CurrentEntry`.
+`QueueInfo.Entries` is an indexed collection of `MusicPlayer.Queue.Entry`; each `Entry` exposes `Id`, `Title`, `Subtitle` (`string?`), `Artwork` (`Artwork?`), `Item` (`MusicPlayer.Queue.Entry.ItemKind?`, a `Song`/`MusicVideo` projected enum), `StartTime`/`EndTime` (`double?`), `IsTransient` (`bool`). The currently-playing entry is `player.Queue.CurrentEntry`.
 
 ### Crossfade transition (ApplicationMusicPlayer)
 
