@@ -1,0 +1,518 @@
+{
+  "version": "0.15.0",
+  "timestamp": "2026-06-15T00:05:34.6730600Z",
+  "totalDurationSeconds": 1131.651515,
+  "platforms": [
+    "ios-sim",
+    "ios-device",
+    "macos",
+    "maccatalyst",
+    "tvos"
+  ],
+  "cells": [
+    {
+      "library": "ActivityKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.2387257
+    },
+    {
+      "library": "ActivityKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 17.7789208
+    },
+    {
+      "library": "BlinkID",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 40.0103409
+    },
+    {
+      "library": "BlinkID",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 32.3545456
+    },
+    {
+      "library": "BlinkIDUX",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 42.6429562
+    },
+    {
+      "library": "BlinkIDUX",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.356789
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 45.2430215
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.2458036
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.200909
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 25.4935123
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 22.3339632
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 24.7976442
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.4057843
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 46.9913865
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.1423487
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.5937918
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.2540982
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 11.9685697
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 20.4671518
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.0504052
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 26.0819277
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 157.608713
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 79.1515955
+    },
+    {
+      "library": "Matter",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 87.037475
+    },
+    {
+      "library": "Matter",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 50.27947
+    },
+    {
+      "library": "Matter",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 55.853768
+    },
+    {
+      "library": "Matter",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 93.6069725
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 40.6903799
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 25.2042813
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.7672295
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 54.3052575
+    },
+    {
+      "library": "MusicKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 35.0411627
+    },
+    {
+      "library": "MusicKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.4630346
+    },
+    {
+      "library": "MusicKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.4095189
+    },
+    {
+      "library": "MusicKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.2257796
+    },
+    {
+      "library": "MusicKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 25.599832
+    },
+    {
+      "library": "Nuke",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.0245596
+    },
+    {
+      "library": "Nuke",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.4918383
+    },
+    {
+      "library": "Nuke",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 17.2927085
+    },
+    {
+      "library": "Nuke",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 16.3297218
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.5623182
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.3302557
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 24.8487165
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 137.9345578
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 27.2286689
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 46.721393
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 24.5068263
+    },
+    {
+      "library": "RoomPlan",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.4672237
+    },
+    {
+      "library": "RoomPlan",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.1823192
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.957405
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 24.8340257
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 16.388153
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.0037926
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 19.0674537
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 114.7237512
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 112.844757
+    },
+    {
+      "library": "TipKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 25.3299905
+    },
+    {
+      "library": "TipKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.3779127
+    },
+    {
+      "library": "TipKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 14.9427342
+    },
+    {
+      "library": "TipKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.4596312
+    },
+    {
+      "library": "TipKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 16.3832321
+    },
+    {
+      "library": "Translation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.4861848
+    },
+    {
+      "library": "Translation",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 18.370246
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 26.5549477
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.1414612
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 20.6301836
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.5667384
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 16.5167524
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.5795513
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.8004623
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 35.3006492
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 19.8852809
+    }
+  ]
+}

@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 2,
+  "version": "0.18.0",
+  "runId": "20260726-235114.338Z-p46994-1e8c27a",
+  "timestamp": "2026-07-27T00:02:54.1039300Z",
+  "totalDurationSeconds": 549.655071,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter Facebook,Kingfisher,Lottie,MatterSupport,RealityFoundation,RealityKit,Stripe,StoreKit2,FamilyControls restricts the matrix to a package subset",
+    "platform subset \u2014 not run: tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 2,
+  "counts": {
+    "planned": 22,
+    "recorded": 22,
+    "unreached": 0,
+    "pass": 12,
+    "fail": 10,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [
+    {
+      "library": "Facebook",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-device",
+      "result": "ERROR",
+      "reason": "dotnet publish (NativeAOT) failed with exit 1"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    }
+  ],
+  "filter": "Facebook,Kingfisher,Lottie,MatterSupport,RealityFoundation,RealityKit,Stripe,StoreKit2,FamilyControls",
+  "packages": [
+    "Facebook",
+    "Kingfisher",
+    "Lottie",
+    "MatterSupport",
+    "RealityFoundation",
+    "RealityKit",
+    "Stripe",
+    "StoreKit2",
+    "FamilyControls"
+  ],
+  "platforms": [
+    "ios-sim",
+    "ios-device",
+    "macos",
+    "maccatalyst"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 22,
+  "inputs": {
+    "sdkVersion": "0.18.0",
+    "appleVersion": "26.2.8",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "1e8c27a",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "Facebook": {
+        "kind": "third-party",
+        "version": "18.1.0",
+        "mode": "binary"
+      },
+      "FamilyControls": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Kingfisher": {
+        "kind": "third-party",
+        "version": "8.10.0",
+        "mode": "source"
+      },
+      "Lottie": {
+        "kind": "third-party",
+        "version": "4.6.0",
+        "mode": "source"
+      },
+      "MatterSupport": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "RealityFoundation": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "RealityKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "StoreKit2": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Stripe": {
+        "kind": "third-party",
+        "version": "26.0.0",
+        "mode": "zip"
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/api-surface",
+    "filesCollected": 88,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "Facebook",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 109.7844668,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Facebook-ios-sim.log"
+    },
+    {
+      "library": "Facebook",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 75.6114472,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Facebook-ios-device.log"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 41.1681291,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Kingfisher-ios-sim.log"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 29.3704789,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Kingfisher-ios-device.log"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.8350757,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Lottie-ios-sim.log"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 24.0482652,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Lottie-ios-device.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 97.4714235,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/MatterSupport-ios-sim.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 48.2238185,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/MatterSupport-ios-device.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 82.2995004,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/MatterSupport-macos.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 94.8251922,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/MatterSupport-maccatalyst.log"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 130.0866669,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/RealityFoundation-ios-sim.log"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 27.4241802,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/RealityFoundation-ios-device.log"
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 35.5845818,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/RealityKit-ios-sim.log"
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 22.0889447,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/RealityKit-ios-device.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 123.8013566,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Stripe-ios-sim.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-device",
+      "result": "ERROR",
+      "reason": "dotnet publish (NativeAOT) failed with exit 1",
+      "durationSeconds": 76.5419987,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/Stripe-ios-device.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.3193385,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/StoreKit2-ios-sim.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 23.9455533,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/StoreKit2-ios-device.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 17.7630584,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/StoreKit2-macos.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 48.1723842,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/StoreKit2-maccatalyst.log"
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.9343112,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/FamilyControls-ios-sim.log"
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 48.8891047,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260726-235114.338Z-p46994-1e8c27a/cells/FamilyControls-ios-device.log"
+    }
+  ]
+}

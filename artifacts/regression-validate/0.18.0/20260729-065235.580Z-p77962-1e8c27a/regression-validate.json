@@ -1,0 +1,826 @@
+{
+  "schemaVersion": 2,
+  "version": "0.18.0",
+  "runId": "20260729-065235.580Z-p77962-1e8c27a",
+  "timestamp": "2026-07-29T07:17:26.9887720Z",
+  "totalDurationSeconds": 1309.324014,
+  "verdict": "FAIL",
+  "complete": true,
+  "incompleteReasons": [],
+  "abortReason": null,
+  "exitCode": 2,
+  "counts": {
+    "planned": 76,
+    "recorded": 76,
+    "unreached": 0,
+    "pass": 69,
+    "fail": 1,
+    "buildOnly": 6,
+    "skip": 0
+  },
+  "failedCells": [
+    {
+      "library": "Stripe",
+      "platform": "ios-device",
+      "result": "ERROR",
+      "reason": "dotnet publish (NativeAOT) failed with exit 1"
+    }
+  ],
+  "filter": null,
+  "packages": [
+    "ActivityKit",
+    "BlinkID",
+    "BlinkIDUX",
+    "CryptoKit",
+    "Facebook",
+    "FamilyControls",
+    "Kingfisher",
+    "LiveCommunicationKit",
+    "Lottie",
+    "MapLibre",
+    "Mappedin",
+    "Matter",
+    "MatterSupport",
+    "MusicKit",
+    "Nuke",
+    "ProximityReader",
+    "RealityFoundation",
+    "RealityKit",
+    "RoomPlan",
+    "StoreKit2",
+    "Stripe",
+    "TipKit",
+    "Translation",
+    "WeatherKit",
+    "WorkoutKit"
+  ],
+  "platforms": [
+    "ios-sim",
+    "ios-device",
+    "macos",
+    "maccatalyst",
+    "tvos"
+  ],
+  "platformsComplete": true,
+  "cellsPlanned": 76,
+  "inputs": {
+    "sdkVersion": "0.18.0",
+    "appleVersion": "26.2.8",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "1e8c27a",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "ActivityKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "BlinkID": {
+        "kind": "third-party",
+        "version": "7.8.0",
+        "mode": "zip"
+      },
+      "BlinkIDUX": {
+        "kind": "third-party",
+        "version": "7.8.0",
+        "mode": "zip"
+      },
+      "CryptoKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Facebook": {
+        "kind": "third-party",
+        "version": "18.1.0",
+        "mode": "binary"
+      },
+      "FamilyControls": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Kingfisher": {
+        "kind": "third-party",
+        "version": "8.10.0",
+        "mode": "source"
+      },
+      "LiveCommunicationKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Lottie": {
+        "kind": "third-party",
+        "version": "4.6.0",
+        "mode": "source"
+      },
+      "MapLibre": {
+        "kind": "third-party",
+        "version": "6.27.0",
+        "mode": "zip"
+      },
+      "Mappedin": {
+        "kind": "third-party",
+        "version": "6.4.0",
+        "mode": "zip"
+      },
+      "Matter": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "MatterSupport": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "MusicKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Nuke": {
+        "kind": "third-party",
+        "version": "13.0.6",
+        "mode": "source"
+      },
+      "ProximityReader": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "RealityFoundation": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "RealityKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "RoomPlan": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "StoreKit2": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Stripe": {
+        "kind": "third-party",
+        "version": "26.0.0",
+        "mode": "zip"
+      },
+      "TipKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "Translation": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "WeatherKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      },
+      "WorkoutKit": {
+        "kind": "apple-framework",
+        "version": "26.2.8",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/api-surface",
+    "filesCollected": 182,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "ActivityKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 25.0765217,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/ActivityKit-ios-sim.log"
+    },
+    {
+      "library": "ActivityKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 17.1964935,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/ActivityKit-ios-device.log"
+    },
+    {
+      "library": "BlinkID",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 52.1089193,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/BlinkID-ios-sim.log"
+    },
+    {
+      "library": "BlinkID",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 38.5470642,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/BlinkID-ios-device.log"
+    },
+    {
+      "library": "BlinkIDUX",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.8091896,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/BlinkIDUX-ios-sim.log"
+    },
+    {
+      "library": "BlinkIDUX",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 26.2208267,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/BlinkIDUX-ios-device.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 41.5303035,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/CryptoKit-ios-sim.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 26.393374,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/CryptoKit-ios-device.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 24.6795454,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/CryptoKit-macos.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 38.953975,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/CryptoKit-maccatalyst.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 33.6938069,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/CryptoKit-tvos.log"
+    },
+    {
+      "library": "Facebook",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 117.701533,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Facebook-ios-sim.log"
+    },
+    {
+      "library": "Facebook",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 69.5055262,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Facebook-ios-device.log"
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.846918,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/FamilyControls-ios-sim.log"
+    },
+    {
+      "library": "FamilyControls",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 19.464816,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/FamilyControls-ios-device.log"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 56.5785432,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Kingfisher-ios-sim.log"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.9044748,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Kingfisher-ios-device.log"
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 36.4025783,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/LiveCommunicationKit-ios-sim.log"
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 18.3776177,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/LiveCommunicationKit-ios-device.log"
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 10.389834,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/LiveCommunicationKit-macos.log"
+    },
+    {
+      "library": "LiveCommunicationKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 17.7667059,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/LiveCommunicationKit-maccatalyst.log"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.2478481,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Lottie-ios-sim.log"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.8612617,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Lottie-ios-device.log"
+    },
+    {
+      "library": "MapLibre",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 47.5788837,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MapLibre-ios-sim.log"
+    },
+    {
+      "library": "MapLibre",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.5820603,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MapLibre-ios-device.log"
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 143.9410649,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Mappedin-ios-sim.log"
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 75.7901339,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Mappedin-ios-device.log"
+    },
+    {
+      "library": "Matter",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 90.5503107,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Matter-ios-sim.log"
+    },
+    {
+      "library": "Matter",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 46.4348492,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Matter-ios-device.log"
+    },
+    {
+      "library": "Matter",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 77.795067,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Matter-macos.log"
+    },
+    {
+      "library": "Matter",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 90.3536012,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Matter-maccatalyst.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 32.4793661,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MatterSupport-ios-sim.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.7005464,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MatterSupport-ios-device.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 13.1613095,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MatterSupport-macos.log"
+    },
+    {
+      "library": "MatterSupport",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.7842293,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MatterSupport-maccatalyst.log"
+    },
+    {
+      "library": "MusicKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 60.7920483,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MusicKit-ios-sim.log"
+    },
+    {
+      "library": "MusicKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 31.1417481,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MusicKit-ios-device.log"
+    },
+    {
+      "library": "MusicKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 36.2612506,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MusicKit-macos.log"
+    },
+    {
+      "library": "MusicKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 47.264518,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MusicKit-maccatalyst.log"
+    },
+    {
+      "library": "MusicKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 40.5895492,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/MusicKit-tvos.log"
+    },
+    {
+      "library": "Nuke",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 43.0595979,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Nuke-ios-sim.log"
+    },
+    {
+      "library": "Nuke",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.3377322,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Nuke-ios-device.log"
+    },
+    {
+      "library": "Nuke",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 15.8967077,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Nuke-macos.log"
+    },
+    {
+      "library": "Nuke",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 16.5037883,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Nuke-tvos.log"
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 41.5495534,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/ProximityReader-ios-sim.log"
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.2039176,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/ProximityReader-ios-device.log"
+    },
+    {
+      "library": "ProximityReader",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.3843867,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/ProximityReader-maccatalyst.log"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 142.61153,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RealityFoundation-ios-sim.log"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 31.363489,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RealityFoundation-ios-device.log"
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 35.1642669,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RealityKit-ios-sim.log"
+    },
+    {
+      "library": "RealityKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.7131897,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RealityKit-ios-device.log"
+    },
+    {
+      "library": "RoomPlan",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.7727864,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RoomPlan-ios-sim.log"
+    },
+    {
+      "library": "RoomPlan",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 19.6937191,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/RoomPlan-ios-device.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 44.6933935,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/StoreKit2-ios-sim.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 23.7772333,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/StoreKit2-ios-device.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 15.7896647,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/StoreKit2-macos.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.3126608,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/StoreKit2-maccatalyst.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 21.6031139,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/StoreKit2-tvos.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 170.1867737,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Stripe-ios-sim.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-device",
+      "result": "ERROR",
+      "reason": "dotnet publish (NativeAOT) failed with exit 1",
+      "durationSeconds": 102.6455007,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Stripe-ios-device.log"
+    },
+    {
+      "library": "TipKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.1780891,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/TipKit-ios-sim.log"
+    },
+    {
+      "library": "TipKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 22.1558502,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/TipKit-ios-device.log"
+    },
+    {
+      "library": "TipKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 14.5351377,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/TipKit-macos.log"
+    },
+    {
+      "library": "TipKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.5703043,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/TipKit-maccatalyst.log"
+    },
+    {
+      "library": "TipKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 15.2504425,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/TipKit-tvos.log"
+    },
+    {
+      "library": "Translation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.8604447,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Translation-ios-sim.log"
+    },
+    {
+      "library": "Translation",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 16.6505308,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/Translation-ios-device.log"
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 36.817092,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WeatherKit-ios-sim.log"
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.9628402,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WeatherKit-ios-device.log"
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 14.5904582,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WeatherKit-macos.log"
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.8059248,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WeatherKit-maccatalyst.log"
+    },
+    {
+      "library": "WeatherKit",
+      "platform": "tvos",
+      "result": "BUILD-ONLY",
+      "reason": "no tvos validator yet",
+      "durationSeconds": 15.1616437,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WeatherKit-tvos.log"
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 21.9862158,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WorkoutKit-ios-sim.log"
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "ios-device",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 18.4012752,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WorkoutKit-ios-device.log"
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 12.3627656,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WorkoutKit-macos.log"
+    },
+    {
+      "library": "WorkoutKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 19.6022988,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.0/20260729-065235.580Z-p77962-1e8c27a/cells/WorkoutKit-maccatalyst.log"
+    }
+  ]
+}

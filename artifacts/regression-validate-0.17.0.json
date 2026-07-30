@@ -1,0 +1,17 @@
+{
+  "version": "0.17.0",
+  "timestamp": "2026-07-09T01:54:00.6755060Z",
+  "totalDurationSeconds": 37.228223,
+  "platforms": [
+    "ios-sim"
+  ],
+  "cells": [
+    {
+      "library": "MapLibre",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.2221466
+    }
+  ]
+}

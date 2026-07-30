@@ -4,9 +4,28 @@ obj/
 *.nupkg
 *.snupkg
 
-# Release pack output (BuildAndPackRelease default + RELEASE-1.0.md convention)
-artifacts/
+# Release pack output (BuildAndPackRelease default + RELEASE-1.0.md convention).
+# Ignore the CONTENTS, not the directory itself, so the regression evidence trail
+# below can be re-included — git cannot re-include a path under an excluded dir.
+artifacts/*
 release-out/
+
+# Regression-matrix evidence (F1/F2). The JSON verdicts ARE the release record —
+# 0.17.0 shipped with a 1-cell artifact nothing tracked and nothing missed. Keep
+# the verdicts; keep the bulky per-run logs and surface snapshots local-only.
+!artifacts/regression-validate-*.json
+!artifacts/regression-validate/
+artifacts/regression-validate/**/cells/
+artifacts/regression-validate/**/api-surface/
+artifacts/regression-validate/**/*.log
+artifacts/regression-validate/**/matrix.txt
+# Partials are spot-checks, not ship evidence — only canonical verdicts are tracked
+artifacts/regression-validate-*.partial-*.json
+# Self-test sentinels (TestRegressionArtifacts writes under artifacts/ and cleans up
+# in finally — keep them ignored in case a run is killed mid-flight)
+artifacts/regression-validate-0.0.0-selftest*.json
+artifacts/regression-validate/0.0.0-selftest/
+libraries/.selftest-*/
 
 # Test app build output
 tests/*/bin/
@@ -65,3 +84,6 @@ local-packages/
 # Per-library nuget.config overrides (root NuGet.config is intentional)
 **/nuget.config
 !/NuGet.config
+
+# Local working notes (binding pipeline scratch — references private worktrees/paths)
+/BINDING-CANDIDATES.md
