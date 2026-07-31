@@ -20,9 +20,9 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCameraCore/StripeCameraCore.xcframework" PackageId="SwiftBindings.Stripe.CameraCore" PackageVersion="26.0.0" />
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.0.0" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.0.0" />
+    <SwiftFrameworkDependency Include="../StripeCameraCore/StripeCameraCore.xcframework" PackageId="SwiftBindings.Stripe.CameraCore" PackageVersion="26.4.1" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.4.1" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.4.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

@@ -20,7 +20,7 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.0.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.4.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
