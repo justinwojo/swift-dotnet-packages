@@ -1,12 +1,10 @@
 # SwiftBindings Packages
 
-Native Swift interop bindings for popular Swift libraries on .NET. Each package uses the [SwiftBindings SDK](https://www.nuget.org/packages/SwiftBindings.Sdk), built from the [swift-dotnet-bindings](https://github.com/justinwojo/swift-dotnet-bindings) project, to auto-generate C# bindings from Swift xcframeworks, with every library validated end-to-end on iOS Simulator and physical devices.
-
-These are not traditional Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
+Native Swift interop bindings for popular Swift libraries on .NET. Each package uses the [SwiftBindings SDK](https://www.nuget.org/packages/SwiftBindings.Sdk), to auto-generate C# bindings from Swift xcframeworks, with every library validated end-to-end on iOS Simulator and physical devices.
 
 ## Apple frameworks
 
-Bindings against the system-installed Apple SDKs. They do **not** download or build Swift sources; they wrap the system framework and ship a `.xcframework` of generated `@_cdecl` thunks. Multi-TFM: `net10.0-ios26.2`, `net10.0-macos26.2`, `net10.0-maccatalyst26.2`, `net10.0-tvos26.2` (TFMs available depend on the framework). See [Apple framework support](#apple-framework-support) below for build-host requirements.
+Bindings against the system-installed Apple SDKs. Multi-TFM: `net10.0-ios26.2`, `net10.0-macos26.2`, `net10.0-maccatalyst26.2`, `net10.0-tvos26.2` (TFMs available depend on the framework). See [Apple framework support](#apple-framework-support) below for build-host requirements.
 
 | Package | Description | Version | Guide |
 |---|---|---|---|
@@ -31,7 +29,7 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 
 ## Third-party libraries
 
-Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/spm-to-xcframework).
+Bindings are generated against each vendor's official native frameworks. Most libraries (BlinkID, BlinkIDUX, Mappedin, MapLibre, Stripe, Facebook) use the prebuilt xcframeworks the vendor publishes with each release; Nuke, Lottie, and Kingfisher are compiled from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/spm-to-xcframework).
 
 > 📖 **Every third-party library has a full usage guide on the [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki)** — Swift→C# naming rules, setup, worked examples, and a per-API list of what is and isn't callable, verified against the generated bindings.
 
@@ -44,18 +42,27 @@ Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](htt
 | [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkIDUX.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkIDUX) |
 | [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Mappedin.svg)](https://www.nuget.org/packages/SwiftBindings.Mappedin) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Mappedin) |
 | [`SwiftBindings.MapLibre`](libraries/MapLibre/README.md) | Open-source vector maps (MapLibre Native iOS) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.MapLibre.svg)](https://www.nuget.org/packages/SwiftBindings.MapLibre) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/MapLibre) |
-| [`SwiftBindings.Facebook.Core`](libraries/Facebook/FBSDKCoreKit/README.md) | Facebook SDK core — initialization, App Events, Graph API | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Core.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Core) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
-| [`SwiftBindings.Facebook.Login`](libraries/Facebook/FBSDKLoginKit/README.md) | Facebook Login | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Login.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Login) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
-| [`SwiftBindings.Facebook.Share`](libraries/Facebook/FBSDKShareKit/README.md) | Sharing dialogs and share content | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Share.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Share) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
-| [`SwiftBindings.Facebook.AEM`](libraries/Facebook/FBAEMKit/README.md) | Aggregated Event Measurement | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.AEM.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.AEM) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
 
-**Transitive support package** — [`SwiftBindings.Facebook.CoreBasics`](libraries/Facebook/FBSDKCoreKit_Basics/README.md) (FBSDKCoreKit_Basics infrastructure) is pulled in automatically by the Facebook packages above; do not install directly.
+## Facebook
+
+Bindings against the prebuilt xcframeworks shipped with each [facebook-ios-sdk](https://github.com/facebook/facebook-ios-sdk) release. Install the sub-package(s) you need — `Facebook.Core` is the common dependency the others build on.
+
+> 📖 **[Full usage wiki guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook)** — one guide covers all Facebook packages: SDK initialization, App Events, Graph API, Login, Sharing, and Aggregated Event Measurement.
+
+| Package | Description | Version |
+|---|---|---|
+| [`SwiftBindings.Facebook.Core`](libraries/Facebook/FBSDKCoreKit/README.md) | Facebook SDK core — initialization, App Events, Graph API | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Core.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Core) |
+| [`SwiftBindings.Facebook.Login`](libraries/Facebook/FBSDKLoginKit/README.md) | Facebook Login | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Login.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Login) |
+| [`SwiftBindings.Facebook.Share`](libraries/Facebook/FBSDKShareKit/README.md) | Sharing dialogs and share content | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Share.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Share) |
+| [`SwiftBindings.Facebook.AEM`](libraries/Facebook/FBAEMKit/README.md) | Aggregated Event Measurement | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.AEM.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.AEM) |
+
+**Transitive support package** — [`SwiftBindings.Facebook.CoreBasics`](libraries/Facebook/FBSDKCoreKit_Basics/README.md) (FBSDKCoreKit_Basics infrastructure) is pulled in automatically by the Facebook packages above; **do not install directly**.
 
 ## Stripe
 
 Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stripe-ios](https://github.com/stripe/stripe-ios) release. Most apps depend on a specific sub-package (`Stripe.PaymentSheet`, `Stripe.ApplePay`, etc.) rather than the umbrella.
 
-> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — one guide covers all Stripe sub-packages: PaymentSheet, card entry UI, Apple Pay, card scanning, Identity, Financial Connections, Issuing, and Connect.
+> 📖 **[Full usage wiki guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — one guide covers all Stripe sub-packages: PaymentSheet, card entry UI, Apple Pay, card scanning, Identity, Financial Connections, Issuing, and Connect.
 
 | Package | Description | Version |
 |---|---|---|

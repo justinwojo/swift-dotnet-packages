@@ -58,10 +58,10 @@ Each library root has a `library.json` declaring its SPM source and products:
 
 ### Build Modes
 
-- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, Kingfisher, BlinkIDUX, etc.
-- **Binary mode** — Delegates to `spm-to-xcframework --binary`, which resolves the tag via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by BlinkID today.
-- **Zip mode** — Downloads a single release zip from `zipUrl` (with `{version}` substitution), extracts it, and picks out each product's xcframework by name from the archive root. Used only by Stripe today (their `Stripe.xcframework.zip` release asset bundles all 14 product + internal xcframeworks at the archive root).
-- **Manual mode** — No build. Verifies that the expected `<framework>.xcframework` directories already exist under the library root and errors with the missing paths otherwise. Used for proprietary artifacts (Mappedin) that must be provisioned out-of-band. Manual xcframeworks are never committed to the repo.
+- **Source mode** — Delegates to `spm-to-xcframework` (pinned in `.tools/`). Clones the repo, archives each product/target for device + simulator, merges into an xcframework. Used by Nuke, Lottie, and Kingfisher.
+- **Binary mode** — Delegates to `spm-to-xcframework --binary`, which resolves the tag via SPM and copies each product's prebuilt xcframework out of `.build/artifacts/` (pruning `__MACOSX` AppleDouble ghosts that some vendor zips ship). Used only by Facebook today.
+- **Zip mode** — Downloads a release zip from `zipUrl` (with `{version}` substitution), extracts it, and picks out each product's xcframework by name from the archive root. The majority mode today: BlinkID, BlinkIDUX, Mappedin, MapLibre, and Stripe (Stripe's `Stripe.xcframework.zip` release asset bundles all 14 product + internal xcframeworks at the archive root).
+- **Manual mode** — No build. Verifies that the expected `<framework>.xcframework` directories already exist under the library root and errors with the missing paths otherwise. For proprietary artifacts that must be provisioned out-of-band (none currently — Mappedin moved to zip mode when its xcframework became a public GitHub release asset). Manual xcframeworks are never committed to the repo.
 
 ### Nuke Build Targets
 
@@ -218,7 +218,7 @@ Some vendors have internal frameworks (not public SPM products) that other produ
 2. Built alongside public products, but they don't need binding generation or csproj files
 3. Referenced as `NativeReference` in test csproj (needed at runtime)
 
-Example: Stripe has 2 internal dependencies: `Stripe3DS2`, `StripeCameraCore`.
+No library currently uses `"internal": true`. Stripe's `Stripe3DS2` and `StripeCameraCore` were once internal but now ship as real packages (`SwiftBindings.Stripe.ThreeDS2` / `.CameraCore`) — support packages that other Stripe products depend on, not intended for direct install.
 
 ### SwiftFrameworkDependency Items
 
@@ -269,7 +269,7 @@ Some products have Xcode schemes that differ from their framework name. Example:
 
 ### Stripe-specific: zip-mode ingest
 
-Stripe is the only library on `mode: "zip"`. Their GitHub release page publishes a single `Stripe.xcframework.zip` asset that bundles all 14 product + internal xcframeworks at the archive root (Stripe, Stripe3DS2, StripeApplePay, StripeCameraCore, StripeCardScan, StripeConnect, StripeCore, StripeCryptoOnramp, StripeFinancialConnections, StripeIdentity, StripeIssuing, StripePayments, StripePaymentSheet, StripePaymentsUI, StripeUICore — 13 are referenced from our `library.json`; StripeCryptoOnramp is not yet bound). `BuildXcframework --library Stripe` downloads this single zip, extracts, and lays out each product under `libraries/Stripe/<subdirectory>/<framework>.xcframework`. No SPM checkout, no per-product compile.
+Stripe is the largest of the zip-mode libraries (BlinkID, BlinkIDUX, Mappedin, MapLibre, and Stripe all use `mode: "zip"`; the others are single-xcframework downloads). Stripe's GitHub release page publishes a single `Stripe.xcframework.zip` asset that bundles all 14 product + internal xcframeworks at the archive root (Stripe, Stripe3DS2, StripeApplePay, StripeCameraCore, StripeCardScan, StripeConnect, StripeCore, StripeCryptoOnramp, StripeFinancialConnections, StripeIdentity, StripeIssuing, StripePayments, StripePaymentSheet, StripePaymentsUI, StripeUICore — 13 are referenced from our `library.json`; StripeCryptoOnramp is not yet bound). `BuildXcframework --library Stripe` downloads this single zip, extracts, and lays out each product under `libraries/Stripe/<subdirectory>/<framework>.xcframework`. No SPM checkout, no per-product compile.
 
 Bumping Stripe's version is a single edit to `version` in `libraries/Stripe/library.json`. The `zipUrl` field substitutes `{version}` at build time. Stripe API surface can shift between minor releases (e.g. 25.11.0 dropped `PaymentSheetError.FetchPaymentMethodsFailure`) — always run the full `BuildLibrary --library Stripe --all-products` + sim + device validation after a version bump and update the test app to match.
 
