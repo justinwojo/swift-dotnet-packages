@@ -2,7 +2,13 @@
 
 Transitive support package for the [Stripe iOS SDK](https://github.com/stripe/stripe-ios) bindings. Wraps `Stripe3DS2.xcframework` — an ObjC-only framework Stripe ships to power 3-D Secure 2 challenge flows used by `StripePayments`, `StripePaymentSheet`, `StripePaymentsUI`, `StripeIssuing`, and the `Stripe` umbrella.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — where 3-D Secure 2 sits in the Stripe package map and how `STPPaymentHandler` drives it.
+
 > **You should not install this package directly.** It is pulled in automatically as a transitive dependency by the Stripe binding packages that need it. It exists as a standalone NuGet only so its binary can be shared across siblings without duplication.
+
+## Documentation
+
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 
 ## How It Works
 

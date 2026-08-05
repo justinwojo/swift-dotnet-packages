@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.18.0">
+<Project Sdk="SwiftBindings.Sdk/0.19.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -33,7 +33,7 @@
   <ItemGroup>
     <SwiftFrameworkDependency Include="../BlinkID/BlinkID.xcframework"
                               PackageId="SwiftBindings.BlinkID"
-                              PackageVersion="7.8.5" />
+                              PackageVersion="7.8.6" />
   </ItemGroup>
 
 </Project>

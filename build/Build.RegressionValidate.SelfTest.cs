@@ -357,12 +357,13 @@ partial class Build
 
                 // ── Case 10: the inputs block pins what the run actually validated ──
                 {
-                    var inputs = BuildInputsBlock("0.18.0", "26.2.8", new[] { "Kingfisher", "Matter" });
+                    var inputs = BuildInputsBlock("0.18.0", "26.2.8", "26.2.10", new[] { "Kingfisher", "Matter" });
                     using var doc = JsonDocument.Parse(JsonSerializer.Serialize(inputs));
                     var root = doc.RootElement;
-                    Assert("inputs record both version trains",
+                    Assert("inputs record all three version trains",
                         root.GetProperty("sdkVersion").GetString() == "0.18.0"
-                        && root.GetProperty("appleVersion").GetString() == "26.2.8",
+                        && root.GetProperty("appleVersion").GetString() == "26.2.8"
+                        && root.GetProperty("appleBindingsVersion").GetString() == "26.2.10",
                         "version trains missing");
                     Assert("inputs record the Xcode in use",
                         root.GetProperty("xcode").ValueKind == JsonValueKind.String
@@ -372,11 +373,13 @@ partial class Build
                         root.GetProperty("libraries").GetProperty("Kingfisher").GetProperty("version").GetString()
                             is { Length: > 0 },
                         "Kingfisher version not pinned");
-                    Assert("apple-framework packages ride the Apple train",
+                    // The produced train, not the core supplement's: 26.2.10 is the
+                    // version this run stamped into Matter's own <Version> and packed.
+                    Assert("apple-framework packages ride the per-framework bindings train",
                         root.GetProperty("libraries").GetProperty("Matter").GetProperty("kind").GetString()
                             == "apple-framework"
                         && root.GetProperty("libraries").GetProperty("Matter").GetProperty("version").GetString()
-                            == "26.2.8",
+                            == "26.2.10",
                         "apple-framework input not attributed");
                 }
 

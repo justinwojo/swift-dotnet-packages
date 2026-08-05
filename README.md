@@ -33,19 +33,29 @@ Bindings against the system-installed Apple SDKs. They do **not** download or bu
 
 Built from upstream Swift Package Manager sources via [`spm-to-xcframework`](https://github.com/justinwojo/spm-to-xcframework).
 
-| Package | Description | Version |
-|---|---|---|
-| [`SwiftBindings.Nuke`](libraries/Nuke/README.md) | High-performance image loading and caching (multi-TFM: iOS, macOS, tvOS) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Nuke.svg)](https://www.nuget.org/packages/SwiftBindings.Nuke) |
-| [`SwiftBindings.Lottie`](libraries/Lottie/README.md) | Lottie animation rendering | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Lottie.svg)](https://www.nuget.org/packages/SwiftBindings.Lottie) |
-| [`SwiftBindings.BlinkID`](libraries/BlinkID/README.md) | Microblink ID document scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkID.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkID) |
-| [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkIDUX.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) |
-| [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Mappedin.svg)](https://www.nuget.org/packages/SwiftBindings.Mappedin) |
+> 📖 **Every third-party library has a full usage guide on the [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki)** — Swift→C# naming rules, setup, worked examples, and a per-API list of what is and isn't callable, verified against the generated bindings.
 
-> [`SwiftBindings.Facebook.*`](libraries/Facebook/) (facebook-ios-sdk 18.1.0: Core, CoreBasics, AEM, Login, Share) and [`SwiftBindings.MapLibre`](libraries/MapLibre/README.md) (MapLibre Native iOS 6.27.0) are bound and validated in this repo but **not yet published** to NuGet.
+| Package | Description | Version | Guide |
+|---|---|---|---|
+| [`SwiftBindings.Nuke`](libraries/Nuke/README.md) | High-performance image loading and caching (multi-TFM: iOS, macOS, tvOS) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Nuke.svg)](https://www.nuget.org/packages/SwiftBindings.Nuke) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Nuke) |
+| [`SwiftBindings.Lottie`](libraries/Lottie/README.md) | Lottie animation rendering | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Lottie.svg)](https://www.nuget.org/packages/SwiftBindings.Lottie) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Lottie) |
+| [`SwiftBindings.Kingfisher`](libraries/Kingfisher/README.md) | Image downloading and caching with the `KF` fluent builder | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Kingfisher.svg)](https://www.nuget.org/packages/SwiftBindings.Kingfisher) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Kingfisher) |
+| [`SwiftBindings.BlinkID`](libraries/BlinkID/README.md) | Microblink ID document scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkID.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkID) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkID) |
+| [`SwiftBindings.BlinkIDUX`](libraries/BlinkIDUX/README.md) | Drop-in scanning UX components for BlinkID | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.BlinkIDUX.svg)](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkIDUX) |
+| [`SwiftBindings.Mappedin`](libraries/Mappedin/README.md) | Indoor mapping and wayfinding | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Mappedin.svg)](https://www.nuget.org/packages/SwiftBindings.Mappedin) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Mappedin) |
+| [`SwiftBindings.MapLibre`](libraries/MapLibre/README.md) | Open-source vector maps (MapLibre Native iOS) | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.MapLibre.svg)](https://www.nuget.org/packages/SwiftBindings.MapLibre) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/MapLibre) |
+| [`SwiftBindings.Facebook.Core`](libraries/Facebook/FBSDKCoreKit/README.md) | Facebook SDK core — initialization, App Events, Graph API | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Core.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Core) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
+| [`SwiftBindings.Facebook.Login`](libraries/Facebook/FBSDKLoginKit/README.md) | Facebook Login | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Login.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Login) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
+| [`SwiftBindings.Facebook.Share`](libraries/Facebook/FBSDKShareKit/README.md) | Sharing dialogs and share content | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.Share.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.Share) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
+| [`SwiftBindings.Facebook.AEM`](libraries/Facebook/FBAEMKit/README.md) | Aggregated Event Measurement | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Facebook.AEM.svg)](https://www.nuget.org/packages/SwiftBindings.Facebook.AEM) | [wiki](https://github.com/justinwojo/swift-dotnet-packages/wiki/Facebook) |
+
+**Transitive support package** — [`SwiftBindings.Facebook.CoreBasics`](libraries/Facebook/FBSDKCoreKit_Basics/README.md) (FBSDKCoreKit_Basics infrastructure) is pulled in automatically by the Facebook packages above; do not install directly.
 
 ## Stripe
 
 Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stripe-ios](https://github.com/stripe/stripe-ios) release. Most apps depend on a specific sub-package (`Stripe.PaymentSheet`, `Stripe.ApplePay`, etc.) rather than the umbrella.
+
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — one guide covers all Stripe sub-packages: PaymentSheet, card entry UI, Apple Pay, card scanning, Identity, Financial Connections, Issuing, and Connect.
 
 | Package | Description | Version |
 |---|---|---|

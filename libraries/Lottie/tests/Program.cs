@@ -1190,7 +1190,7 @@ public class MainViewController : UIViewController
             var view = new LottieAnimationView();
             var animation = LottieAnimation.Filepath(path);
             view.Animation = animation;
-            view.Play(0.0, 0.5);
+            view.PlayFromProgressToProgressLoopModeCompletion(0.0, 0.5);
             logger.Pass("Play(fromProgress, toProgress) succeeded");
             results.Pass("Playback_ProgressRange");
         }

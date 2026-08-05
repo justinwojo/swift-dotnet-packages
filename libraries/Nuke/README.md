@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for [Nuke](https://github.com/kean/Nuke), a powerful image loading and caching framework for Swift. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Nuke)** — Swift→C# naming (the `Info`/`Kind` nested-type suffixes), pipeline setup, async image loading, the three cache layers, prefetching, task progress, processors, and the remaining binding limitations.
+
 ## Installation
 
 ```
@@ -11,7 +13,8 @@ dotnet add package SwiftBindings.Nuke
 ## Requirements
 
 - .NET 10.0+
-- iOS 15.0+
+- Target frameworks: `net10.0-ios`, `net10.0-macos`, `net10.0-tvos`
+- iOS 15.0+ / macOS 12.0+ / tvOS 15.0+
 - macOS host for development
 
 ## Usage
@@ -49,10 +52,9 @@ cache.CostLimit = 50_000_000;  // 50 MB
 cache.CountLimit = 200;
 cache.Ttl = 300.0;             // 5 minutes
 
-// Data cache with compression
+// Disk (data) cache
 var dataCache = new DataCache("my-cache");
 dataCache.SizeLimit = 100_000_000;  // 100 MB
-dataCache.IsCompressionEnabled = true;
 
 // Clear all cached data
 pipeline.Cache.RemoveAll();
@@ -62,10 +64,15 @@ pipeline.Cache.RemoveAll();
 
 ```csharp
 var prefetcher = new ImagePrefetcher(ImagePipeline.Shared);
-prefetcher.Priority = ImageRequest.PriorityType.High;
+prefetcher.Priority = ImageRequest.PriorityKind.High;
 // ...
 prefetcher.StopPrefetching();
 ```
+
+## Documentation
+
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Nuke) — full C# walkthrough of the binding surface
+- [Nuke official documentation](https://kean-docs.github.io/nuke/documentation/nuke) — upstream API reference
 
 ## How It Works
 

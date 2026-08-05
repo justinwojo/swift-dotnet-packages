@@ -70,6 +70,9 @@ local-packages/
 *.key
 *.pem
 
+# Python bytecode caches (scripts/)
+__pycache__/
+
 # macOS
 .DS_Store
 

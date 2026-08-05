@@ -1,6 +1,8 @@
 # SwiftBindings.BlinkIDUX
 
-Native Swift interop bindings for [BlinkIDUX](https://github.com/BlinkID/blinkid-swift-package), Microblink's drop-in scanning UX components for BlinkID. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
+Native Swift interop bindings for [BlinkIDUX](https://github.com/microblink/blinkid-ios), Microblink's drop-in scanning UX components for BlinkID. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
+
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkIDUX)** — launching the prebuilt scan UX from C#, theming it, reading scan outcomes, and the headless analyzer path when you need the extracted document fields.
 
 ## Installation
 
@@ -13,29 +15,51 @@ This package depends on [`SwiftBindings.BlinkID`](https://www.nuget.org/packages
 ## Requirements
 
 - .NET 10.0+
-- iOS 15.0+
+- iOS 16.0+ (the BlinkIDUX xcframework's own minimum; the BlinkID core is 15.0)
 - macOS host for development
 - A BlinkID licence key from Microblink (BlinkID is commercial)
-- Camera usage description in `Info.plist`
+- `NSCameraUsageDescription` in `Info.plist`
 
 ## Usage
 
-```csharp
-using BlinkID;
-using BlinkIDUX;
-using Swift.Runtime;
+Launch the prebuilt scanning UX and present it as a `UIViewController`:
 
-// Configure scanning behavior + branding via the BlinkIDUX surface,
-// then present the SwiftUI host that wraps the camera + analyzer.
-var model = SwiftObjectHelper<BlinkIDUXModel>.GetTypeMetadata();
+```csharp
+using BlinkIDUX;
+using UIKit;
+
+var session = await BlinkIDUXViewSession.CreateAsync(
+    licenseKey: "<your-microblink-licence-key>",
+    showIntroductionAlert: true,
+    showHelpButton: true,
+    allowHapticFeedback: true,
+    preferFrontCamera: false,
+    onResult: code => InvokeOnMainThread(() => HandleOutcome(code)));
+
+if (session.ViewController is UIViewController scanner)
+    PresentViewController(scanner, animated: true, completionHandler: null);
 ```
 
-See [Microblink's BlinkID documentation](https://github.com/BlinkID/blinkid-swift-package) for the full UX integration guide (delegate plumbing, theming, localisation).
+Brand it with the static theme bridge before creating the session:
+
+```csharp
+using Swift;
+
+var brand = SwiftColor.FromHex(0x1E88E5);
+BlinkIDTheme.SetAlertTitleColor(brand);
+BlinkIDTheme.SetAlertTitleFont(SwiftFont.System(20, SwiftFontWeight.Semibold));
+BlinkIDTheme.SetHelpButtonBackgroundColor(brand);
+```
+
+The UX session reports an outcome code (`0` completed, `1` interrupted, `2` cancelled, `3` ended) rather than the extracted document data. For the full `BlinkIDScanningResult`, drive `BlinkIDAnalyzer` yourself — see the usage guide.
 
 ## Documentation
 
-- [BlinkID Swift package](https://github.com/BlinkID/blinkid-swift-package)
-- [Microblink developer documentation](https://microblink.com/products/blinkid/)
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkIDUX) — full C# walkthrough of the binding surface
+- [BlinkID core SDK bindings (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkID) — the sibling package this one depends on
+- [BlinkIDUX API reference (DocC)](https://microblink.github.io/blinkid-ios/documentation/blinkidux/)
+- [Microblink BlinkID documentation](https://docs.microblink.com/blinkid)
+- [blinkid-ios on GitHub](https://github.com/microblink/blinkid-ios)
 
 ## How It Works
 

@@ -387,7 +387,7 @@ internal static class Tests
 
         try
         {
-            var plane = MeshResource.GeneratePlane(width: 0.1f, height: 0.1f);
+            var plane = MeshResource.GeneratePlaneWidthHeightCornerRadius(width: 0.1f, height: 0.1f);
             if (plane is null)
                 throw new InvalidOperationException("GeneratePlane returned null");
             Pass("MeshResource.GeneratePlane(w,h)");

@@ -1,6 +1,8 @@
 # SwiftBindings.BlinkID
 
-Native Swift interop bindings for [BlinkID](https://github.com/BlinkID/blinkid-swift-package), Microblink's ID document scanning SDK. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
+Native Swift interop bindings for [BlinkID](https://docs.microblink.com/blinkid), Microblink's ID document scanning SDK. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
+
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkID)** — license-key initialization, scanning sessions, feeding camera frames or `UIImage`s, reading VIZ/MRZ/barcode results and cropped images, tuning `ScanningSettings`, and the tag-enum / struct-copy patterns the binding uses.
 
 ## Installation
 
@@ -19,22 +21,47 @@ dotnet add package SwiftBindings.BlinkID
 
 ```csharp
 using BlinkID;
-using Swift.Runtime;
+using BlinkID.BlinkIDSDK;
 
-// Inspect scanning result types — full populated results are produced by an
-// active scanning session through the BlinkIDUX surface.
-var resultMetadata = SwiftObjectHelper<BlinkIDScanningResult>.GetTypeMetadata();
-var settingsMetadata = SwiftObjectHelper<BlinkIDSdkSettings>.GetTypeMetadata();
+// 1. Initialize the SDK with your Microblink license key.
+using var settings = new BlinkIDSdkSettings(
+    licenseKey:          "<your-microblink-license-key>",
+    licensee:            null,
+    helloLogEnabled:     false,
+    downloadResources:   true,
+    resourceDownloadUrl: "https://models.cdn.microblink.com/resources");
+
+var sdk = await BlinkIDSdk.CreateBlinkIDSdkAsync(settings);
+
+// 2. Open a scanning session.
+using var sessionSettings = new BlinkIDSessionSettings();
+var session = await sdk.CreateScanningSessionAsync(sessionSettings);
+
+// 3. Feed frames until the document is scanned.
+using var roi   = new RegionOfInterest();
+using var input = new InputImage(uiImage, roi);
+using var frame = await session.ProcessAsync(input);
+
+using var process      = frame.ProcessResult;
+using var completeness = process?.ResultCompleteness;
+if (completeness?.ScanningStatus == ScanningStatus.DocumentScanned)
+{
+    // 4. Read the result.
+    using var result = await session.GetResultAsync();
+    string? fullName = result.FullName?.Value;
+    string? docNo    = result.DocumentNumber?.Value;
+}
 ```
 
-This package binds the BlinkID core scanning engine. For the camera UX, use [`SwiftBindings.BlinkIDUX`](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) on top of this package.
-
-See [Microblink's BlinkID documentation](https://github.com/BlinkID/blinkid-swift-package) for licensing, supported document types, and the full result schema.
+This package binds the BlinkID core scanning engine — no camera, no UI. For Microblink's prebuilt camera scanning UX, use [`SwiftBindings.BlinkIDUX`](https://www.nuget.org/packages/SwiftBindings.BlinkIDUX) on top of this package.
 
 ## Documentation
 
-- [BlinkID Swift package](https://github.com/BlinkID/blinkid-swift-package)
-- [Microblink developer documentation](https://microblink.com/products/blinkid/)
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkID) — full C# walkthrough of the binding surface
+- [BlinkIDUX usage guide (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/BlinkIDUX) — the camera scanning UX layered on this package
+- [Microblink BlinkID documentation](https://docs.microblink.com/blinkid) — concepts, supported documents, [quickstart](https://docs.microblink.com/blinkid/quickstart)
+- [Microblink developer hub](https://developer.microblink.com/) — create and manage license keys
+- [blinkid-ios (upstream)](https://github.com/microblink/blinkid-ios)
 
 ## How It Works
 

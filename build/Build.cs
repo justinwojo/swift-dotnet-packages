@@ -81,8 +81,35 @@ partial class Build : NukeBuild
     [Parameter("Package version override")]
     readonly string? Version;
 
-    [Parameter("Apple package version (separate train from SDK, e.g. 26.2.3)")]
+    [Parameter("Core SwiftBindings.Apple supplement version — the package this repo REFERENCES (separate train from SDK, e.g. 26.2.8)")]
     readonly string? AppleVersion;
+
+    /// <summary>
+    /// The per-framework <c>SwiftBindings.Apple.*</c> train — the version the
+    /// bindings in <c>apple-frameworks/</c> are PRODUCED at, plus the sibling
+    /// pins between them.
+    ///
+    /// <para>Separate from <see cref="AppleVersion"/> because the two trains
+    /// de-sync routinely: a wave often justifies new per-framework bindings
+    /// without justifying a new core supplement. Driving both off one value
+    /// stamps 17 produced packages with a version already on nuget.org carrying
+    /// different content.</para>
+    ///
+    /// <para>Omitted ⇒ falls back to <see cref="AppleVersion"/>
+    /// (<see cref="ResolveAppleBindingsVersion"/>), so every invocation written
+    /// before the split behaves exactly as it did.</para>
+    /// </summary>
+    [Parameter("Per-framework SwiftBindings.Apple.* bindings version — the train this repo PRODUCES (e.g. 26.2.10). Defaults to --apple-version.")]
+    readonly string? AppleBindingsVersion;
+
+    /// <summary>
+    /// The effective per-framework bindings train: <c>--apple-bindings-version</c>
+    /// when given, else <c>--apple-version</c>. Null only when neither was passed.
+    /// Static and parameterized so the defaulting rule is one testable rule rather
+    /// than a null-coalesce repeated at each call site.
+    /// </summary>
+    internal static string? ResolveAppleBindingsVersion(string? appleBindingsVersion, string? appleVersion) =>
+        string.IsNullOrWhiteSpace(appleBindingsVersion) ? appleVersion : appleBindingsVersion;
 
     [Parameter, Secret]
     readonly string? NuGetApiKey;

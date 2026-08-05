@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeCardScan` — the on-device card-scanning module of the [Stripe iOS SDK](https://github.com/stripe/stripe-ios). Presents a camera sheet that recognises the PAN of a physical card and returns the result without sending images off-device. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — presenting the scan sheet and reading the scanned card.
+
 ## Installation
 
 ```
@@ -26,7 +28,8 @@ var sheet = new CardScanSheet();
 
 ## Documentation
 
-- [Card scanning on iOS](https://docs.stripe.com/card-scan)
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
+- [StripeCardScan API reference (DocC)](https://stripe.dev/stripe-ios/stripecardscan/documentation/stripecardscan)
 - [`StripeCardScan` source](https://github.com/stripe/stripe-ios/tree/master/StripeCardScan)
 
 ## How It Works

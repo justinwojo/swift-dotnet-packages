@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeIdentity` — the [Stripe Identity](https://docs.stripe.com/identity) verification module of the [iOS SDK](https://github.com/stripe/stripe-ios). Presents the Stripe-hosted identity-verification sheet and reports the result back to your app. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — presenting the verification sheet and reading the flow result.
+
 ## Installation
 
 ```
@@ -29,6 +31,7 @@ using var sheet = new IdentityVerificationSheet("vs_test_client_secret");
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Verify your users' identity on iOS](https://docs.stripe.com/identity/verify-identity-documents?platform=ios)
 - [`StripeIdentity` source](https://github.com/stripe/stripe-ios/tree/master/StripeIdentity)
 

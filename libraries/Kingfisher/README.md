@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for [Kingfisher](https://github.com/onevcat/Kingfisher), a powerful pure-Swift library for downloading and caching images from the web. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Kingfisher)** — Swift→C# naming, the `KF` fluent builder for setting images on a `UIImageView`, awaited retrieval via `KingfisherManager`, cache and downloader configuration, processors, prefetching, and the limitations that decide which APIs are callable.
+
 ## Installation
 
 ```
@@ -43,6 +45,8 @@ See [Kingfisher's documentation](https://github.com/onevcat/Kingfisher/wiki) for
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Kingfisher) — full C# walkthrough of the binding surface
+- [Kingfisher documentation](https://swiftpackageindex.com/onevcat/Kingfisher/master/documentation/kingfisher) — vendor's canonical API reference
 - [Kingfisher on GitHub](https://github.com/onevcat/Kingfisher)
 - [Kingfisher wiki](https://github.com/onevcat/Kingfisher/wiki)
 

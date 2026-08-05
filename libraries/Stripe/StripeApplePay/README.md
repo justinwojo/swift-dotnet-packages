@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeApplePay` — the lightweight Apple Pay integration module of the [Stripe iOS SDK](https://github.com/stripe/stripe-ios). Lets you offer Apple Pay without pulling in the heavier `StripePaymentSheet` / `StripePayments` modules. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — Apple Pay via PaymentSheet, `PKPaymentRequest` construction, and why the standalone `STPApplePayContext` delegate isn't callable from C#.
+
 ## Installation
 
 ```
@@ -34,6 +36,7 @@ var client = new STPAPIClient("pk_test_...");
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Accept Apple Pay payments on iOS](https://docs.stripe.com/apple-pay)
 - [`StripeApplePay` source](https://github.com/stripe/stripe-ios/tree/master/StripeApplePay)
 

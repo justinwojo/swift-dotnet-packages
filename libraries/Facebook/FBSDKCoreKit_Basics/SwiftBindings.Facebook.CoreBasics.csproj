@@ -1,7 +1,16 @@
-<Project Sdk="SwiftBindings.Sdk/0.18.0">
+<Project Sdk="SwiftBindings.Sdk/0.19.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
+
+    <!-- FBSDKCoreKit_Basics ships as a pure Objective-C framework (no
+         .swiftinterface, only a clang module map + umbrella header). Both
+         properties must live in the csproj body so the .NET iOS workload's bgen
+         pipeline engages at evaluation time — without them the SDK still writes
+         ApiDefinition.cs but nothing compiles it and the package ships an
+         assembly with zero binding types. -->
+    <SwiftFrameworkType>ObjC</SwiftFrameworkType>
+    <IsBindingProject>true</IsBindingProject>
 
     <!-- NuGet package metadata -->
     <PackageId>SwiftBindings.Facebook.CoreBasics</PackageId>

@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeUICore` — the shared UI building-block module of the [Stripe iOS SDK](https://github.com/stripe/stripe-ios). It hosts form fields, theming primitives, and view utilities consumed by `StripePaymentSheet`, `StripePaymentsUI`, `StripeConnect`, `StripeIdentity`, `StripeIssuing`, and `StripeFinancialConnections`. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — where `StripeUICore` sits in the Stripe package map, and the packages that consume it.
+
 > **You should not install this package directly.** It is pulled in automatically as a transitive dependency by every public Stripe binding package that consumes it (`StripePaymentSheet`, `StripePaymentsUI`, `StripeConnect`, `StripeIdentity`, `StripeIssuing`, `StripeFinancialConnections`), so NuGet resolves it for you. It exists as a standalone NuGet only so its binary can be shared across siblings without duplication. Reference it explicitly (`dotnet add package SwiftBindings.Stripe.UICore`) only if you are intentionally calling `StripeUICore` symbols from your own code.
 
 ## Requirements
@@ -23,6 +25,7 @@ var moduleType = typeof(Functions);
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Stripe iOS SDK on GitHub](https://github.com/stripe/stripe-ios)
 - [`StripeUICore` source](https://github.com/stripe/stripe-ios/tree/master/StripeUICore)
 

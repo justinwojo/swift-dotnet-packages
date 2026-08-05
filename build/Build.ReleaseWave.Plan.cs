@@ -43,7 +43,7 @@ partial class Build
 
     /// <summary>A <c>&lt;PackageReference Include="SwiftBindings.…"&gt;</c> opening tag,
     /// any attribute order / quote style. Deliberately broader than
-    /// <see cref="AppleCrossRefTagPattern"/> (which is Apple-only) because a wave
+    /// <see cref="AppleRefTagPattern"/> (which is Apple-only) because a wave
     /// must see every intra-repo package edge, including future third-party ones.</summary>
     static readonly Regex WavePackageRefTagPattern = new(
         @"<PackageReference\b[^>]*?\bInclude\s*=\s*(?<q>[""'])SwiftBindings\.[^""']+\k<q>[^>]*?>",
@@ -68,7 +68,7 @@ partial class Build
 
     /// <summary>
     /// The <c>PackageVersion="…"</c> attribute of an SFD tag, in the same
-    /// pre/ver/post shape <see cref="AppleCrossRefVersionPattern"/> uses so the
+    /// pre/ver/post shape <see cref="AppleRefVersionPattern"/> uses so the
     /// same rewrite code drives both.
     ///
     /// <para>Note the two are safely distinct: <c>\bVersion</c> cannot match
@@ -90,7 +90,7 @@ partial class Build
     /// The <c>Version="…"</c> attribute of a <c>PackageReference</c> tag. Same
     /// shape and same prerelease-tolerant <c>ver</c> group as
     /// <see cref="WaveSfdVersionPattern"/>; deliberately NOT
-    /// <see cref="AppleCrossRefVersionPattern"/>, whose digits-only group other
+    /// <see cref="AppleRefVersionPattern"/>, whose digits-only group other
     /// targets depend on.
     ///
     /// <para><c>\bVersion</c> cannot match inside <c>PackageVersion</c> (no word
@@ -949,17 +949,26 @@ partial class Build
     string? _appleWaveVersion;
 
     /// <summary>
-    /// The shared Apple-framework version. <c>--apple-version</c> wins; otherwise
-    /// it's one patch past the highest published <c>SwiftBindings.Apple.*</c>
-    /// version in the repo, which is how the Apple train has always moved.
+    /// The shared Apple-framework version — the version the per-framework
+    /// <c>SwiftBindings.Apple.*</c> packages are PUBLISHED at, so it rides the
+    /// bindings train: <c>--apple-bindings-version</c> wins, else
+    /// <c>--apple-version</c> (unchanged for every invocation written before the
+    /// split), else one patch past the highest published
+    /// <c>SwiftBindings.Apple.*</c> version in the repo, which is how this train
+    /// has always moved. Deliberately NOT the core supplement's version: the wave
+    /// never republishes the supplement, so once the two trains de-sync, taking
+    /// <c>--apple-version</c> here would publish the per-framework packages at a
+    /// number that belongs to a different package's history.
     /// </summary>
     async Task<string> ResolveAppleTrainVersionAsync()
     {
-        if (!string.IsNullOrWhiteSpace(AppleVersion))
+        var requested = ResolveAppleBindingsVersion(AppleBindingsVersion, AppleVersion);
+        if (!string.IsNullOrWhiteSpace(requested))
         {
-            if (!WaveVersionPattern.IsMatch(AppleVersion!))
-                throw new InvalidOperationException($"--apple-version '{AppleVersion}' is not a valid semver.");
-            return AppleVersion!;
+            if (!WaveVersionPattern.IsMatch(requested!))
+                throw new InvalidOperationException(
+                    $"--apple-bindings-version/--apple-version '{requested}' is not a valid semver.");
+            return requested!;
         }
 
         string? highest = null;

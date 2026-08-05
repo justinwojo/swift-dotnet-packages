@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 2,
+  "version": "0.19.0",
+  "runId": "20260805-001604.755Z-p58228-c6bb648",
+  "timestamp": "2026-08-05T00:18:42.4007120Z",
+  "totalDurationSeconds": 19.486662,
+  "verdict": "PASS",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter MusicKit restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-sim, ios-device, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 0,
+  "counts": {
+    "planned": 1,
+    "recorded": 1,
+    "unreached": 0,
+    "pass": 1,
+    "fail": 0,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [],
+  "filter": "MusicKit",
+  "packages": [
+    "MusicKit"
+  ],
+  "platforms": [
+    "macos"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 1,
+  "inputs": {
+    "sdkVersion": "0.19.0",
+    "appleVersion": "26.2.9",
+    "appleBindingsVersion": "26.2.9",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "c6bb648",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "MusicKit": {
+        "kind": "apple-framework",
+        "version": "26.2.9",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260805-001604.755Z-p58228-c6bb648/api-surface",
+    "filesCollected": 2,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260805-001604.755Z-p58228-c6bb648",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260805-001604.755Z-p58228-c6bb648/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260805-001604.755Z-p58228-c6bb648/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "MusicKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 19.4662686,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260805-001604.755Z-p58228-c6bb648/cells/MusicKit-macos.log"
+    }
+  ]
+}

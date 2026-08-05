@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.18.0">
+<Project Sdk="SwiftBindings.Sdk/0.19.0">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -21,5 +21,11 @@
     <SwiftFrameworkDependency Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework" PackageId="SwiftBindings.Facebook.CoreBasics" PackageVersion="18.1.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
+
+<!-- BEGIN auto-detected ProjectReference -->
+  <ItemGroup>
+    <ProjectReference Include="../FBSDKCoreKit_Basics/SwiftBindings.Facebook.CoreBasics.csproj" />
+  </ItemGroup>
+  <!-- END auto-detected ProjectReference -->
 
 </Project>

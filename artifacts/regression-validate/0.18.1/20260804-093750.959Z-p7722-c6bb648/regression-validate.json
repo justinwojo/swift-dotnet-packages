@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 2,
+  "version": "0.18.1",
+  "runId": "20260804-093750.959Z-p7722-c6bb648",
+  "timestamp": "2026-08-04T09:40:41.4440680Z",
+  "totalDurationSeconds": 28.862008,
+  "verdict": "PASS",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter Lottie restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 0,
+  "counts": {
+    "planned": 1,
+    "recorded": 1,
+    "unreached": 0,
+    "pass": 1,
+    "fail": 0,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [],
+  "filter": "Lottie",
+  "packages": [
+    "Lottie"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 1,
+  "inputs": {
+    "sdkVersion": "0.18.1",
+    "appleVersion": "26.2.8",
+    "appleBindingsVersion": "26.2.8",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "c6bb648",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "Lottie": {
+        "kind": "third-party",
+        "version": "4.6.1",
+        "mode": "source"
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-093750.959Z-p7722-c6bb648/api-surface",
+    "filesCollected": 2,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-093750.959Z-p7722-c6bb648",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-093750.959Z-p7722-c6bb648/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-093750.959Z-p7722-c6bb648/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 28.8586158,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-093750.959Z-p7722-c6bb648/cells/Lottie-ios-sim.log"
+    }
+  ]
+}

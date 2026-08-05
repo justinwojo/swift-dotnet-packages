@@ -80,7 +80,7 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 - `BuildAndPackRelease --library X --version V [--output dir] [--dry-run]` — release build at `-c Release`, then pack, then write `release-manifest.json`.
 - `PublishRelease --packages-dir dir --nuget-api-key K` — push `.nupkg` files to nuget.org (parallelism=5, `--skip-duplicate`).
 - `ReleaseWave --wave-spec "Lib=1.2.3,…" | --libraries A,B --auto-version | --all --auto-version` — run the **whole release pipeline locally** (build → pack → sim-validate → publish) for 1..N libraries in one process, dependency-ordered, bounded-parallel. **Dry run by default** — see "Local release waves" under Release Process.
-- `RegressionValidate --version V [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS and MacCatalyst run binaries directly. Only tvOS remains BUILD-ONLY (no validator yet).
+- `RegressionValidate --version V --apple-version A [--apple-bindings-version B] [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS and MacCatalyst run binaries directly. Only tvOS remains BUILD-ONLY (no validator yet). See "Two Apple version trains" below for the two Apple flags.
 - `ListChangedLibraries [--base-sha S --head-sha S | --all] [--json]` — emit the CI matrix (newline-delimited or GHA `{"include":[...]}` JSON).
 - `ListSims` / `BootSim` / `ShutdownSim` — simulator fleet management.
 
@@ -347,7 +347,18 @@ NUGET_API_KEY=… dotnet nuke ReleaseWave --all --auto-version --apple-version 2
 
 **Selection** — exactly one of `--wave-spec`, `--libraries … --auto-version`, or `--all --auto-version`. `--all` means *every already-published library*: `AppIntents` is hard-excluded (do-not-ship, rejected even if named explicitly), and libraries that exist in the repo but have never shipped (Facebook, MapLibre today) are excluded too — first-time publication must be an explicit act, so name them in `--wave-spec`/`--libraries`.
 
-**`--auto-version`** applies the convention documented above: third-party libraries ship at `library.json`'s version when it's newer than the last published NuGet version, otherwise last-published patch + 1; Apple frameworks all share one version from `--apple-version`, else highest-published-Apple + 1 patch. Every lookup is a live nuget.org flat-container query and is printed in the plan.
+**`--auto-version`** applies the convention documented above: third-party libraries ship at `library.json`'s version when it's newer than the last published NuGet version, otherwise last-published patch + 1; Apple frameworks all share one version from `--apple-bindings-version` (default: `--apple-version`), else highest-published-Apple + 1 patch. Every lookup is a live nuget.org flat-container query and is printed in the plan.
+
+### Two Apple version trains
+
+`SwiftBindings.Apple` (the core supplement this repo *references*, injected by the SDK as a floating range) and `SwiftBindings.Apple.<Framework>` (the 17 per-framework packages this repo *produces*) are separate release trains on separate cadences, and they de-sync routinely. Two flags, two trains:
+
+| Flag | Governs | Read as |
+|---|---|---|
+| `--apple-version` | the core supplement: NuGet cache eviction, any explicit `SwiftBindings.Apple` pin, the run artifact's `inputs.appleVersion` | a **reference** |
+| `--apple-bindings-version` | each `apple-frameworks/*` csproj's own `<Version>`, cross-framework sibling pins (`RealityKit`→`RealityFoundation`, `MatterSupport`→`Matter`), and what `--auto-version` waves ship | a **produced identity** |
+
+`--apple-bindings-version` **defaults to `--apple-version`** when omitted, so every pre-split invocation behaves exactly as before. `AssertCrossFrameworkCoherence` validates each `SwiftBindings.Apple*` pin against its own train and names the flag to pass in the failure message; an Apple `PackageReference` whose version can't be read still fails loud. Coverage: `dotnet nuke TestAppleVersionSplit` (also run by `TestHarness`).
 
 **`--dry-run` defaults to TRUE.** Publishing requires `--dry-run false` *and* a key in `NUGET_API_KEY` or `--nuget-api-key` (checked in preflight, never logged). Publish is skipped entirely if any library failed, unless `--publish-partial`.
 

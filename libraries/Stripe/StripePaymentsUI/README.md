@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripePaymentsUI` — the UI controls layered on top of [`StripePayments`](https://www.nuget.org/packages/SwiftBindings.Stripe.Payments). Includes `STPCardFormView`, `STPPaymentCardTextField`, and the supporting view-styling primitives, for apps that want to compose their own payment-entry UI rather than use [PaymentSheet](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentSheet). These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — card-entry controls (`STPCardFormView`, `STPPaymentCardTextField`), brand imagery, and the delegate caveats.
+
 ## Installation
 
 ```
@@ -33,6 +35,7 @@ var textField = new STPPaymentCardTextField(new Swift.CGRect(0, 0, 320, 44));
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Card element guides](https://docs.stripe.com/payments/accept-a-payment?platform=ios&ui=elements)
 - [`StripePaymentsUI` source](https://github.com/stripe/stripe-ios/tree/master/StripePaymentsUI)
 

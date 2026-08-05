@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 2,
+  "version": "0.18.1",
+  "runId": "20260804-075740.523Z-p10021-c6bb648",
+  "timestamp": "2026-08-04T08:02:13.7733500Z",
+  "totalDurationSeconds": 128.695653,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter BlinkID,BlinkIDUX,Facebook,Kingfisher,Lottie,MapLibre,Mappedin,Nuke,Stripe restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 2,
+  "counts": {
+    "planned": 9,
+    "recorded": 9,
+    "unreached": 0,
+    "pass": 5,
+    "fail": 4,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [
+    {
+      "library": "Facebook",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    }
+  ],
+  "filter": "BlinkID,BlinkIDUX,Facebook,Kingfisher,Lottie,MapLibre,Mappedin,Nuke,Stripe",
+  "packages": [
+    "BlinkID",
+    "BlinkIDUX",
+    "Facebook",
+    "Kingfisher",
+    "Lottie",
+    "MapLibre",
+    "Mappedin",
+    "Nuke",
+    "Stripe"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 9,
+  "inputs": {
+    "sdkVersion": "0.18.1",
+    "appleVersion": "26.2.8",
+    "appleBindingsVersion": "26.2.8",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "c6bb648",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "BlinkID": {
+        "kind": "third-party",
+        "version": "7.8.0",
+        "mode": "zip"
+      },
+      "BlinkIDUX": {
+        "kind": "third-party",
+        "version": "7.8.0",
+        "mode": "zip"
+      },
+      "Facebook": {
+        "kind": "third-party",
+        "version": "18.1.0",
+        "mode": "binary"
+      },
+      "Kingfisher": {
+        "kind": "third-party",
+        "version": "8.11.0",
+        "mode": "source"
+      },
+      "Lottie": {
+        "kind": "third-party",
+        "version": "4.6.1",
+        "mode": "source"
+      },
+      "MapLibre": {
+        "kind": "third-party",
+        "version": "6.28.0",
+        "mode": "zip"
+      },
+      "Mappedin": {
+        "kind": "third-party",
+        "version": "6.7.0",
+        "mode": "zip"
+      },
+      "Nuke": {
+        "kind": "third-party",
+        "version": "13.0.6",
+        "mode": "source"
+      },
+      "Stripe": {
+        "kind": "third-party",
+        "version": "26.4.1",
+        "mode": "zip"
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/api-surface",
+    "filesCollected": 40,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "BlinkID",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 38.9270463,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/BlinkID-ios-sim.log"
+    },
+    {
+      "library": "BlinkIDUX",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 34.8974841,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/BlinkIDUX-ios-sim.log"
+    },
+    {
+      "library": "Facebook",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 86.6137872,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Facebook-ios-sim.log"
+    },
+    {
+      "library": "Kingfisher",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 45.7991562,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Kingfisher-ios-sim.log"
+    },
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 13.8675289,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Lottie-ios-sim.log"
+    },
+    {
+      "library": "MapLibre",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 71.9647707,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/MapLibre-ios-sim.log"
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 40.9993467,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Mappedin-ios-sim.log"
+    },
+    {
+      "library": "Nuke",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 38.1197441,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Nuke-ios-sim.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 123.6507199,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-075740.523Z-p10021-c6bb648/cells/Stripe-ios-sim.log"
+    }
+  ]
+}

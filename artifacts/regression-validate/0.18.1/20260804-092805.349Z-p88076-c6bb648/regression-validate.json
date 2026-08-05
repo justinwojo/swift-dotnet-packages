@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "version": "0.18.1",
+  "runId": "20260804-092805.349Z-p88076-c6bb648",
+  "timestamp": "2026-08-04T09:32:56.7674540Z",
+  "totalDurationSeconds": 121.645537,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter Lottie,Mappedin,Stripe restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 2,
+  "counts": {
+    "planned": 3,
+    "recorded": 3,
+    "unreached": 0,
+    "pass": 2,
+    "fail": 1,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1"
+    }
+  ],
+  "filter": "Lottie,Mappedin,Stripe",
+  "packages": [
+    "Lottie",
+    "Mappedin",
+    "Stripe"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 3,
+  "inputs": {
+    "sdkVersion": "0.18.1",
+    "appleVersion": "26.2.8",
+    "appleBindingsVersion": "26.2.8",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "c6bb648",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "Lottie": {
+        "kind": "third-party",
+        "version": "4.6.1",
+        "mode": "source"
+      },
+      "Mappedin": {
+        "kind": "third-party",
+        "version": "6.7.0",
+        "mode": "zip"
+      },
+      "Stripe": {
+        "kind": "third-party",
+        "version": "26.4.1",
+        "mode": "zip"
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/api-surface",
+    "filesCollected": 24,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "Lottie",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "dotnet build (ios) failed with exit 1",
+      "durationSeconds": 38.160571,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/cells/Lottie-ios-sim.log"
+    },
+    {
+      "library": "Mappedin",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 116.632468,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/cells/Mappedin-ios-sim.log"
+    },
+    {
+      "library": "Stripe",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 121.6433786,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.18.1/20260804-092805.349Z-p88076-c6bb648/cells/Stripe-ios-sim.log"
+    }
+  ]
+}

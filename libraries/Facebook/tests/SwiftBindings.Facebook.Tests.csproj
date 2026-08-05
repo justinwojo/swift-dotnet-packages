@@ -22,12 +22,67 @@
     <IncludeSwiftBindingsRuntimeNative>true</IncludeSwiftBindingsRuntimeNative>
   </PropertyGroup>
 
+  <!-- KNOWN UPSTREAM DEFECT — this app builds and runs on the SIMULATOR ONLY.
+
+       This is a MIXED-LANE vs PURE-OBJC-LANE collision, not two pure-ObjC assemblies:
+       binding-metadata.props shows FBSDKCoreKit_Basics alone has
+       _SwiftBindingHasWrapperXCFramework=False (pure ObjC, sidecar only), while
+       FBSDKCoreKit and FBSDKShareKit are mixed lane and FBAEMKit and FBSDKLoginKit are
+       Swift lane — all four carry a real wrapper xcframework plus its
+       buildTransitive/runtimes payload. The collision is therefore between a mixed-lane
+       companion assembly (Core) and a pure-ObjC assembly (Basics).
+
+       FBSDKCoreKit's generated ApiDefinition re-declares 13 entries that
+       FBSDKCoreKit_Basics also owns, spanning seven distinct NATIVE names —
+       one class (FBSDKCrashHandler) and six protocols (FBSDKCrashObserving,
+       FBSDKDataPersisting, FBSDKFileDataExtracting, FBSDKFileManaging,
+       FBSDKInfoDictionaryProviding, FBSDKNotificationDelivering), each protocol
+       contributing both a [Protocol] model type and an I... interface. Only the seven
+       native names collide in the registrar, which is why MT4118 reports seven.
+       Core emits empty [Protocol] shims; Basics emits the real types. Loading
+       both managed assemblies in one app collides in the ObjC registrar:
+
+         * dynamic registrar (simulator Debug, what this app runs on) — the runtime
+           logs "Could not register the assembly 'SwiftBindings.Facebook.CoreBasics'
+           ... Cannot register two managed types (...) with the same native name
+           ('FBSDKCrashHandler')" at startup and SWALLOWS it. The app runs and every
+           test below passes, because bgen resolves each type through
+           Class.GetHandle against the already-loaded native class.
+         * static / managed-static registrar — hard BUILD failure:
+           MT4118 -> MT4116 -> MT2431/MT2362 -> IL7000 -> NETSDK1144. managed-static
+           is forced for NativeAOT and is the default for non-simulator iOS, so
+           BuildTestApp for the Facebook library with the device flag, with or
+           without the aot flag, BOTH fail.
+
+       Dropping the CoreBasics ProjectReference below does NOT unblock the device
+       leg: SwiftBindings.Facebook.Core itself ProjectReferences CoreBasics (the SDK's
+       SWIFTBIND081 assertion requires a managed reference for the CoreBasics
+       SwiftFrameworkDependency), so the assembly arrives transitively regardless.
+       Consequently EVERY consumer of SwiftBindings.Facebook.Core is device-blocked,
+       not just ones that opt into CoreBasics.
+
+       Verified remediation (not applied — it trades a build failure for a packaging
+       one): marking the CoreBasics SwiftFrameworkDependency NativeOnly="true" in
+       Core/AEM/Login/Share and dropping their CoreBasics ProjectReferences makes
+       a device NativeAOT build run clean through to an .ipa. No consumer's generated C#
+       references the FBSDKCoreKit_Basics namespace, so nothing fails to compile —
+       but the published packages would then no longer declare their dependency on
+       SwiftBindings.Facebook.CoreBasics, so a consumer installing only Core would
+       be missing FBSDKCoreKit_Basics.framework at runtime. The real fix is upstream:
+       stop emitting the duplicate declarations in FBSDKCoreKit. -->
+
   <ItemGroup>
     <None Include="Info.plist" />
   </ItemGroup>
 
-  <!-- Binding projects (Core is pulled in transitively by Login/Share too) -->
+  <!-- Binding projects (Core is pulled in transitively by Login/Share too).
+       CoreBasics and AEM are referenced explicitly so their managed binding
+       assemblies are actually loaded into the app and can be exercised — a bare
+       <NativeReference> only embeds the native framework, it does not bring the
+       C# surface along. -->
   <ItemGroup>
+    <ProjectReference Include="../FBSDKCoreKit_Basics/SwiftBindings.Facebook.CoreBasics.csproj" />
+    <ProjectReference Include="../FBAEMKit/SwiftBindings.Facebook.AEM.csproj" />
     <ProjectReference Include="../FBSDKCoreKit/SwiftBindings.Facebook.Core.csproj" />
     <ProjectReference Include="../FBSDKLoginKit/SwiftBindings.Facebook.Login.csproj" />
     <ProjectReference Include="../FBSDKShareKit/SwiftBindings.Facebook.Share.csproj" />
@@ -98,8 +153,10 @@
     </ItemGroup>
   </Target>
 
-  <!-- FBSDKCoreKit_Basics is a transitive dependency (pure ObjC, no Swift wrapper
-       and no ProjectReference.targets), so its framework is referenced directly. -->
+  <!-- FBSDKCoreKit_Basics is pure ObjC: no Swift wrapper xcframework and no
+       generated ProjectReference.targets, so its native framework is referenced
+       directly here (its managed binding assembly comes in via the
+       ProjectReference above). -->
   <ItemGroup>
     <NativeReference Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework"><Kind>Framework</Kind></NativeReference>
   </ItemGroup>

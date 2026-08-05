@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeIssuing` — the [Stripe Issuing](https://docs.stripe.com/issuing) push-provisioning module of the [iOS SDK](https://github.com/stripe/stripe-ios). Adds Stripe-issued cards to Apple Wallet via PassKit's in-app provisioning flow. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — push provisioning into Apple Wallet, PIN management, and the ephemeral-key-provider caveat.
+
 ## Installation
 
 ```
@@ -33,6 +35,7 @@ var details = new STPPushProvisioningDetailsParams(
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Push provisioning on iOS](https://docs.stripe.com/issuing/cards/digital-wallets)
 - [`StripeIssuing` source](https://github.com/stripe/stripe-ios/tree/master/StripeIssuing)
 

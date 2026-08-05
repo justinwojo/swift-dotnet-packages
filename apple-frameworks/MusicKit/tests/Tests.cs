@@ -485,9 +485,9 @@ internal static class Tests
         // which proves the ergonomic surface exists, and the ldftn below roots it for the trimmer.
         static void RootMusicItemCollectionErgonomics(MusicItemCollection<Song> c)
         {
-            c.Index((int)0);                   // index(after:) instance overload
+            c.IndexAfter((int)0);              // index(after:) instance overload
             nint formIdx = 0;                  // formIndex(after: inout Index) surfaces as ref nint
-            c.FormIndex(ref formIdx);          // formIndex(after:) instance overload
+            c.FormIndexAfter(ref formIdx);     // formIndex(after:) instance overload
             _ = c.Index((nint)0, (nint)0);     // index(_:offsetBy:) CSM extension
             _ = c.Distance((nint)0, (nint)0);  // distance(from:to:) CSM extension
         }
@@ -536,13 +536,15 @@ internal static class Tests
             }
             else
             {
-                // index(after:) — instance method with an int convenience overload.
-                if (t.GetMethod("Index", new[] { typeof(int) }) is null)
-                    throw new InvalidOperationException("Index(int) missing");
+                // index(after:) — instance method with an int convenience overload. The bare name
+                // Index belongs to the index(_:offsetBy:) CSM extension, so the label-collision
+                // ladder names this one from its argument label.
+                if (t.GetMethod("IndexAfter", new[] { typeof(int) }) is null)
+                    throw new InvalidOperationException("IndexAfter(int) missing");
                 // formIndex(after: inout Index) surfaces as ref nint — no by-value convenience
                 // overload is possible (the writeback would be lost), so probe the ref nint form.
-                if (t.GetMethod("FormIndex", new[] { typeof(nint).MakeByRefType() }) is null)
-                    throw new InvalidOperationException("FormIndex(ref nint) missing");
+                if (t.GetMethod("FormIndexAfter", new[] { typeof(nint).MakeByRefType() }) is null)
+                    throw new InvalidOperationException("FormIndexAfter(ref nint) missing");
 
                 // index(_:offsetBy:)/distance(from:to:) — CSM concrete-specialization extension methods
                 // (nint, nint). Callable as collection.Index(i, distance) / collection.Distance(start, end).
@@ -556,7 +558,8 @@ internal static class Tests
                 // None of these members may be [Obsolete] — that's the SB0001-stub marker.
                 foreach (var m in t.GetMethods())
                 {
-                    if (m.Name is "Index" or "FormIndex" or "Distance"
+                    if (m.Name is "Index" or "IndexAfter" or "IndexBefore"
+                            or "FormIndexAfter" or "FormIndexBefore" or "Distance"
                         && m.GetCustomAttributes(typeof(ObsoleteAttribute), false).Length > 0)
                     {
                         throw new InvalidOperationException($"{m.Name}({string.Join(",", Array.ConvertAll(m.GetParameters(), p => p.ParameterType.Name))}) is still [Obsolete] — SB0001 cleanup regressed");

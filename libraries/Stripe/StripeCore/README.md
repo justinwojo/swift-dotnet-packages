@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeCore` — the foundational module of the [Stripe iOS SDK](https://github.com/stripe/stripe-ios). It hosts the API client (`STPAPIClient`), networking primitives, the `STPAppInfo` partner-info struct, error types, and shared cross-module types that every other Stripe package depends on. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — publishable-key setup, `STPAPIClient` / `StripeAPI`, and how every other Stripe package builds on them.
+
 ## Installation
 
 ```
@@ -30,6 +32,7 @@ var appInfo = new STPAppInfo("MyApp", "partner_123", "1.0.0", "https://example.c
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Stripe iOS SDK overview](https://docs.stripe.com/sdks/ios)
 - [`StripeCore` source](https://github.com/stripe/stripe-ios/tree/master/StripeCore)
 

@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for [Lottie](https://github.com/airbnb/lottie-ios), Airbnb's library for rendering After Effects animations natively on iOS. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Lottie)** — Swift→C# naming, loading animations (JSON / `.lottie`), embedding `LottieAnimationView` in UIKit, playback control, loop modes and scrubbing, keypaths and value providers, and the main-actor / label-derived-overload-naming caveats.
+
 ## Installation
 
 ```
@@ -40,7 +42,8 @@ animView.Pause();
 animView.Stop();
 
 // Play a specific progress range
-animView.Play(fromProgress: 0.0, toProgress: 0.5);
+// (Swift's play(fromProgress:toProgress:…) — colliding overloads are named from their labels)
+animView.PlayFromProgressToProgressLoopModeCompletion(fromProgress: 0.0, toProgress: 0.5);
 
 // Adjust speed and check state
 animView.AnimationSpeed = 1.5;
@@ -91,6 +94,12 @@ var floatProvider = new FloatValueProvider(0.75);
 var sizeProvider = new SizeValueProvider((Swift.CGSize)new CGSize(100, 200));
 var pointProvider = new PointValueProvider((Swift.CGPoint)new CGPoint(50, 75));
 ```
+
+## Documentation
+
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Lottie) — full C# walkthrough of the binding surface
+- [Lottie official documentation (iOS)](https://lottie.airbnb.tech/#/ios)
+- [Lottie iOS DocC API reference](https://swiftpackageindex.com/airbnb/lottie-ios/master/documentation/lottie)
 
 ## How It Works
 

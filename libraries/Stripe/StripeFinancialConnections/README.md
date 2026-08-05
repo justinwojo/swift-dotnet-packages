@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeFinancialConnections` — the [Stripe Financial Connections](https://docs.stripe.com/financial-connections) module of the [iOS SDK](https://github.com/stripe/stripe-ios). Presents a sheet for users to link a bank account, and returns the linked-account session to your app. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — presenting the bank-linking sheet and reading the session / token result.
+
 ## Installation
 
 ```
@@ -28,6 +30,7 @@ var sheet = new FinancialConnectionsSheet("fcs_test_client_secret");
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Financial Connections on iOS](https://docs.stripe.com/financial-connections/other-data-powered-products?platform=ios)
 - [`StripeFinancialConnections` source](https://github.com/stripe/stripe-ios/tree/master/StripeFinancialConnections)
 

@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripeConnect` — the [Stripe Connect](https://docs.stripe.com/connect) embedded-components module of the [iOS SDK](https://github.com/stripe/stripe-ios). Lets your platform host Stripe-managed UI (account onboarding, payouts, payments) inside your own app for Connect-connected accounts. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — why embedded components aren't constructible from C# today, and the Stripe surface that is.
+
 ## Installation
 
 ```
@@ -32,6 +34,7 @@ var corner = new EmbeddedComponentManager.Appearance.CornerRadiusType();
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Embedded components for Stripe Connect on iOS](https://docs.stripe.com/connect/get-started-connect-embedded-components)
 - [`StripeConnect` source](https://github.com/stripe/stripe-ios/tree/master/StripeConnect)
 

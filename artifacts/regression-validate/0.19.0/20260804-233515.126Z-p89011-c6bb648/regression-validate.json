@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "version": "0.19.0",
+  "runId": "20260804-233515.126Z-p89011-c6bb648",
+  "timestamp": "2026-08-04T23:39:03.3861120Z",
+  "totalDurationSeconds": 81.025142,
+  "verdict": "PASS",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter MusicKit,RealityFoundation restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 0,
+  "counts": {
+    "planned": 2,
+    "recorded": 2,
+    "unreached": 0,
+    "pass": 2,
+    "fail": 0,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [],
+  "filter": "MusicKit,RealityFoundation",
+  "packages": [
+    "MusicKit",
+    "RealityFoundation"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 2,
+  "inputs": {
+    "sdkVersion": "0.19.0",
+    "appleVersion": "26.2.9",
+    "appleBindingsVersion": "26.2.9",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "c6bb648",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "MusicKit": {
+        "kind": "apple-framework",
+        "version": "26.2.9",
+        "mode": null
+      },
+      "RealityFoundation": {
+        "kind": "apple-framework",
+        "version": "26.2.9",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648/api-surface",
+    "filesCollected": 7,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "MusicKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 30.4330845,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648/cells/MusicKit-ios-sim.log"
+    },
+    {
+      "library": "RealityFoundation",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 81.0226401,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.0/20260804-233515.126Z-p89011-c6bb648/cells/RealityFoundation-ios-sim.log"
+    }
+  ]
+}

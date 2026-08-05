@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripePaymentSheet` — Stripe's drop-in payment UI for the [iOS SDK](https://github.com/stripe/stripe-ios). Renders all enabled payment methods, handles 3D Secure, Apple Pay, and saved-card flows, and returns a result your app can act on. Pair with `CustomerSheet` to manage saved payment methods. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — drop-in checkout, configuration and appearance, `FlowController`, address collection, and the deferred-intent limitation.
+
 ## Installation
 
 ```
@@ -37,18 +39,19 @@ appearance.BorderWidth = 2.0;
 ### Address collection
 
 ```csharp
-var addressType = new AddressViewController.AddressDetails.AddressType(
+var address = new AddressViewController.AddressDetails.AddressInfo(
     city: "San Francisco",
     country: "US",
     line1: "123 Market St",
     line2: null,
     postalCode: "94107",
     state: "CA");
-var details = new AddressViewController.AddressDetails(addressType, name: "Test User");
+var details = new AddressViewController.AddressDetails(address, name: "Test User");
 ```
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Accept a payment with PaymentSheet](https://docs.stripe.com/payments/accept-a-payment?platform=ios)
 - [PaymentSheet appearance API](https://docs.stripe.com/elements/appearance-api?platform=ios)
 - [`StripePaymentSheet` source](https://github.com/stripe/stripe-ios/tree/master/StripePaymentSheet)

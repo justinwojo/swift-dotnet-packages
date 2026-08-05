@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for `StripePayments` — the module of the [Stripe iOS SDK](https://github.com/stripe/stripe-ios) that handles `PaymentIntent`, `SetupIntent`, `PaymentMethod`, and the underlying confirm/handle-action flows. Use this package when you need fine-grained control over payment confirmation; if you want a drop-in UI, use [`SwiftBindings.Stripe.PaymentSheet`](https://www.nuget.org/packages/SwiftBindings.Stripe.PaymentSheet) instead. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — payment/setup intents, payment-method params, card validation, 3DS handling, and the `STPAPIClient` extension surface.
+
 ## Installation
 
 ```
@@ -43,6 +45,7 @@ var setup = new STPSetupIntentConfirmParams("seti_test_secret_123");
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Build a custom payments integration on iOS](https://docs.stripe.com/payments/accept-a-payment?platform=ios&ui=custom)
 - [`StripePayments` source](https://github.com/stripe/stripe-ios/tree/master/StripePayments)
 

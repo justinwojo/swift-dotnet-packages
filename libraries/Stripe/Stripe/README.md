@@ -2,6 +2,8 @@
 
 Native Swift interop bindings for [Stripe iOS](https://github.com/stripe/stripe-ios) — the umbrella module that re-exports the most common Stripe payment APIs (`STPAPIClient`, payment-method params, payment / setup intent flows). For most apps, depend on the more specific package(s) below; pull this umbrella in only if you want everything wired up the way the Swift SDK does it. These are not Objective-C proxy wrappers — they use .NET 10's native Swift interop for direct, high-performance calls into Swift APIs from C#.
 
+> 📖 **[Full usage guide →](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe)** — the package map for all 14 Stripe packages, PaymentSheet checkout, API-client setup, and which flows the bindings can't express.
+
 ## Installation
 
 ```
@@ -52,6 +54,7 @@ The Stripe iOS SDK is split into ~11 modules. Pick the ones your app actually us
 
 ## Documentation
 
+- [**Usage guide** (wiki)](https://github.com/justinwojo/swift-dotnet-packages/wiki/Stripe) — full C# walkthrough of the binding surface
 - [Stripe iOS SDK overview](https://docs.stripe.com/sdks/ios)
 - [Accept a payment on iOS](https://docs.stripe.com/payments/accept-a-payment?platform=ios)
 - [Stripe iOS SDK on GitHub](https://github.com/stripe/stripe-ios)
