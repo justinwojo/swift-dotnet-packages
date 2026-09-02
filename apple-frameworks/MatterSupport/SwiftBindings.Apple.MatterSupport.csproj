@@ -23,6 +23,6 @@
   <ItemGroup>
     <!-- MatterAddDeviceRequest.setupPayload returns Matter.MTRSetupPayload, so
          consumers need the sibling package on restore. -->
-    <PackageReference Include="SwiftBindings.Apple.Matter" Version="26.2.12" />
+    <PackageReference Include="SwiftBindings.Apple.Matter" Version="26.2.13" />
   </ItemGroup>
 </Project>

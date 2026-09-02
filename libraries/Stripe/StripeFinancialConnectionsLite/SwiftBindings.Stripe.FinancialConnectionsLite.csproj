@@ -24,21 +24,24 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
+<!-- StripeFinancialConnectionsLite's native links @rpath/StripeCore.framework/StripeCore, so the
+     PackageId/PackageVersion on the SwiftFrameworkDependency below must stay: they are what makes
+     the packed nuspec declare SwiftBindings.Stripe.Core. Deliberately NOT NativeOnly="true" — that
+     opt-out silences SWIFTBIND081 but also drops the nuspec dependency, leaving the package
+     under-declaring a framework it genuinely loads. The ProjectReference further down is the SDK's
+     primary fix and matches StripeCameraCore, the existing native-carrier package with the same
+     StripeCore linkage. This note sits OUTSIDE the block because the injector regenerates the block
+     wholesale and strips any comment placed within it. -->
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <!-- StripeFinancialConnectionsLite's native links @rpath/StripeCore.framework/StripeCore,
-         so PackageId/PackageVersion must stay: they are what makes the packed nuspec
-         declare SwiftBindings.Stripe.Core. Deliberately NOT NativeOnly="true" — that
-         opt-out silences SWIFTBIND081 but also drops the nuspec dependency, leaving the
-         package under-declaring a framework it genuinely loads. The ProjectReference
-         below is the SDK's primary fix and matches StripeCameraCore, the existing
-         native-carrier package with the same StripeCore linkage. -->
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.4.2" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
+<!-- BEGIN auto-detected ProjectReference -->
   <ItemGroup>
     <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
   </ItemGroup>
+  <!-- END auto-detected ProjectReference -->
 
 </Project>
