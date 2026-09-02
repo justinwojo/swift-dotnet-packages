@@ -234,8 +234,10 @@ partial class Build
     // ── Pure: version arithmetic ────────────────────────────────────────────
 
     /// <summary>
-    /// Compare two package versions. Numeric major/minor/patch first (missing
-    /// components read as 0), then SemVer 2.0 §11.4 precedence for the prerelease
+    /// Compare two package versions. Numeric major/minor/patch/revision first
+    /// (missing components read as 0, so <c>1.2.3</c> == <c>1.2.3.0</c> and
+    /// <c>1.2.3</c> &lt; <c>1.2.3.1</c> — matching how NuGet normalizes and orders
+    /// four-part versions), then SemVer 2.0 §11.4 precedence for the prerelease
     /// tail: a release outranks the same numeric prerelease, and two prereleases
     /// compare identifier by identifier — numerically where both identifiers are
     /// numeric, with numeric ranking below alphanumeric, and a shorter identifier
@@ -253,16 +255,16 @@ partial class Build
             var pre = dash >= 0 ? core[(dash + 1)..] : "";
             if (dash >= 0) core = core[..dash];
 
-            var nums = new int[3];
+            var nums = new int[4];
             var segs = core.Split('.');
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < 4; i++)
                 nums[i] = i < segs.Length && int.TryParse(segs[i], out var n) ? n : 0;
             return (nums, pre);
         }
 
         var (an, ap) = Split(a);
         var (bn, bp) = Split(b);
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < 4; i++)
         {
             var c = an[i].CompareTo(bn[i]);
             if (c != 0) return c;
@@ -317,14 +319,71 @@ partial class Build
     }
 
     /// <summary>
+    /// The three-component core of a version — prerelease tail, build metadata
+    /// and any fourth (revision) component removed. <c>4.6.1.3-beta+sha</c> ⇒
+    /// <c>4.6.1</c>. Used to ask "is this published version a rebuild of that
+    /// upstream release?" without a revision or tail defeating the match.
+    /// </summary>
+    internal static string CoreVersion(string version)
+    {
+        var core = version;
+        var cut = core.IndexOfAny(new[] { '-', '+' });
+        if (cut >= 0) core = core[..cut];
+        var segs = core.Split('.');
+        var major = segs.Length > 0 && int.TryParse(segs[0], out var a) ? a : 0;
+        var minor = segs.Length > 1 && int.TryParse(segs[1], out var b) ? b : 0;
+        var patch = segs.Length > 2 && int.TryParse(segs[2], out var c) ? c : 0;
+        return $"{major}.{minor}.{patch}";
+    }
+
+    /// <summary>
+    /// The next rebuild release after <paramref name="version"/>: the same
+    /// three-component core with its fourth (revision) component incremented,
+    /// appearing for the first time as <c>.1</c>. <c>18.1.1</c> ⇒
+    /// <c>18.1.1.1</c> ⇒ <c>18.1.1.2</c>.
+    ///
+    /// <para>
+    /// Never emits a <c>.0</c> revision: NuGet normalizes <c>X.Y.Z.0</c> back to
+    /// <c>X.Y.Z</c>, so a zero revision would collide with the release it is
+    /// meant to follow. A prerelease tail is dropped, as in
+    /// <see cref="NextPatchVersion"/>.
+    /// </para>
+    /// </summary>
+    internal static string NextRevisionVersion(string version)
+    {
+        var core = version;
+        var cut = core.IndexOfAny(new[] { '-', '+' });
+        if (cut >= 0) core = core[..cut];
+        var segs = core.Split('.');
+        var revision = segs.Length > 3 && int.TryParse(segs[3], out var r) ? r : 0;
+        return $"{CoreVersion(version)}.{revision + 1}";
+    }
+
+    /// <summary>
     /// The documented third-party auto-version rule (CLAUDE.md "Versioning
-    /// convention"): a new upstream release ships AT the upstream version; a
-    /// rebuild of the same upstream bumps the PATCH of the last published NuGet
-    /// version. The NuGet patch routinely exceeds the upstream patch, which is why
-    /// this compares rather than assuming.
+    /// convention"), in three branches:
+    ///
+    /// <list type="number">
+    ///   <item><b>New upstream release</b> ⇒ ship AT the upstream version.</item>
+    ///   <item><b>Rebuild of the upstream we are already on</b> (the last
+    ///         published version's three-component core equals the upstream
+    ///         version) ⇒ bump the fourth component: <c>18.1.1</c> ⇒
+    ///         <c>18.1.1.1</c>. This keeps major.minor.patch meaning exactly
+    ///         "upstream X.Y.Z" forever, so upstream's own next release can
+    ///         always be shipped under its real number.</item>
+    ///   <item><b>Rebuild of a library whose published version has already
+    ///         drifted past upstream</b> (the pre-revision convention spent
+    ///         patch numbers out of upstream's namespace — Lottie published
+    ///         4.6.1–4.6.7 against upstream 4.6.0/4.6.1) ⇒ keep bumping the
+    ///         PATCH, because a revision on the upstream core would sort BELOW
+    ///         what we already shipped. Such a library re-syncs on its own at
+    ///         upstream's next release that outranks our last patch, after
+    ///         which branch 2 applies.</item>
+    /// </list>
     ///
     /// <paramref name="lastPublished"/> null (never published) ⇒ ship at
-    /// <paramref name="upstreamVersion"/>.
+    /// <paramref name="upstreamVersion"/>. A null <paramref name="upstreamVersion"/>
+    /// (no library.json to read) can only take branch 3.
     /// </summary>
     internal static string ResolveThirdPartyVersion(string? upstreamVersion, string? lastPublished)
     {
@@ -336,6 +395,12 @@ partial class Build
 
         if (!string.IsNullOrEmpty(upstreamVersion) && CompareVersions(upstreamVersion!, lastPublished!) > 0)
             return upstreamVersion!;
+
+        // Same upstream, rebuilt: move the revision, not the patch. Compares
+        // cores so an existing revision (18.1.1.1) still matches upstream 18.1.1.
+        if (!string.IsNullOrEmpty(upstreamVersion)
+            && CoreVersion(lastPublished!) == CoreVersion(upstreamVersion!))
+            return NextRevisionVersion(lastPublished!);
 
         return NextPatchVersion(lastPublished!);
     }

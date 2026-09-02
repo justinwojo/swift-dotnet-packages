@@ -79,7 +79,7 @@ Bindings against the prebuilt `Stripe.xcframework.zip` published with each [stri
 | [`SwiftBindings.Stripe.CardScan`](libraries/Stripe/StripeCardScan/README.md) | On-device card scanning | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.CardScan.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.CardScan) |
 | [`SwiftBindings.Stripe.FinancialConnections`](libraries/Stripe/StripeFinancialConnections/README.md) | Bank-account linking sheet | [![NuGet](https://img.shields.io/nuget/v/SwiftBindings.Stripe.FinancialConnections.svg)](https://www.nuget.org/packages/SwiftBindings.Stripe.FinancialConnections) |
 
-**Transitive support packages** — pulled in automatically by the products above; **do not install directly**: [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) (shared UI primitives), [`SwiftBindings.Stripe.ThreeDS2`](libraries/Stripe/Stripe3DS2/README.md) (3-D Secure 2), and [`SwiftBindings.Stripe.CameraCore`](libraries/Stripe/StripeCameraCore/README.md) (camera-capture infrastructure). These are SPI/native carriers with no standalone entry-point API; NuGet resolves them for you.
+**Transitive support packages** — pulled in automatically by the products above; **do not install directly**: [`SwiftBindings.Stripe.UICore`](libraries/Stripe/StripeUICore/README.md) (shared UI primitives), [`SwiftBindings.Stripe.ThreeDS2`](libraries/Stripe/Stripe3DS2/README.md) (3-D Secure 2), [`SwiftBindings.Stripe.CameraCore`](libraries/Stripe/StripeCameraCore/README.md) (camera-capture infrastructure), and [`SwiftBindings.Stripe.FinancialConnectionsLite`](libraries/Stripe/StripeFinancialConnectionsLite/README.md) (lightweight bank-payment flow that PaymentSheet links against from Stripe 26.7.0). These are SPI/native carriers with no standalone entry-point API; NuGet resolves them for you.
 
 ## Apple framework support
 
@@ -89,7 +89,7 @@ Apple-framework packages bind the system SDK directly. There is no SPM checkout 
 
 - macOS host with Xcode 26.3 or later (for the iOS 26.2 / macOS 26.2 / Mac Catalyst 26.2 / tvOS 26.2 SDKs).
 - .NET SDK 10.0+ (pinned at `10.0.103` in `global.json`).
-- The `SwiftBindings.Apple` supplement package (currently `26.2.1`) is pulled in transitively — do not pin it directly.
+- The `SwiftBindings.Apple` supplement package (currently `26.2.8`) is pulled in transitively — do not pin it directly.
 
 **Consumer requirements** (apps that install these NuGets):
 

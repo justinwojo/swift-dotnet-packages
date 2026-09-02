@@ -110,6 +110,18 @@ partial class Build
             Assert("cmp.prerelease-equal", CompareVersions("1.0.0-rc.1", "1.0.0-rc.1") == 0,
                 "identical prereleases did not compare equal");
             Assert("cmp.short-form", CompareVersions("1.2", "1.2.0") == 0, "missing patch != 0");
+            // Four-part (revision) versions: NuGet normalizes X.Y.Z.0 to X.Y.Z and
+            // sorts X.Y.Z below X.Y.Z.1 below X.Y.Z+1. A three-component compare
+            // reads 4.6.1.1 and 4.6.1 as EQUAL, which would make the rebuild
+            // branch of ResolveThirdPartyVersion re-issue a live version.
+            Assert("cmp.revision-above-release", CompareVersions("18.1.1.1", "18.1.1") > 0,
+                "a revision did not outrank its base release");
+            Assert("cmp.revision-below-next-patch", CompareVersions("18.1.1.1", "18.1.2") < 0,
+                "a revision outranked the next patch");
+            Assert("cmp.revision-ordered", CompareVersions("18.1.1.10", "18.1.1.2") > 0,
+                "revisions did not compare numerically");
+            Assert("cmp.revision-zero-equals-release", CompareVersions("18.1.1.0", "18.1.1") == 0,
+                "a .0 revision did not equal its base release");
             // Numeric prerelease identifiers have no width limit in SemVer, so
             // int.TryParse silently fails on a long one and drops it to a STRING
             // compare — where "9" > "10000000000000000000". BigInteger keeps it
@@ -127,18 +139,44 @@ partial class Build
             Assert("next.drops-prerelease", NextPatchVersion("1.2.3-beta") == "1.2.4",
                 NextPatchVersion("1.2.3-beta"));
 
+            // ── revision arithmetic ──────────────────────────────────────────
+            Assert("rev.first", NextRevisionVersion("18.1.1") == "18.1.1.1",
+                NextRevisionVersion("18.1.1"));
+            Assert("rev.subsequent", NextRevisionVersion("18.1.1.1") == "18.1.1.2",
+                NextRevisionVersion("18.1.1.1"));
+            Assert("rev.rollover-none", NextRevisionVersion("18.1.1.9") == "18.1.1.10",
+                NextRevisionVersion("18.1.1.9"));
+            Assert("rev.drops-prerelease", NextRevisionVersion("1.2.3-beta") == "1.2.3.1",
+                NextRevisionVersion("1.2.3-beta"));
+            Assert("core.strips-revision-and-tail", CoreVersion("4.6.1.3-beta+sha") == "4.6.1",
+                CoreVersion("4.6.1.3-beta+sha"));
+
             // ── third-party version convention ───────────────────────────────
-            // Rebuild of the same upstream → patch-bump the published version.
-            // This is the case where the NuGet patch legitimately runs ahead of
-            // the upstream patch (Lottie upstream 4.6.0 → NuGet 4.6.5).
-            Assert("resolve.rebuild", ResolveThirdPartyVersion("4.6.0", "4.6.4") == "4.6.5",
+            // Rebuild of an upstream we have ALREADY drifted past (the published
+            // 4.6.4 outranks upstream 4.6.0, from the pre-revision convention) →
+            // keep bumping the patch; a revision on 4.6.0 would sort below what
+            // already shipped. Self-corrects at upstream's next release.
+            Assert("resolve.rebuild-drifted", ResolveThirdPartyVersion("4.6.0", "4.6.4") == "4.6.5",
                 ResolveThirdPartyVersion("4.6.0", "4.6.4"));
             // New upstream release → ship AT the upstream version.
             Assert("resolve.new-upstream", ResolveThirdPartyVersion("26.0.1", "25.17.1") == "26.0.1",
                 ResolveThirdPartyVersion("26.0.1", "25.17.1"));
-            // Upstream == published → still a rebuild.
-            Assert("resolve.equal", ResolveThirdPartyVersion("6.4.1", "6.4.1") == "6.4.2",
+            // Upstream == published → rebuild on the SAME upstream, so the
+            // revision moves and major.minor.patch keeps meaning "upstream 6.4.1".
+            Assert("resolve.equal", ResolveThirdPartyVersion("6.4.1", "6.4.1") == "6.4.1.1",
                 ResolveThirdPartyVersion("6.4.1", "6.4.1"));
+            // Second rebuild on that same upstream → next revision, not a patch.
+            Assert("resolve.rebuild-revision", ResolveThirdPartyVersion("6.4.1", "6.4.1.1") == "6.4.1.2",
+                ResolveThirdPartyVersion("6.4.1", "6.4.1.1"));
+            // Upstream finally moves: adopt its real number, leaving the revisions
+            // behind. This is the branch that makes upstream's namespace safe.
+            Assert("resolve.upstream-past-revision",
+                ResolveThirdPartyVersion("6.4.2", "6.4.1.2") == "6.4.2",
+                ResolveThirdPartyVersion("6.4.2", "6.4.1.2"));
+            // A drifted library re-syncs once upstream outranks our last patch
+            // (Lottie: published 4.6.7 against upstream 4.6.1, until upstream 4.7.0).
+            Assert("resolve.drift-resync", ResolveThirdPartyVersion("4.7.0", "4.6.7") == "4.7.0",
+                ResolveThirdPartyVersion("4.7.0", "4.6.7"));
             // Never published → first release ships at upstream.
             Assert("resolve.never-published", ResolveThirdPartyVersion("18.1.0", null) == "18.1.0",
                 ResolveThirdPartyVersion("18.1.0", null));

@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/facebook/facebook-ios-sdk.git",
-  "version": "18.1.0",
+  "version": "18.1.1",
   "mode": "binary",
   "minIOS": "15.0",
   "products": [

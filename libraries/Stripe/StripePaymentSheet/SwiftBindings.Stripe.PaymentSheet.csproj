@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.19.2">
+<Project Sdk="SwiftBindings.Sdk/0.19.3">
 
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>
@@ -34,6 +34,13 @@
     <ProjectReference Include="../Stripe3DS2/SwiftBindings.Stripe.ThreeDS2.csproj" />
     <ProjectReference Include="../StripeApplePay/SwiftBindings.Stripe.ApplePay.csproj" />
     <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
+    <!-- Hand-authored, and it will never be re-detected: StripeFinancialConnectionsLite exports no
+         public Swift API, so it appears in no generated C# and the behaviour-derived scan reads zero
+         hits for it (expect it in the "carried forward" log line every run). It is still required —
+         StripePaymentSheet carries a hard LC_LOAD_DYLIB on it from Stripe 26.7.0, so without this
+         reference the packed nupkg declares no dependency on the framework's carrier package and a
+         consumer installing PaymentSheet alone fails at dyld. Do not delete. -->
+    <ProjectReference Include="../StripeFinancialConnectionsLite/SwiftBindings.Stripe.FinancialConnectionsLite.csproj" />
     <ProjectReference Include="../StripePayments/SwiftBindings.Stripe.Payments.csproj" />
     <ProjectReference Include="../StripePaymentsUI/SwiftBindings.Stripe.PaymentsUI.csproj" />
     <ProjectReference Include="../StripeUICore/SwiftBindings.Stripe.UICore.csproj" />

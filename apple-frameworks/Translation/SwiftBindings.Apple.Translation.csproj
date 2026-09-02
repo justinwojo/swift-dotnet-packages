@@ -1,4 +1,4 @@
-<Project Sdk="SwiftBindings.Sdk/0.19.2">
+<Project Sdk="SwiftBindings.Sdk/0.19.3">
   <PropertyGroup>
     <TargetFramework />
     <TargetFrameworks>net10.0-ios26.2</TargetFrameworks>

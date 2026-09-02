@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/stripe/stripe-ios.git",
-  "version": "26.4.1",
+  "version": "26.9.0",
   "mode": "zip",
   "zipUrl": "https://github.com/stripe/stripe-ios/releases/download/{version}/Stripe.xcframework.zip",
   "minIOS": "15.0",
@@ -48,6 +48,10 @@
     {
       "framework": "StripeFinancialConnections",
       "subdirectory": "StripeFinancialConnections"
+    },
+    {
+      "framework": "StripeFinancialConnectionsLite",
+      "subdirectory": "StripeFinancialConnectionsLite"
     },
     {
       "framework": "StripeConnect",

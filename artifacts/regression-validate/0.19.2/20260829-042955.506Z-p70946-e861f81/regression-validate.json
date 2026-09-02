@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 2,
+  "version": "0.19.2",
+  "runId": "20260829-042955.506Z-p70946-e861f81",
+  "timestamp": "2026-08-29T04:33:19.9142380Z",
+  "totalDurationSeconds": 27.420609,
+  "verdict": "PASS",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter ProximityReader restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-sim, ios-device, macos, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 0,
+  "counts": {
+    "planned": 1,
+    "recorded": 1,
+    "unreached": 0,
+    "pass": 1,
+    "fail": 0,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [],
+  "filter": "ProximityReader",
+  "packages": [
+    "ProximityReader"
+  ],
+  "platforms": [
+    "maccatalyst"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 1,
+  "inputs": {
+    "sdkVersion": "0.19.2",
+    "appleVersion": "26.2.8",
+    "appleBindingsVersion": "26.2.12",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "e861f81",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "ProximityReader": {
+        "kind": "apple-framework",
+        "version": "26.2.12",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.2/20260829-042955.506Z-p70946-e861f81/api-surface",
+    "filesCollected": 2,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.2/20260829-042955.506Z-p70946-e861f81",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.2/20260829-042955.506Z-p70946-e861f81/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.2/20260829-042955.506Z-p70946-e861f81/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "ProximityReader",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 27.4158279,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.2/20260829-042955.506Z-p70946-e861f81/cells/ProximityReader-maccatalyst.log"
+    }
+  ]
+}

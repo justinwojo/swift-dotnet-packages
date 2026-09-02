@@ -78,6 +78,12 @@
     <NativeReference Include="../StripeCameraCore/StripeCameraCore.xcframework">
       <Kind>Framework</Kind>
     </NativeReference>
+    <!-- No managed surface (StripeFinancialConnectionsLite exports no public Swift API), but
+         StripePaymentSheet 26.7.0+ carries a hard LC_LOAD_DYLIB on it, so the app fails at dyld
+         without it embedded. Native-only, like Stripe3DS2 and StripeCameraCore above. -->
+    <NativeReference Include="../StripeFinancialConnectionsLite/StripeFinancialConnectionsLite.xcframework">
+      <Kind>Framework</Kind>
+    </NativeReference>
   </ItemGroup>
 
   <!-- Wrapper xcframework: must be in a Target (not static ItemGroup) so the Exists() check

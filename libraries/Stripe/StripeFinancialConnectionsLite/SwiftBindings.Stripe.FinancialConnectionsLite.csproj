@@ -1,0 +1,44 @@
+<Project Sdk="SwiftBindings.Sdk/0.19.3">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <!-- StripeFinancialConnectionsLite exports no public API: its .swiftinterface is a bare
+         `@_exported import` with nothing to bind, so the generator emits no SBW_* @_cdecl
+         wrapper and there is no wrapper xcframework to require. The package exists purely as
+         the native carrier for the framework: StripePaymentSheet 26.7.0+ carries a hard
+         LC_LOAD_DYLIB on @rpath/StripeFinancialConnectionsLite.framework/..., so an app that
+         embeds PaymentSheet without this framework fails at dyld. With no wrapper, pack ships
+         the source xcframework as the sole native carrier. -->
+    <SwiftWrapperRequired>false</SwiftWrapperRequired>
+
+    <!-- NuGet package metadata -->
+    <PackageId>SwiftBindings.Stripe.FinancialConnectionsLite</PackageId>
+    <Version>26.0.0</Version>
+    <Description>.NET bindings for the StripeFinancialConnectionsLite Swift library</Description>
+    <PackageTags>$(CommonPackageTags);stripe;financial-connections;payments</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Package the README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+<!-- BEGIN auto-detected SwiftFrameworkDependency -->
+  <ItemGroup>
+    <!-- StripeFinancialConnectionsLite's native links @rpath/StripeCore.framework/StripeCore,
+         so PackageId/PackageVersion must stay: they are what makes the packed nuspec
+         declare SwiftBindings.Stripe.Core. Deliberately NOT NativeOnly="true" — that
+         opt-out silences SWIFTBIND081 but also drops the nuspec dependency, leaving the
+         package under-declaring a framework it genuinely loads. The ProjectReference
+         below is the SDK's primary fix and matches StripeCameraCore, the existing
+         native-carrier package with the same StripeCore linkage. -->
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.4.2" />
+  </ItemGroup>
+  <!-- END auto-detected SwiftFrameworkDependency -->
+
+  <ItemGroup>
+    <ProjectReference Include="../StripeCore/SwiftBindings.Stripe.Core.csproj" />
+  </ItemGroup>
+
+</Project>

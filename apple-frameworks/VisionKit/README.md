@@ -34,9 +34,11 @@ if (analysis.HasResults(ImageAnalyzer.AnalysisTypes.Text))
     Console.WriteLine(analysis.Transcript);
 ```
 
-The two-argument form above is the `UIImage` overload, so it compiles on iOS and Mac Catalyst only. `AnalyzeAsync` also has overloads for `NSImage` (macOS), `CGImage`, `CIImage`, and an `NSUrl` pointing at an image file — each of those takes a `CGImagePropertyOrientation` before the configuration:
+The two-argument form above is the `UIImage` overload, so it compiles on iOS and Mac Catalyst only. `AnalyzeAsync` also has overloads for `NSImage` (macOS), `CGImage`, `CIImage`, and an `NSUrl` pointing at an image file — each of those takes an `ImageIO.CGImagePropertyOrientation` before the configuration (the second `UIImage` overload takes a `UIKit.UIImageOrientation` instead):
 
 ```csharp
+using ImageIO;
+
 using var analysis = await analyzer.AnalyzeAsync(cgImage, CGImagePropertyOrientation.Up, configuration);
 ```
 
@@ -57,7 +59,9 @@ var interaction = new ImageAnalysisInteraction
 var subjects = await interaction.GetSubjectsAsync();
 ```
 
-On macOS the equivalent type is `ImageAnalysisOverlayView`.
+On macOS the equivalent type is `ImageAnalysisOverlayView`, an `NSView` subclass you add to a view hierarchy normally.
+
+`ImageAnalysisInteraction` is `@MainActor`-isolated — construct it and touch its members on the UI thread. One caveat on the UIKit side: Swift's `UIInteraction` conformance is not represented in the generated C#, so the interaction does not implement `IUIInteraction` and cannot be passed to `UIView.AddInteraction` directly; see the usage guide for the Objective-C messaging workaround.
 
 ### Configure the data scanner (iOS)
 
@@ -91,7 +95,16 @@ if (DataScannerViewController.IsSupported && DataScannerViewController.IsAvailab
 }
 ```
 
-`RecognizedDataType.GetBarcode()` / `GetText()` are the unparameterized cases. Scanned results arrive as `RecognizedItem.Text` / `RecognizedItem.Barcode` values through `IDataScannerViewControllerDelegate`. Present and retain the controller (it is a `UIViewController`) before calling `StartScanning`, and add an `NSCameraUsageDescription` string to your app's `Info.plist` — the scanner uses the camera, and iOS terminates an app that requests camera access without it. `DataScannerViewController` requires a real camera, so `IsSupported` is false on the simulator.
+`RecognizedDataType.GetBarcode()` / `GetText()` are the unparameterized cases. Results arrive either through `IDataScannerViewControllerDelegate` (implement it and assign `scanner.Delegate`, keeping your own strong reference — the bridge holds it weakly) or by enumerating `scanner.RecognizedItems`, an `IAsyncEnumerable<IReadOnlyList<RecognizedItem>>`. `RecognizedItem` maps a Swift payload enum, so you read it through its discriminator:
+
+```csharp
+if (item.Tag == RecognizedItem.CaseTag.Text && item.TryGetText(out var text))
+    Console.WriteLine(text.Transcript);
+else if (item.TryGetBarcode(out var barcode))
+    Console.WriteLine(barcode.PayloadStringValue);
+```
+
+Present and retain the controller (it is a `UIViewController`) before calling `StartScanning`, and add an `NSCameraUsageDescription` string to your app's `Info.plist` — the scanner uses the camera, and iOS terminates an app that requests camera access without it. `DataScannerViewController` requires a real camera, so `IsSupported` is false on the simulator and `StartScanning` — which maps a Swift `throws` function — raises a `Swift.Runtime.SwiftException` there; catch it if you run on both.
 
 ## Platform surface
 
