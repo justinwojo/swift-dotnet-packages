@@ -225,7 +225,7 @@ sealed class MyDelegate : IImageAnalysisInteractionDelegate
 }
 ```
 
-**Keep a strong reference to your implementation.** The proxy that hands it to Swift holds it weakly; if it is collected while Swift still holds the delegate, the next callback fails fast with a lifetime-invariant error.
+**Keep a strong reference to your implementation.** The `delegate` property is a Swift `weak var`, so nothing on the Swift side keeps your object alive; the binding's wrapper follows your implementation's lifetime rather than the other way round. Hold the implementation for as long as you want callbacks. If you drop it, the Swift slot clears and callbacks stop, and if VisionKit still calls through some other reference it holds, the call degrades quietly (a `void` callback is dropped) and the runtime raises `ProxyDegradation.ImplCollected` once so you can find out why your delegate went silent.
 
 ## Live Text on screen (macOS)
 
@@ -399,7 +399,7 @@ sealed class ScannerDelegate : IDataScannerViewControllerDelegate
 scanner.Delegate = new ScannerDelegate();   // keep a strong reference to it
 ```
 
-Every member of this interface carries a default body that throws `NotSupportedException` (Swift declares them all with protocol-extension defaults, i.e. "optional" delegate methods). Implement all six rather than relying on the defaults — an unimplemented one turns a callback Swift does make into an exception crossing a native frame. As with the interaction delegate, **hold your own strong reference**: the proxy's reference is weak.
+Every member of this interface carries a default body that throws `NotSupportedException` (Swift declares them all with protocol-extension defaults, i.e. "optional" delegate methods). Implement all six rather than relying on the defaults — an unimplemented one turns a callback Swift does make into an exception crossing a native frame. As with the interaction delegate, **hold your own strong reference**: the property is `weak` on the Swift side, so your reference is the only one keeping the implementation alive.
 
 ### `RecognizedItem`
 
@@ -478,7 +478,7 @@ using var analysis = await analyzer.AnalyzeAsync(image, config);
 - **`ImageAnalyzer` is `Sendable`** and carries no main-actor isolation — analyze from any thread.
 - **`ImageAnalysisInteraction`, `ImageAnalysisOverlayView`, and `DataScannerViewController` are `@MainActor`-isolated.** Their generated members are marked `[SwiftMainActor]` and assert the main thread at runtime, constructors included. Await their async members *from* the UI thread so the platform synchronization context can resume each continuation back on main; blocking the main thread while awaiting stalls the very executor those continuations need.
 - **Option-set statics allocate.** `ImageAnalyzer.AnalysisTypes.Text`, `InteractionTypes.Automatic`, etc. return disposable instances rather than cached singletons — `using var` them (or accept finalizer cleanup) rather than treating them as free constants.
-- **Delegates are held weakly.** The proxy that bridges your `IDataScannerViewControllerDelegate` / `IImageAnalysisInteractionDelegate` / `IImageAnalysisOverlayViewDelegate` to Swift keeps a `WeakReference`. Keep the implementation alive yourself; if it is collected while Swift still holds the proxy, the next callback fails fast rather than corrupting memory.
+- **Delegates are held weakly.** `IDataScannerViewControllerDelegate` / `IImageAnalysisInteractionDelegate` / `IImageAnalysisOverlayViewDelegate` are assigned into Swift `weak` properties, so your application owns the implementation and the binding's wrapper lives exactly as long as it does. Keep the implementation alive yourself. Dropping it clears the Swift slot; a callback that still arrives afterwards (VisionKit holding the delegate elsewhere for work in flight) is degraded rather than fatal — a `void` requirement is dropped, a value-returning one hands Swift an empty or zero value — and `ProxyDegradation.ImplCollected` fires once per conformance so the silence is diagnosable.
 - **The recognized-item stream is a live producer.** `DataScannerViewController.RecognizedItems` starts native work when fetched; dispose it if you don't enumerate it, and don't enumerate the same fetch twice.
 - **Cancellation.** Every `*Async` member takes a trailing `CancellationToken` that cancels the in-flight Swift task.
 

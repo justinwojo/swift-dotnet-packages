@@ -440,6 +440,148 @@ internal static class Tests
         }
         catch (Exception ex) { Fail("AnchorEntity boxes as IHasAnchoring existential", ex.Message); }
 
+        // Class-bound existentials. SynchronizationService is spelled `<Self : AnyObject>`,
+        // HasSynchronization `<Self : Entity>` and HasAnchoring `<Self : Entity>`; all three are
+        // class-bound, so Swift lays their `any P` values out as the compact two-word
+        // [classRef][witnessTable] rather than the opaque payload+metadata+witness form used for
+        // value-type protocols. Reading one at the wrong width hands Swift a witness pointer taken
+        // from the wrong word.
+        //
+        // SynchronizationService is forward-only: the binding refuses to build a Swift-backed
+        // proxy over a C# implementation, so a C# type cannot conform back to it, and its only
+        // sink lives on Scene, which has no public initializer.
+        try
+        {
+            var refused = false;
+            string message = string.Empty;
+            try
+            {
+                _ = new global::RealityFoundation.SwiftInterop.SynchronizationServiceProxy(
+                    new NoopSynchronizationService());
+            }
+            catch (NotSupportedException ex)
+            {
+                refused = true;
+                message = ex.Message;
+            }
+
+            if (!refused)
+                throw new InvalidOperationException(
+                    "a C# implementation was accepted as a Swift-backed SynchronizationService; " +
+                    "this protocol is read-only, so accepting one would hand Swift a conformance that does not exist");
+            if (message.IndexOf("ISynchronizationService", StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException($"the refusal did not name the protocol: {message}");
+            Log($"SynchronizationServiceProxy refused a C# implementation: {message}");
+            Pass("SynchronizationServiceProxy refuses a C# implementation (forward-only protocol)");
+        }
+        catch (Exception ex)
+        {
+            Fail("SynchronizationServiceProxy refuses a C# implementation (forward-only protocol)", ex.Message);
+        }
+
+        // A class-bound `any P` that Swift itself produced, read back through a GENERATED member.
+        // Entity.anchor is the one such member this fixture can reach — Scene.addAnchor and
+        // Scene.AnchorCollection take `any HasAnchoring` too, but Scene has no public initializer.
+        // The generated getter marshals the result through HasAnchoringProxy, the proxy the
+        // emitter built on its class-bound arm: it reads the class reference out of word 0 and
+        // balances the +1 it adopts with an ARC release on that reference, rather than a
+        // value-witness destroy driven by the metadata word. Swift writes exactly two words into
+        // the getter's zero-filled result buffer, so everything behind the witness stays zero —
+        // the words a binding generated on the value-type arm would have taken for payload,
+        // metadata and witness.
+        const string anchorExistentialTest =
+            "Entity.anchor returns `any HasAnchoring` as [classRef][witnessTable] and yields the anchor entity itself";
+        try
+        {
+            using var anchorEntity = new AnchorEntity();
+            using var child = new Entity();
+            anchorEntity.AddChild(child, preservingWorldTransform: false);
+
+            var anchorHandle = anchorEntity.Payload.DangerousGetHandle();
+            var expectedWitness = ProtocolWitnessTable.GetOrThrowAuto<AnchorEntity, IHasAnchoring>().Handle;
+            if (expectedWitness == IntPtr.Zero)
+                throw new InvalidOperationException("AnchorEntity's HasAnchoring witness table resolved to null");
+
+            var boxed = child.Anchor;
+            if (boxed is null)
+                throw new InvalidOperationException(
+                    "Entity.anchor returned null for an entity parented to an AnchorEntity");
+            if (boxed is not global::RealityFoundation.SwiftInterop.HasAnchoringProxy proxy)
+                throw new InvalidOperationException(
+                    $"Entity.anchor returned {boxed.GetType().Name}, not the generated HasAnchoringProxy");
+
+            var container = ((ISwiftExistentialConvertible<ExistentialContainer1>)proxy).GetExistentialContainer();
+            if (container.Payload0 != anchorHandle)
+                throw new InvalidOperationException(
+                    $"word 0 holds {container.Payload0:X}, not the anchor entity Swift boxed ({anchorHandle:X})");
+            if (container.Payload1 != expectedWitness)
+                throw new InvalidOperationException(
+                    $"word 1 holds {container.Payload1:X}, not AnchorEntity's HasAnchoring witness table ({expectedWitness:X})");
+            if (container.Payload2 != IntPtr.Zero
+                || container.ObjectMetadata.Handle != IntPtr.Zero
+                || container[0] != IntPtr.Zero)
+                throw new InvalidOperationException(
+                    $"the words behind the witness are not empty (payload2={container.Payload2:X}, " +
+                    $"metadata={container.ObjectMetadata.Handle:X}, witness word={container[0]:X}); " +
+                    "a class-bound existential is two words and nothing may follow it");
+            if (((ISwiftObject)proxy).SwiftHandle != anchorHandle)
+                throw new InvalidOperationException(
+                    $"the proxy reports {((ISwiftObject)proxy).SwiftHandle:X} as its Swift instance, " +
+                    $"not the anchor entity ({anchorHandle:X})");
+
+            // The getter adopted Swift's +1; disposing runs the class-bound release that gives it
+            // back. Reading again afterwards must still find the same live anchor entity.
+            proxy.Dispose();
+
+            if (child.Anchor is not global::RealityFoundation.SwiftInterop.HasAnchoringProxy secondProxy)
+                throw new InvalidOperationException("the second Entity.anchor read did not return a HasAnchoringProxy");
+            var secondHandle = ((ISwiftObject)secondProxy).SwiftHandle;
+            secondProxy.Dispose();
+            if (secondHandle != anchorHandle)
+                throw new InvalidOperationException(
+                    $"the second read yielded {secondHandle:X}, not the anchor entity ({anchorHandle:X})");
+            if (anchorEntity.Name is null)
+                throw new InvalidOperationException(
+                    "the anchor entity stopped answering after its boxed references were released");
+
+            Log($"Entity.anchor -> classRef={container.Payload0:X} (the anchor entity), " +
+                $"witness={container.Payload1:X}, nothing behind it");
+            Pass(anchorExistentialTest);
+        }
+        catch (Exception ex)
+        {
+            Fail(anchorExistentialTest, ex.Message);
+        }
+
+        // `any HasSynchronization` reaches no generated signature: the emitted C# names
+        // IHasSynchronization only in Entity's conformance list, the module-init conformance and
+        // witness-table registrations, the per-class conformance-symbol maps, and the proxy type.
+        // What the class-bound decision does reach is HasSynchronizationProxy, and the proxy
+        // settles that decision against the shipped Swift library: resolving its witness table
+        // first verifies the container size its emitted layout arm implies against
+        // MemoryLayout<any HasSynchronization>.size, which the wrapper exports. `<Self : Entity>`
+        // is class-bound, so the library reports two words; a binding generated from ABI facts
+        // that read the protocol as value-type implies five and throws here instead of resolving.
+        const string layoutTripwireTest =
+            "HasSynchronizationProxy's emitted container layout matches `any HasSynchronization` in the Swift library";
+        try
+        {
+            var witnessTable = global::RealityFoundation.SwiftInterop.HasSynchronizationProxy.ProtocolWitnessTableHandle;
+            if (witnessTable == IntPtr.Zero)
+                throw new InvalidOperationException("the proxy's HasSynchronization witness table resolved to null");
+            Log($"HasSynchronizationProxy layout check agreed with the library; witness table={witnessTable:X}");
+            Pass(layoutTripwireTest);
+        }
+        catch (Exception ex)
+        {
+            Fail(layoutTripwireTest, ex.Message);
+        }
+
+        Skip("Scene.SynchronizationService assignment and read-back",
+            "Scene has no public initializer and this fixture has no RealityKit view to vend one");
+        Skip("ISynchronizationService reverse dispatch (entity/owner/giveOwnership)",
+            "the protocol is read-only: a C# type cannot conform to it, so Swift has nothing to call back into");
+
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
         if (failed == 0)
@@ -447,6 +589,17 @@ internal static class Tests
         else
             Log($"TEST FAILED: {failed} failures", prefixed: false);
         return failed;
+    }
+
+    // Only used to prove the binding refuses to make a C# type conform to a read-only,
+    // Swift-vended protocol; none of these members is ever reached.
+    private sealed class NoopSynchronizationService : ISynchronizationService
+    {
+        public global::RealityFoundation.Entity? Entity(ulong identifier) => null;
+
+        public ISynchronizationPeerID? Owner(global::RealityFoundation.Entity entity) => null;
+
+        public bool GiveOwnership(global::RealityFoundation.Entity entity, ISynchronizationPeerID toPeer) => false;
     }
 
     internal static void Log(string msg, bool prefixed = true) =>

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 2,
+  "version": "0.19.4",
+  "runId": "20260905-052056.583Z-p46461-d66297e",
+  "timestamp": "2026-09-05T05:24:22.9147510Z",
+  "totalDurationSeconds": 32.433112,
+  "verdict": "PASS",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter CryptoKit restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "exitCode": 0,
+  "counts": {
+    "planned": 1,
+    "recorded": 1,
+    "unreached": 0,
+    "pass": 1,
+    "fail": 0,
+    "buildOnly": 0,
+    "skip": 0
+  },
+  "failedCells": [],
+  "filter": "CryptoKit",
+  "packages": [
+    "CryptoKit"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 1,
+  "inputs": {
+    "sdkVersion": "0.19.4",
+    "appleVersion": "26.2.8",
+    "appleBindingsVersion": "26.2.14",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "d66297e",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "CryptoKit": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.4/20260905-052056.583Z-p46461-d66297e/api-surface",
+    "filesCollected": 2,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.4/20260905-052056.583Z-p46461-d66297e",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.4/20260905-052056.583Z-p46461-d66297e/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.4/20260905-052056.583Z-p46461-d66297e/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "CryptoKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 32.4301862,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.19.4/20260905-052056.583Z-p46461-d66297e/cells/CryptoKit-ios-sim.log"
+    }
+  ]
+}

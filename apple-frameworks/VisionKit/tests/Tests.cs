@@ -34,6 +34,7 @@ internal static class Tests
         {
             RunSyncTests();
             await RunAsyncTestsAsync();
+            RunAnalysisDelegateReverseDispatchTests();
         }
         catch (Exception ex)
         {
@@ -260,10 +261,12 @@ internal static class Tests
         // The initializer's non-empty recognizedDataTypes argument — the shape a real consumer
         // writes. Building the Swift Set marshals each struct element through Set.insert, which
         // the runtime routes through a plain-cdecl shim rather than the raw CallConvSwift
-        // P/Invoke (whose (Bool, @out) tuple return Mono's JIT mis-handles). Constructing with
-        // two distinct data types, reading the instance back, and disposing exercises the
-        // insert, the set's element count, and its release in one pass — the exact sequence
-        // that used to corrupt memory on this runtime.
+        // P/Invoke, so the insert's (Bool, @out) tuple return never crosses the managed boundary
+        // directly. Constructing with two distinct data types and then reading the stored set
+        // back off the instance exercises the insert, the element count, membership of each
+        // element the set was built from, and the set's release in one pass: an element silently
+        // dropped or corrupted on the way in surfaces as a count mismatch or a Contains miss
+        // rather than passing unobserved.
         try
         {
             using var barcode = DataScannerViewController.RecognizedDataType.Barcode(
@@ -288,8 +291,30 @@ internal static class Tests
             if (populated.IsHighlightingEnabled)
                 throw new InvalidOperationException("IsHighlightingEnabled came back true");
 
-            Log("DataScannerViewController populated-set init: 2 recognized data types (barcode+text) " +
-                "marshalled through Set.insert; QualityLevel=Accurate and all five flags round-tripped");
+            // Read the Swift-side set back off the instance and prove both elements survived the
+            // insert. Contains routes through Swift's own Set membership (element metadata plus
+            // the Hashable witness), so this is Swift's judgement of equality, not C#'s.
+            var readBack = populated.RecognizedDataTypes;
+            int readBackCount;
+            try
+            {
+                readBackCount = readBack.Count;
+                if (readBackCount != 2)
+                    throw new InvalidOperationException(
+                        $"recognizedDataTypes read back holding {readBackCount} elements, expected 2");
+                if (!readBack.Contains(barcode))
+                    throw new InvalidOperationException("the barcode data type is missing from the read-back set");
+                if (!readBack.Contains(text))
+                    throw new InvalidOperationException("the text data type is missing from the read-back set");
+            }
+            finally
+            {
+                (readBack as IDisposable)?.Dispose();
+            }
+
+            Log($"DataScannerViewController populated-set init: {readBackCount} recognized data types " +
+                "(barcode+text) marshalled through Set.insert and read back with both members present; " +
+                "QualityLevel=Accurate and all five flags round-tripped");
             Pass("DataScannerViewController construction (non-empty recognizedDataTypes)");
         }
         catch (Exception ex)
@@ -387,9 +412,7 @@ internal static class Tests
         }
 
         // A C# delegate implementation handed to Swift through the generated existential
-        // container, then read back. This covers the assignment direction only — Swift calls
-        // back exclusively while a scan is running, which a camera-less simulator never
-        // reaches, so no callback body can be observed from here.
+        // container, then read back.
         try
         {
             var listener = new ScannerDelegate();
@@ -398,6 +421,7 @@ internal static class Tests
             if (readBack is null)
                 throw new InvalidOperationException("Delegate read back null while the assigned implementation was still alive");
             Log($"DataScannerViewController.Delegate set to a C# implementation and read back as {readBack.GetType().Name}");
+            (readBack as IDisposable)?.Dispose();
             GC.KeepAlive(listener);
             Pass("DataScannerViewController.Delegate assignment (existential marshalling)");
         }
@@ -405,6 +429,8 @@ internal static class Tests
         {
             Fail("DataScannerViewController.Delegate assignment (existential marshalling)", Describe(ex));
         }
+
+        RunScannerDelegateReverseDispatchTests(scanner);
 
         try
         {
@@ -492,29 +518,244 @@ internal static class Tests
         return false;
     }
 
+    // Reverse dispatch: Swift calling back INTO a C# implementation. The delegate sink is a
+    // class-bound existential (`any DataScannerViewControllerDelegate` on a `weak var`), so
+    // every call here crosses the two-word class-bound container, the protocol witness table,
+    // and the generated cdecl receiver before reaching the implementation.
+    //
+    // The route is: assign the implementation, read the property back — the getter hands out a
+    // SWIFT-BACKED proxy over the container Swift is actually holding, not the implementation
+    // object — and then call a requirement on that proxy. A proxy built directly around a C#
+    // implementation short-circuits to it without involving Swift at all, so only the read-back
+    // proxy exercises the round trip. VisionKit itself invokes this delegate solely while a scan
+    // is running, which a camera-less simulator never reaches, so driving the proxy by hand is
+    // the only way to observe a callback here.
+    private static void RunScannerDelegateReverseDispatchTests(DataScannerViewController scanner)
+    {
+        var listener = new ScannerDelegate();
+        scanner.Delegate = listener;
+
+        // 1. A requirement invoked on the read-back proxy has to land in the C# implementation
+        //    with its receiver intact. `dataScannerDidZoom` is the one requirement on this
+        //    protocol whose whole signature is dispatchable through the witness table (the
+        //    others carry RecognizedItem / [RecognizedItem] / an error enum — see the refusal
+        //    test below), so it carries the round trip.
+        const string dispatchName = "IDataScannerViewControllerDelegate reverse dispatch (dataScannerDidZoom)";
+        try
+        {
+            var readBack = scanner.Delegate;
+            if (readBack is null)
+                throw new InvalidOperationException("Delegate read back null while the assigned implementation was still alive");
+            if (ReferenceEquals(readBack, listener))
+                throw new InvalidOperationException(
+                    "Delegate read back the implementation object itself; the round trip needs the Swift-backed proxy over the container Swift holds");
+
+            int before = listener.ZoomCallbacks;
+            readBack.DataScannerDidZoom(scanner);
+            if (listener.ZoomCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the call did not reach the C# implementation: ZoomCallbacks {before} -> {listener.ZoomCallbacks}");
+            if (listener.LastScanner is null)
+                throw new InvalidOperationException("the implementation received a null receiver");
+            // Managed-peer reuse: the receiver Swift passes back is the same ObjC object the
+            // test created, so the binding must hand the implementation the consumer's own
+            // instance rather than minting a second managed peer over the same pointer.
+            if (!ReferenceEquals(listener.LastScanner, scanner))
+                throw new InvalidOperationException(
+                    "the receiver handed to the implementation is a different managed instance from the controller under test");
+            // Read through that receiver inside the callback: a value read back out of it
+            // proves the object arrived usable, not merely non-null.
+            if (Math.Abs(listener.LastZoomFactor - scanner.ZoomFactor) > 0.0001)
+                throw new InvalidOperationException(
+                    $"zoom factor read inside the callback was {listener.LastZoomFactor}, the controller reports {scanner.ZoomFactor}");
+
+            Log($"dataScannerDidZoom dispatched through the read-back proxy into C#: callback #{listener.ZoomCallbacks}, " +
+                $"receiver is the same managed instance, ZoomFactor={listener.LastZoomFactor}");
+            (readBack as IDisposable)?.Dispose();
+            Pass(dispatchName);
+        }
+        catch (Exception ex)
+        {
+            Fail(dispatchName, Describe(ex));
+        }
+
+        // 2. The read-back proxy adopts the returned existential at +1 and releases it when it
+        //    is collected. Dropping one without disposing, running finalizers, then reading and
+        //    dispatching again catches an over-release of the container Swift still holds.
+        const string finalizerName = "IDataScannerViewControllerDelegate dispatch after the read-back proxy is finalized";
+        try
+        {
+            var dropped = scanner.Delegate;
+            if (dropped is null)
+                throw new InvalidOperationException("Delegate read back null before the finalizer pass");
+            dropped = null;
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            var second = scanner.Delegate;
+            if (second is null)
+                throw new InvalidOperationException("Delegate read back null after the first proxy was finalized");
+            int before = listener.ZoomCallbacks;
+            second.DataScannerDidZoom(scanner);
+            if (listener.ZoomCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the second dispatch did not reach the implementation: ZoomCallbacks {before} -> {listener.ZoomCallbacks}");
+            if (!ReferenceEquals(listener.LastScanner, scanner))
+                throw new InvalidOperationException("the receiver on the second dispatch was a different managed instance");
+            Log($"a finalized read-back proxy left the sink intact: second dispatch reached callback #{listener.ZoomCallbacks}");
+            (second as IDisposable)?.Dispose();
+            Pass(finalizerName);
+        }
+        catch (Exception ex)
+        {
+            Fail(finalizerName, Describe(ex));
+        }
+
+        // 3. The sink is a Swift `weak var`. Nothing on the C# side holds the proxy Swift's
+        //    weak reference points at once the assignment expression is over, so unless the
+        //    binding roots it for as long as the controller lives, a collection nils the sink
+        //    and the delegate silently stops firing. The consumer's own implementation stays
+        //    alive here, exactly as a real consumer would keep it.
+        const string weakName = "DataScannerViewController.Delegate survives a collection (weak sink)";
+        try
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            var survivor = scanner.Delegate;
+            if (survivor is null)
+                throw new InvalidOperationException(
+                    "Delegate read back null after a collection — the weak sink lost its proxy while the implementation was still alive");
+            int before = listener.ZoomCallbacks;
+            survivor.DataScannerDidZoom(scanner);
+            if (listener.ZoomCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the surviving delegate no longer dispatches to the original implementation: ZoomCallbacks {before} -> {listener.ZoomCallbacks}");
+            Log($"the weak delegate sink survived two collections and still dispatches to the original implementation (callback #{listener.ZoomCallbacks})");
+            (survivor as IDisposable)?.Dispose();
+            Pass(weakName);
+        }
+        catch (Exception ex)
+        {
+            Fail(weakName, Describe(ex));
+        }
+
+        // 4. The remaining five requirements are not dispatchable through a witness table —
+        //    each carries a RecognizedItem, a [RecognizedItem], or an error enum. The binding
+        //    marks them SB0003 and they must refuse cleanly on a Swift-backed proxy rather than
+        //    marshalling something wrong. The item arrays are passed empty because
+        //    RecognizedItem has no public initializer: VisionKit only ever vends one from a
+        //    live scan, which this host cannot start.
+        const string refusalName = "IDataScannerViewControllerDelegate non-dispatchable requirements refuse cleanly";
+        try
+        {
+            var proxy = scanner.Delegate;
+            if (proxy is null)
+                throw new InvalidOperationException("Delegate read back null before the refusal pass");
+            var empty = Array.Empty<RecognizedItem>();
+            int refusals = 0;
+            void ExpectRefusal(string member, Action call)
+            {
+                try
+                {
+                    call();
+                    throw new InvalidOperationException(
+                        $"'{member}' returned normally on a Swift-backed proxy; a non-dispatchable member must refuse");
+                }
+                catch (NotSupportedException)
+                {
+                    refusals++;
+                }
+            }
+
+#pragma warning disable SB0003 // the refusal is what is under test
+            ExpectRefusal(nameof(IDataScannerViewControllerDelegate.DataScannerDidAddAllItems),
+                () => proxy.DataScannerDidAddAllItems(scanner, empty, empty));
+            ExpectRefusal(nameof(IDataScannerViewControllerDelegate.DataScannerDidUpdateAllItems),
+                () => proxy.DataScannerDidUpdateAllItems(scanner, empty, empty));
+            ExpectRefusal(nameof(IDataScannerViewControllerDelegate.DataScannerDidRemoveAllItems),
+                () => proxy.DataScannerDidRemoveAllItems(scanner, empty, empty));
+            ExpectRefusal(nameof(IDataScannerViewControllerDelegate.DataScannerBecameUnavailableWithError),
+                () => proxy.DataScannerBecameUnavailableWithError(scanner, DataScannerViewController.ScanningUnavailable.Unsupported));
+#pragma warning restore SB0003
+
+            if (refusals != 4)
+                throw new InvalidOperationException($"expected 4 clean refusals, counted {refusals}");
+            if (listener.Callbacks != listener.ZoomCallbacks)
+                throw new InvalidOperationException(
+                    $"a refused member still reached the implementation: {listener.Callbacks} total callbacks vs {listener.ZoomCallbacks} zoom callbacks");
+            Log("the four array/error requirements refused with NotSupportedException on the Swift-backed proxy and never reached C#; " +
+                "dataScannerDidTapOn is covered by the same refusal but needs a RecognizedItem, which has no public initializer, so it is not called");
+            (proxy as IDisposable)?.Dispose();
+            Pass(refusalName);
+        }
+        catch (Exception ex)
+        {
+            Fail(refusalName, Describe(ex));
+        }
+
+        GC.KeepAlive(listener);
+    }
+
     // Every member is implemented rather than left to the generated interface defaults: those
     // defaults throw, so an empty implementation would turn any callback Swift did make into
-    // an exception crossing back out of a native frame. The counters are here so a future
-    // device run with a real camera has something to assert on.
+    // an exception crossing back out of a native frame. The recorded receiver and values are
+    // what the reverse-dispatch tests assert on.
     private sealed class ScannerDelegate : IDataScannerViewControllerDelegate
     {
         public int Callbacks { get; private set; }
 
-        public void DataScannerDidZoom(DataScannerViewController dataScanner) => Callbacks++;
+        public int ZoomCallbacks { get; private set; }
 
-        public void DataScannerDidTapOn(DataScannerViewController dataScanner, RecognizedItem item) => Callbacks++;
+        public DataScannerViewController? LastScanner { get; private set; }
+
+        public double LastZoomFactor { get; private set; }
+
+        public void DataScannerDidZoom(DataScannerViewController dataScanner)
+        {
+            Callbacks++;
+            ZoomCallbacks++;
+            LastScanner = dataScanner;
+            LastZoomFactor = dataScanner.ZoomFactor;
+        }
+
+        public void DataScannerDidTapOn(DataScannerViewController dataScanner, RecognizedItem item)
+        {
+            Callbacks++;
+            LastScanner = dataScanner;
+        }
 
         public void DataScannerDidAddAllItems(DataScannerViewController dataScanner,
-            IEnumerable<RecognizedItem> addedItems, IEnumerable<RecognizedItem> allItems) => Callbacks++;
+            IEnumerable<RecognizedItem> addedItems, IEnumerable<RecognizedItem> allItems)
+        {
+            Callbacks++;
+            LastScanner = dataScanner;
+        }
 
         public void DataScannerDidUpdateAllItems(DataScannerViewController dataScanner,
-            IEnumerable<RecognizedItem> updatedItems, IEnumerable<RecognizedItem> allItems) => Callbacks++;
+            IEnumerable<RecognizedItem> updatedItems, IEnumerable<RecognizedItem> allItems)
+        {
+            Callbacks++;
+            LastScanner = dataScanner;
+        }
 
         public void DataScannerDidRemoveAllItems(DataScannerViewController dataScanner,
-            IEnumerable<RecognizedItem> removedItems, IEnumerable<RecognizedItem> allItems) => Callbacks++;
+            IEnumerable<RecognizedItem> removedItems, IEnumerable<RecognizedItem> allItems)
+        {
+            Callbacks++;
+            LastScanner = dataScanner;
+        }
 
         public void DataScannerBecameUnavailableWithError(DataScannerViewController dataScanner,
-            DataScannerViewController.ScanningUnavailable error) => Callbacks++;
+            DataScannerViewController.ScanningUnavailable error)
+        {
+            Callbacks++;
+            LastScanner = dataScanner;
+        }
     }
 #endif
 
@@ -613,6 +854,540 @@ internal static class Tests
 #endif
         analysis?.Dispose();
     }
+
+#if IOS || MACCATALYST
+    // The second class-bound delegate sink in this framework, on the UIKit interaction type.
+    // Same route as the scanner's: assign a C# implementation, read the property back to get a
+    // Swift-backed proxy over the container Swift holds, and drive requirements through it.
+    // Three of this protocol's requirements are dispatchable end to end; the other four carry a
+    // CGPoint, a CGRect return, or an optional UIKit class return and refuse under SB0003.
+    private static void RunAnalysisDelegateReverseDispatchTests()
+    {
+        const string setupName = "ImageAnalysisInteraction.Delegate assignment";
+        ImageAnalysisInteraction? interaction = null;
+        var listener = new InteractionDelegate();
+        try
+        {
+            interaction = new ImageAnalysisInteraction();
+            interaction.Delegate = listener;
+            var readBack = interaction.Delegate;
+            if (readBack is null)
+                throw new InvalidOperationException("Delegate read back null while the assigned implementation was still alive");
+            if (ReferenceEquals(readBack, listener))
+                throw new InvalidOperationException(
+                    "Delegate read back the implementation object itself; the round trip needs the Swift-backed proxy over the container Swift holds");
+            Log($"ImageAnalysisInteraction.Delegate set to a C# implementation and read back as {readBack.GetType().Name}");
+            (readBack as IDisposable)?.Dispose();
+            Pass(setupName);
+        }
+        catch (Exception ex)
+        {
+            Fail(setupName, Describe(ex));
+        }
+
+        if (interaction is null)
+        {
+            Skip("IImageAnalysisInteractionDelegate reverse dispatch",
+                "no ImageAnalysisInteraction could be constructed to hold the delegate");
+            Skip("IImageAnalysisInteractionDelegate dispatch after the read-back proxy is finalized",
+                "no ImageAnalysisInteraction could be constructed to hold the delegate");
+            Skip("ImageAnalysisInteraction.Delegate survives a collection (weak sink)",
+                "no ImageAnalysisInteraction could be constructed to hold the delegate");
+            Skip("IImageAnalysisInteractionDelegate non-dispatchable requirements refuse cleanly",
+                "no ImageAnalysisInteraction could be constructed to hold the delegate");
+            return;
+        }
+
+        // Every dispatchable requirement, each with a value that has to survive the crossing:
+        // the two Bool-carrying calls are made with both truth values so a dropped or
+        // mis-widened byte cannot pass by luck.
+        const string dispatchName = "IImageAnalysisInteractionDelegate reverse dispatch (every dispatchable requirement)";
+        try
+        {
+            var proxy = interaction.Delegate;
+            if (proxy is null)
+                throw new InvalidOperationException("Delegate read back null before the dispatch pass");
+
+            proxy.InteractionLiveTextButtonDidChangeToVisible(interaction, true);
+            if (listener.LiveTextButtonCallbacks != 1 || !listener.LastVisible)
+                throw new InvalidOperationException(
+                    $"liveTextButtonDidChangeToVisible(true) arrived as calls={listener.LiveTextButtonCallbacks} visible={listener.LastVisible}");
+            proxy.InteractionLiveTextButtonDidChangeToVisible(interaction, false);
+            if (listener.LiveTextButtonCallbacks != 2 || listener.LastVisible)
+                throw new InvalidOperationException(
+                    $"liveTextButtonDidChangeToVisible(false) arrived as calls={listener.LiveTextButtonCallbacks} visible={listener.LastVisible}");
+
+            proxy.InteractionHighlightSelectedItemsDidChange(interaction, true);
+            if (listener.HighlightCallbacks != 1 || !listener.LastHighlightSelectedItems)
+                throw new InvalidOperationException(
+                    $"highlightSelectedItemsDidChange(true) arrived as calls={listener.HighlightCallbacks} highlight={listener.LastHighlightSelectedItems}");
+            proxy.InteractionHighlightSelectedItemsDidChange(interaction, false);
+            if (listener.HighlightCallbacks != 2 || listener.LastHighlightSelectedItems)
+                throw new InvalidOperationException(
+                    $"highlightSelectedItemsDidChange(false) arrived as calls={listener.HighlightCallbacks} highlight={listener.LastHighlightSelectedItems}");
+
+            proxy.TextSelectionDidChange(interaction);
+            if (listener.TextSelectionCallbacks != 1)
+                throw new InvalidOperationException(
+                    $"textSelectionDidChange did not reach the implementation: calls={listener.TextSelectionCallbacks}");
+
+            if (listener.LastInteraction is null)
+                throw new InvalidOperationException("the implementation received a null receiver");
+            if (!ReferenceEquals(listener.LastInteraction, interaction))
+                throw new InvalidOperationException(
+                    "the receiver handed to the implementation is a different managed instance from the interaction under test");
+
+            Log($"all three dispatchable requirements reached C# through the read-back proxy: " +
+                $"liveTextButton x{listener.LiveTextButtonCallbacks} (true then false), " +
+                $"highlightSelectedItems x{listener.HighlightCallbacks} (true then false), " +
+                $"textSelectionDidChange x{listener.TextSelectionCallbacks}; receiver is the same managed instance");
+            (proxy as IDisposable)?.Dispose();
+            Pass(dispatchName);
+        }
+        catch (Exception ex)
+        {
+            Fail(dispatchName, Describe(ex));
+        }
+
+        const string finalizerName = "IImageAnalysisInteractionDelegate dispatch after the read-back proxy is finalized";
+        try
+        {
+            var dropped = interaction.Delegate;
+            if (dropped is null)
+                throw new InvalidOperationException("Delegate read back null before the finalizer pass");
+            dropped = null;
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            var second = interaction.Delegate;
+            if (second is null)
+                throw new InvalidOperationException("Delegate read back null after the first proxy was finalized");
+            int before = listener.TextSelectionCallbacks;
+            second.TextSelectionDidChange(interaction);
+            if (listener.TextSelectionCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the second dispatch did not reach the implementation: calls {before} -> {listener.TextSelectionCallbacks}");
+            Log($"a finalized read-back proxy left the sink intact: second dispatch reached callback #{listener.TextSelectionCallbacks}");
+            (second as IDisposable)?.Dispose();
+            Pass(finalizerName);
+        }
+        catch (Exception ex)
+        {
+            Fail(finalizerName, Describe(ex));
+        }
+
+        const string weakName = "ImageAnalysisInteraction.Delegate survives a collection (weak sink)";
+        try
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            var survivor = interaction.Delegate;
+            if (survivor is null)
+                throw new InvalidOperationException(
+                    "Delegate read back null after a collection — the weak sink lost its proxy while the implementation was still alive");
+            int before = listener.TextSelectionCallbacks;
+            survivor.TextSelectionDidChange(interaction);
+            if (listener.TextSelectionCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the surviving delegate no longer dispatches to the original implementation: calls {before} -> {listener.TextSelectionCallbacks}");
+            Log($"the weak delegate sink survived two collections and still dispatches to the original implementation (callback #{listener.TextSelectionCallbacks})");
+            (survivor as IDisposable)?.Dispose();
+            Pass(weakName);
+        }
+        catch (Exception ex)
+        {
+            Fail(weakName, Describe(ex));
+        }
+
+        const string refusalName = "IImageAnalysisInteractionDelegate non-dispatchable requirements refuse cleanly";
+        try
+        {
+            var proxy = interaction.Delegate;
+            if (proxy is null)
+                throw new InvalidOperationException("Delegate read back null before the refusal pass");
+            int callbacksBefore = listener.Callbacks;
+            int refusals = 0;
+            void ExpectRefusal(string member, Action call)
+            {
+                try
+                {
+                    call();
+                    throw new InvalidOperationException(
+                        $"'{member}' returned normally on a Swift-backed proxy; a non-dispatchable member must refuse");
+                }
+                catch (NotSupportedException)
+                {
+                    refusals++;
+                }
+            }
+
+#pragma warning disable SB0003 // the refusal is what is under test
+            ExpectRefusal(nameof(IImageAnalysisInteractionDelegate.InteractionShouldBeginAtFor),
+                () => proxy.InteractionShouldBeginAtFor(interaction, new Swift.CGPoint(1, 2), ImageAnalysisInteraction.InteractionTypes.TextSelection));
+            ExpectRefusal(nameof(IImageAnalysisInteractionDelegate.ContentsRect),
+                () => proxy.ContentsRect(interaction));
+            ExpectRefusal(nameof(IImageAnalysisInteractionDelegate.ContentView),
+                () => proxy.ContentView(interaction));
+            ExpectRefusal(nameof(IImageAnalysisInteractionDelegate.PresentingViewController),
+                () => proxy.PresentingViewController(interaction));
+#pragma warning restore SB0003
+
+            if (refusals != 4)
+                throw new InvalidOperationException($"expected 4 clean refusals, counted {refusals}");
+            if (listener.Callbacks != callbacksBefore)
+                throw new InvalidOperationException(
+                    $"a refused member still reached the implementation: {listener.Callbacks} callbacks vs {callbacksBefore} before the pass");
+            Log("the four CGPoint/CGRect/UIKit-returning requirements refused with NotSupportedException on the Swift-backed proxy and never reached C#");
+            (proxy as IDisposable)?.Dispose();
+            Pass(refusalName);
+        }
+        catch (Exception ex)
+        {
+            Fail(refusalName, Describe(ex));
+        }
+
+        GC.KeepAlive(listener);
+        interaction.Dispose();
+    }
+
+    // As with the scanner delegate, every member is implemented: the generated interface
+    // defaults throw, and a throw crossing back out of a native frame is not a test failure but
+    // a crash.
+    private sealed class InteractionDelegate : IImageAnalysisInteractionDelegate
+    {
+        public int Callbacks { get; private set; }
+
+        public int LiveTextButtonCallbacks { get; private set; }
+
+        public int HighlightCallbacks { get; private set; }
+
+        public int TextSelectionCallbacks { get; private set; }
+
+        public ImageAnalysisInteraction? LastInteraction { get; private set; }
+
+        public bool LastVisible { get; private set; }
+
+        public bool LastHighlightSelectedItems { get; private set; }
+
+        public bool InteractionShouldBeginAtFor(ImageAnalysisInteraction interaction, Swift.CGPoint point,
+            ImageAnalysisInteraction.InteractionTypes interactionType)
+        {
+            Callbacks++;
+            LastInteraction = interaction;
+            return false;
+        }
+
+        public Swift.CGRect ContentsRect(ImageAnalysisInteraction interaction)
+        {
+            Callbacks++;
+            LastInteraction = interaction;
+            return new Swift.CGRect(0, 0, 1, 1);
+        }
+
+        public UIView? ContentView(ImageAnalysisInteraction interaction)
+        {
+            Callbacks++;
+            LastInteraction = interaction;
+            return null;
+        }
+
+        public UIViewController? PresentingViewController(ImageAnalysisInteraction interaction)
+        {
+            Callbacks++;
+            LastInteraction = interaction;
+            return null;
+        }
+
+        public void InteractionLiveTextButtonDidChangeToVisible(ImageAnalysisInteraction interaction, bool visible)
+        {
+            Callbacks++;
+            LiveTextButtonCallbacks++;
+            LastInteraction = interaction;
+            LastVisible = visible;
+        }
+
+        public void InteractionHighlightSelectedItemsDidChange(ImageAnalysisInteraction interaction, bool highlightSelectedItems)
+        {
+            Callbacks++;
+            HighlightCallbacks++;
+            LastInteraction = interaction;
+            LastHighlightSelectedItems = highlightSelectedItems;
+        }
+
+        public void TextSelectionDidChange(ImageAnalysisInteraction interaction)
+        {
+            Callbacks++;
+            TextSelectionCallbacks++;
+            LastInteraction = interaction;
+        }
+    }
+#endif
+
+#if !IOS && !MACCATALYST
+    // The AppKit overlay view is the macOS counterpart of the UIKit interaction, and carries
+    // the same class-bound `weak var delegate` sink. Same route: assign, read the property back
+    // for a Swift-backed proxy, dispatch through it. Three requirements are dispatchable; the
+    // rest carry NSEvent/NSMenu/CGPoint/CGRect and refuse under SB0003.
+    private static void RunAnalysisDelegateReverseDispatchTests()
+    {
+        const string setupName = "ImageAnalysisOverlayView.Delegate assignment";
+        ImageAnalysisOverlayView? overlay = null;
+        var listener = new OverlayViewDelegate();
+        try
+        {
+            overlay = new ImageAnalysisOverlayView(new Swift.CGRect(0, 0, 160, 60));
+            overlay.Delegate = listener;
+            var readBack = overlay.Delegate;
+            if (readBack is null)
+                throw new InvalidOperationException("Delegate read back null while the assigned implementation was still alive");
+            if (ReferenceEquals(readBack, listener))
+                throw new InvalidOperationException(
+                    "Delegate read back the implementation object itself; the round trip needs the Swift-backed proxy over the container Swift holds");
+            Log($"ImageAnalysisOverlayView.Delegate set to a C# implementation and read back as {readBack.GetType().Name}");
+            (readBack as IDisposable)?.Dispose();
+            Pass(setupName);
+        }
+        catch (Exception ex) when (IsEnvironmentRefusal(ex))
+        {
+            Skip(setupName, $"framework refused to build the overlay view in this host: {Describe(ex)}");
+        }
+        catch (Exception ex)
+        {
+            Fail(setupName, Describe(ex));
+        }
+
+        if (overlay is null)
+        {
+            Skip("IImageAnalysisOverlayViewDelegate reverse dispatch",
+                "no ImageAnalysisOverlayView could be constructed to hold the delegate");
+            Skip("IImageAnalysisOverlayViewDelegate dispatch after the read-back proxy is finalized",
+                "no ImageAnalysisOverlayView could be constructed to hold the delegate");
+            Skip("ImageAnalysisOverlayView.Delegate survives a collection (weak sink)",
+                "no ImageAnalysisOverlayView could be constructed to hold the delegate");
+            return;
+        }
+
+        const string dispatchName = "IImageAnalysisOverlayViewDelegate reverse dispatch (every dispatchable requirement)";
+        try
+        {
+            var proxy = overlay.Delegate;
+            if (proxy is null)
+                throw new InvalidOperationException("Delegate read back null before the dispatch pass");
+
+            proxy.OverlayViewLiveTextButtonDidChangeToVisible(overlay, true);
+            if (listener.LiveTextButtonCallbacks != 1 || !listener.LastVisible)
+                throw new InvalidOperationException(
+                    $"liveTextButtonDidChangeToVisible(true) arrived as calls={listener.LiveTextButtonCallbacks} visible={listener.LastVisible}");
+            proxy.OverlayViewLiveTextButtonDidChangeToVisible(overlay, false);
+            if (listener.LiveTextButtonCallbacks != 2 || listener.LastVisible)
+                throw new InvalidOperationException(
+                    $"liveTextButtonDidChangeToVisible(false) arrived as calls={listener.LiveTextButtonCallbacks} visible={listener.LastVisible}");
+
+            proxy.OverlayViewHighlightSelectedItemsDidChange(overlay, true);
+            if (listener.HighlightCallbacks != 1 || !listener.LastHighlightSelectedItems)
+                throw new InvalidOperationException(
+                    $"highlightSelectedItemsDidChange(true) arrived as calls={listener.HighlightCallbacks} highlight={listener.LastHighlightSelectedItems}");
+            proxy.OverlayViewHighlightSelectedItemsDidChange(overlay, false);
+            if (listener.HighlightCallbacks != 2 || listener.LastHighlightSelectedItems)
+                throw new InvalidOperationException(
+                    $"highlightSelectedItemsDidChange(false) arrived as calls={listener.HighlightCallbacks} highlight={listener.LastHighlightSelectedItems}");
+
+            proxy.TextSelectionDidChange(overlay);
+            if (listener.TextSelectionCallbacks != 1)
+                throw new InvalidOperationException(
+                    $"textSelectionDidChange did not reach the implementation: calls={listener.TextSelectionCallbacks}");
+
+            if (listener.LastOverlayView is null)
+                throw new InvalidOperationException("the implementation received a null receiver");
+            if (!ReferenceEquals(listener.LastOverlayView, overlay))
+                throw new InvalidOperationException(
+                    "the receiver handed to the implementation is a different managed instance from the overlay view under test");
+
+            Log($"all three dispatchable requirements reached C# through the read-back proxy: " +
+                $"liveTextButton x{listener.LiveTextButtonCallbacks} (true then false), " +
+                $"highlightSelectedItems x{listener.HighlightCallbacks} (true then false), " +
+                $"textSelectionDidChange x{listener.TextSelectionCallbacks}; receiver is the same managed instance");
+            (proxy as IDisposable)?.Dispose();
+            Pass(dispatchName);
+        }
+        catch (Exception ex)
+        {
+            Fail(dispatchName, Describe(ex));
+        }
+
+        const string finalizerName = "IImageAnalysisOverlayViewDelegate dispatch after the read-back proxy is finalized";
+        try
+        {
+            var dropped = overlay.Delegate;
+            if (dropped is null)
+                throw new InvalidOperationException("Delegate read back null before the finalizer pass");
+            dropped = null;
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            var second = overlay.Delegate;
+            if (second is null)
+                throw new InvalidOperationException("Delegate read back null after the first proxy was finalized");
+            int before = listener.TextSelectionCallbacks;
+            second.TextSelectionDidChange(overlay);
+            if (listener.TextSelectionCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the second dispatch did not reach the implementation: calls {before} -> {listener.TextSelectionCallbacks}");
+            Log($"a finalized read-back proxy left the sink intact: second dispatch reached callback #{listener.TextSelectionCallbacks}");
+            (second as IDisposable)?.Dispose();
+            Pass(finalizerName);
+        }
+        catch (Exception ex)
+        {
+            Fail(finalizerName, Describe(ex));
+        }
+
+        const string weakName = "ImageAnalysisOverlayView.Delegate survives a collection (weak sink)";
+        try
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            var survivor = overlay.Delegate;
+            if (survivor is null)
+                throw new InvalidOperationException(
+                    "Delegate read back null after a collection — the weak sink lost its proxy while the implementation was still alive");
+            int before = listener.TextSelectionCallbacks;
+            survivor.TextSelectionDidChange(overlay);
+            if (listener.TextSelectionCallbacks != before + 1)
+                throw new InvalidOperationException(
+                    $"the surviving delegate no longer dispatches to the original implementation: calls {before} -> {listener.TextSelectionCallbacks}");
+            Log($"the weak delegate sink survived two collections and still dispatches to the original implementation (callback #{listener.TextSelectionCallbacks})");
+            (survivor as IDisposable)?.Dispose();
+            Pass(weakName);
+        }
+        catch (Exception ex)
+        {
+            Fail(weakName, Describe(ex));
+        }
+
+        GC.KeepAlive(listener);
+    }
+
+    private sealed class OverlayViewDelegate : IImageAnalysisOverlayViewDelegate
+    {
+        public int Callbacks { get; private set; }
+
+        public int LiveTextButtonCallbacks { get; private set; }
+
+        public int HighlightCallbacks { get; private set; }
+
+        public int TextSelectionCallbacks { get; private set; }
+
+        public ImageAnalysisOverlayView? LastOverlayView { get; private set; }
+
+        public bool LastVisible { get; private set; }
+
+        public bool LastHighlightSelectedItems { get; private set; }
+
+        public bool OverlayViewShouldBeginAtForAnalysisType(ImageAnalysisOverlayView overlayView, Swift.CGPoint point,
+            ImageAnalysisOverlayView.InteractionTypes analysisType)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return false;
+        }
+
+        public Swift.CGRect ContentsRect(ImageAnalysisOverlayView overlayView)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return new Swift.CGRect(0, 0, 1, 1);
+        }
+
+        public AppKit.NSView? ContentView(ImageAnalysisOverlayView overlayView)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return null;
+        }
+
+        public bool OverlayViewShouldHandleKeyDownEvent(ImageAnalysisOverlayView overlayView, AppKit.NSEvent @event)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return false;
+        }
+
+        public bool OverlayViewShouldShowMenuForEventAtPoint(ImageAnalysisOverlayView overlayView, AppKit.NSEvent @event,
+            Swift.CGPoint point)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return false;
+        }
+
+        public void OverlayViewLiveTextButtonDidChangeToVisible(ImageAnalysisOverlayView overlayView, bool visible)
+        {
+            Callbacks++;
+            LiveTextButtonCallbacks++;
+            LastOverlayView = overlayView;
+            LastVisible = visible;
+        }
+
+        public void OverlayViewHighlightSelectedItemsDidChange(ImageAnalysisOverlayView overlayView, bool highlightSelectedItems)
+        {
+            Callbacks++;
+            HighlightCallbacks++;
+            LastOverlayView = overlayView;
+            LastHighlightSelectedItems = highlightSelectedItems;
+        }
+
+        public void TextSelectionDidChange(ImageAnalysisOverlayView overlayView)
+        {
+            Callbacks++;
+            TextSelectionCallbacks++;
+            LastOverlayView = overlayView;
+        }
+
+        public AppKit.NSMenu OverlayViewUpdatedMenuForForAt(ImageAnalysisOverlayView overlayView, AppKit.NSMenu menu,
+            AppKit.NSEvent @event, Swift.CGPoint point)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+            return menu;
+        }
+
+        public void OverlayViewNeedsUpdate(ImageAnalysisOverlayView overlayView, AppKit.NSMenu menu)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+        }
+
+        public void OverlayViewWillOpen(ImageAnalysisOverlayView overlayView, AppKit.NSMenu menu)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+        }
+
+        public void OverlayViewDidClose(ImageAnalysisOverlayView overlayView, AppKit.NSMenu menu)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+        }
+
+        public void OverlayViewMenuWillHighlight(ImageAnalysisOverlayView overlayView, AppKit.NSMenu menu,
+            AppKit.NSMenuItem? menuItem)
+        {
+            Callbacks++;
+            LastOverlayView = overlayView;
+        }
+    }
+#endif
 
 #if !IOS && !MACCATALYST
     // Turn the main run loop until the task settles, so a framework callback scheduled on the

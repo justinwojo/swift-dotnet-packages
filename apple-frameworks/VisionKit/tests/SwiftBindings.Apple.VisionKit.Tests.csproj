@@ -24,9 +24,16 @@
   </ItemGroup>
 
   <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
-       must be validated against the local change, not a nuget.org version. -->
-  <ItemGroup>
+       must be validated against the local change, not a nuget.org version.
+       The release-evidence path is the exception: passing
+       -p:VisionKitPackageVersion=X swaps in a PackageReference so the app
+       consumes the packed nupkg (and its runtime dependency) exactly as a
+       consumer would, instead of the sibling project's build output. -->
+  <ItemGroup Condition="'$(VisionKitPackageVersion)' == ''">
     <ProjectReference Include="../SwiftBindings.Apple.VisionKit.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(VisionKitPackageVersion)' != ''">
+    <PackageReference Include="SwiftBindings.Apple.VisionKit" Version="$(VisionKitPackageVersion)" />
   </ItemGroup>
 
 </Project>
