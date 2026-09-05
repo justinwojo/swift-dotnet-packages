@@ -20,10 +20,10 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" PackageId="SwiftBindings.Stripe.ThreeDS2" PackageVersion="26.9.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" PackageId="SwiftBindings.Stripe.ThreeDS2" PackageVersion="26.9.0.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

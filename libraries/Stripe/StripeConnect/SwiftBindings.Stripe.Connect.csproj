@@ -20,9 +20,9 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripeFinancialConnections/StripeFinancialConnections.xcframework" PackageId="SwiftBindings.Stripe.FinancialConnections" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeFinancialConnections/StripeFinancialConnections.xcframework" PackageId="SwiftBindings.Stripe.FinancialConnections" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

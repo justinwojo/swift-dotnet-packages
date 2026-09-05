@@ -20,12 +20,12 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeApplePay/StripeApplePay.xcframework" PackageId="SwiftBindings.Stripe.ApplePay" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripePaymentsUI/StripePaymentsUI.xcframework" PackageId="SwiftBindings.Stripe.PaymentsUI" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0" />
-    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" PackageId="SwiftBindings.Stripe.ThreeDS2" PackageVersion="26.9.0" />
+    <SwiftFrameworkDependency Include="../StripeApplePay/StripeApplePay.xcframework" PackageId="SwiftBindings.Stripe.ApplePay" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripePayments/StripePayments.xcframework" PackageId="SwiftBindings.Stripe.Payments" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripePaymentsUI/StripePaymentsUI.xcframework" PackageId="SwiftBindings.Stripe.PaymentsUI" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../Stripe3DS2/Stripe3DS2.xcframework" PackageId="SwiftBindings.Stripe.ThreeDS2" PackageVersion="26.9.0.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
@@ -37,6 +37,7 @@
      dependency on the framework's carrier package and a consumer installing PaymentSheet alone
      fails at dyld. Do not delete it. This note sits OUTSIDE the block because the injector
      regenerates the block wholesale and strips any comment placed within it. -->
+
 <!-- BEGIN auto-detected ProjectReference -->
   <ItemGroup>
     <ProjectReference Include="../Stripe3DS2/SwiftBindings.Stripe.ThreeDS2.csproj" />

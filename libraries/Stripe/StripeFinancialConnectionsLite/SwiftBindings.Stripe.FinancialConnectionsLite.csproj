@@ -34,7 +34,7 @@
      wholesale and strips any comment placed within it. -->
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0.1" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 
