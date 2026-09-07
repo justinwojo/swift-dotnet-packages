@@ -116,7 +116,7 @@ public class AppDelegate : UIApplicationDelegate
 
 #region Main View Controller
 
-public class MainViewController : UIViewController
+public partial class MainViewController : UIViewController
 {
     private UILabel? _titleLabel;
     private UILabel? _resultLabel;
@@ -174,7 +174,7 @@ public class MainViewController : UIViewController
         RunAllTests();
     }
 
-    private void RunAllTests()
+    private async void RunAllTests()
     {
         var logger = new TestLogger();
         var results = new TestResults();
@@ -201,7 +201,7 @@ public class MainViewController : UIViewController
 
         // Phase 6: Playback lifecycle tests
         logger.Info("=== Phase 6: Playback Lifecycle Tests ===");
-        RunPlaybackLifecycleTests(logger, results);
+        await RunPlaybackLifecycleTests(logger, results);
 
         // Phase 7: Value provider tests
         logger.Info("=== Phase 7: Value Provider Tests ===");
@@ -226,6 +226,10 @@ public class MainViewController : UIViewController
         // Phase 12: Release confidence coverage gaps
         logger.Info("=== Phase 12: Coverage Gap Tests ===");
         RunCoverageGapTests(logger, results);
+
+        // Phase 13: Rendering and .lottie behaviour
+        logger.Info("=== Phase 13: Rendering & DotLottie Behaviour ===");
+        await RunBehaviourTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -420,8 +424,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("Animation_FromData: no test file");
-                results.Skip("Animation_FromData", "No test file");
+                logger.Fail("Animation_FromData: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("Animation_FromData", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -453,8 +457,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("Animation_FromDataStrategy: no test file");
-                results.Skip("Animation_FromDataStrategy", "No test file");
+                logger.Fail("Animation_FromDataStrategy: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("Animation_FromDataStrategy", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -508,7 +512,8 @@ public class MainViewController : UIViewController
         var path = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
         if (path == null)
         {
-            logger.Skip("Animation property tests: no test file");
+            logger.Fail("Animation property tests: bundled fixture PlaneAnimation.json is missing from the app bundle");
+            results.Fail("Animation_PropertyTests", "bundled fixture PlaneAnimation.json is missing");
             return;
         }
 
@@ -840,8 +845,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("View_SetAnimation: no test file");
-                results.Skip("View_SetAnimation", "No test file");
+                logger.Fail("View_SetAnimation: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("View_SetAnimation", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -901,8 +906,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("View_CurrentProgress: no test file");
-                results.Skip("View_CurrentProgress", "No test file");
+                logger.Fail("View_CurrentProgress: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("View_CurrentProgress", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -937,8 +942,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("View_CurrentFrame: no test file");
-                results.Skip("View_CurrentFrame", "No test file");
+                logger.Fail("View_CurrentFrame: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("View_CurrentFrame", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -1094,16 +1099,20 @@ public class MainViewController : UIViewController
         }
     }
 
-    private void RunPlaybackLifecycleTests(TestLogger logger, TestResults results)
+    private async Task RunPlaybackLifecycleTests(TestLogger logger, TestResults results)
     {
         var path = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
         if (path == null)
         {
-            logger.Skip("Playback lifecycle: no test file");
+            logger.Fail("Playback lifecycle: bundled fixture PlaneAnimation.json is missing from the app bundle");
+            results.Fail("Playback_Lifecycle", "bundled fixture PlaneAnimation.json is missing");
             return;
         }
 
-        // Play / IsAnimationPlaying
+        // Play / IsAnimationPlaying. The view is attached to the key window first:
+        // an unattached Lottie view has no display link, so "not playing" there says
+        // nothing about the binding. With a window, IsAnimationPlaying=false after
+        // Play() is a real failure and the frame must actually advance.
         logger.Info("--- Play + IsAnimationPlaying ---");
         try
         {
@@ -1111,24 +1120,41 @@ public class MainViewController : UIViewController
             var animation = LottieAnimation.Filepath(path);
             view.Animation = animation;
             view.LoopMode = LottieLoopMode.Loop;
+            AttachToWindow(view);
 
             var beforePlay = view.IsAnimationPlaying;
             view.Play();
             var afterPlay = view.IsAnimationPlaying;
             logger.Info($"IsAnimationPlaying: before={beforePlay}, after={afterPlay}");
 
-            if (afterPlay)
+            if (beforePlay)
             {
-                logger.Pass("Play() sets IsAnimationPlaying=true");
-                results.Pass("Playback_Play");
+                logger.Fail("IsAnimationPlaying was already true before Play()");
+                results.Fail("Playback_Play", "playing before Play()");
+            }
+            else if (!afterPlay)
+            {
+                logger.Fail("IsAnimationPlaying stayed false after Play() on a window-attached view");
+                results.Fail("Playback_Play", "IsAnimationPlaying false after Play()");
             }
             else
             {
-                // IsAnimationPlaying might be false in test context (no display)
-                logger.Warn("IsAnimationPlaying=false after Play (no display context?)");
-                logger.Pass("Play() did not throw");
-                results.Pass("Playback_Play");
+                var startFrame = view.CurrentFrame;
+                bool advanced = await Await.UntilAsync(() => Math.Abs(view.CurrentFrame - startFrame) > 0.0001, 5000);
+                if (advanced)
+                {
+                    logger.Pass($"Play() started playback and advanced the frame {startFrame} -> {view.CurrentFrame}");
+                    results.Pass("Playback_Play");
+                }
+                else
+                {
+                    logger.Fail($"Play() reported playing but CurrentFrame stayed at {startFrame} for 5s");
+                    results.Fail("Playback_Play", "frame never advanced");
+                }
             }
+
+            view.Stop();
+            DetachFromWindow(view);
         }
         catch (Exception ex)
         {
@@ -1171,10 +1197,38 @@ public class MainViewController : UIViewController
             var view = new LottieAnimationView();
             var animation = LottieAnimation.Filepath(path);
             view.Animation = animation;
+            view.LoopMode = LottieLoopMode.Loop;
+            AttachToWindow(view);
             view.Play();
+
+            bool started = await Await.UntilAsync(() => view.IsAnimationPlaying, 5000);
             view.Pause();
-            logger.Pass("Pause() succeeded");
-            results.Pass("Playback_Pause");
+            var pausedFrame = view.CurrentFrame;
+            // Give the display link a chance to move the frame if Pause did not land.
+            await Task.Delay(500);
+            bool frozen = Math.Abs(view.CurrentFrame - pausedFrame) < 0.0001;
+            DetachFromWindow(view);
+
+            if (!started)
+            {
+                logger.Fail("Pause: playback never started, so pausing proves nothing");
+                results.Fail("Playback_Pause", "never started");
+            }
+            else if (view.IsAnimationPlaying)
+            {
+                logger.Fail("Pause: IsAnimationPlaying still true after Pause()");
+                results.Fail("Playback_Pause", "still playing after Pause()");
+            }
+            else if (!frozen)
+            {
+                logger.Fail($"Pause: frame kept advancing from {pausedFrame} to {view.CurrentFrame}");
+                results.Fail("Playback_Pause", "frame advanced after Pause()");
+            }
+            else
+            {
+                logger.Pass($"Pause() stopped playback and froze the frame at {pausedFrame}");
+                results.Pass("Playback_Pause");
+            }
         }
         catch (Exception ex)
         {
@@ -1190,9 +1244,37 @@ public class MainViewController : UIViewController
             var view = new LottieAnimationView();
             var animation = LottieAnimation.Filepath(path);
             view.Animation = animation;
-            view.PlayFromProgressToProgressLoopModeCompletion(0.0, 0.5);
-            logger.Pass("Play(fromProgress, toProgress) succeeded");
-            results.Pass("Playback_ProgressRange");
+            view.LoopMode = LottieLoopMode.PlayOnce;
+            AttachToWindow(view);
+
+            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            view.PlayFromProgressToProgressLoopModeCompletion(0.0, 0.25, LottieLoopMode.PlayOnce,
+                finished => completion.TrySetResult(finished));
+
+            bool done = await Await.UntilAsync(() => completion.Task.IsCompleted, 15000);
+            var endProgress = view.CurrentProgress;
+            DetachFromWindow(view);
+
+            if (!done)
+            {
+                logger.Fail("Play(fromProgress, toProgress) never invoked its completion within 15s");
+                results.Fail("Playback_ProgressRange", "completion never fired");
+            }
+            else if (!completion.Task.Result)
+            {
+                logger.Fail("Play(fromProgress, toProgress) completed with finished=false");
+                results.Fail("Playback_ProgressRange", "finished=false");
+            }
+            else if (Math.Abs(endProgress - 0.25) > 0.02)
+            {
+                logger.Fail($"Play(0.0 -> 0.25) ended at progress {endProgress}, expected the range endpoint");
+                results.Fail("Playback_ProgressRange", $"ended at {endProgress}");
+            }
+            else
+            {
+                logger.Pass($"Play(0.0 -> 0.25) finished at its range endpoint (progress {endProgress})");
+                results.Pass("Playback_ProgressRange");
+            }
         }
         catch (Exception ex)
         {
@@ -1208,13 +1290,33 @@ public class MainViewController : UIViewController
             var animation = LottieAnimation.Filepath(path);
             view.Animation = animation;
             view.LoopMode = LottieLoopMode.PlayOnce;
-            bool callbackReceived = false;
-            view.Play(finished =>
+            AttachToWindow(view);
+
+            // Start near the end so a whole animation does not have to elapse; the
+            // point of the test is that the completion closure is actually invoked
+            // with finished=true, which the old version wrote down and never read.
+            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            view.PlayFromProgressToProgressLoopModeCompletion(0.9, 1.0, LottieLoopMode.PlayOnce,
+                finished => completion.TrySetResult(finished));
+
+            bool arrived = await Await.UntilAsync(() => completion.Task.IsCompleted, 15000);
+            DetachFromWindow(view);
+
+            if (!arrived)
             {
-                callbackReceived = true;
-            });
-            logger.Pass("Play(completion) accepted callback");
-            results.Pass("Playback_Completion");
+                logger.Fail("Play(completion) never invoked the completion closure within 15s");
+                results.Fail("Playback_Completion", "completion never fired");
+            }
+            else if (!completion.Task.Result)
+            {
+                logger.Fail("Play(completion) invoked the closure with finished=false");
+                results.Fail("Playback_Completion", "finished=false");
+            }
+            else
+            {
+                logger.Pass("Play(completion) invoked the completion closure with finished=true");
+                results.Pass("Playback_Completion");
+            }
         }
         catch (Exception ex)
         {
@@ -1527,10 +1629,10 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("SetValueProvider: no test file");
-                results.Skip("L1_SetValueProvider_Float", "No test file");
-                results.Skip("L1_SetValueProvider_Size", "No test file");
-                results.Skip("L1_SetValueProvider_Point", "No test file");
+                logger.Fail("SetValueProvider: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("L1_SetValueProvider_Float", "bundled fixture PlaneAnimation.json is missing");
+                results.Fail("L1_SetValueProvider_Size", "bundled fixture PlaneAnimation.json is missing");
+                results.Fail("L1_SetValueProvider_Point", "bundled fixture PlaneAnimation.json is missing");
             }
         }
 
@@ -1552,8 +1654,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("Provider_Remove: no test file");
-                results.Skip("Provider_Remove", "No test file");
+                logger.Fail("Provider_Remove: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("Provider_Remove", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -1690,8 +1792,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("Cache_Roundtrip: no test file");
-                results.Skip("Cache_Roundtrip", "No test file");
+                logger.Fail("Cache_Roundtrip: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("Cache_Roundtrip", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -1830,8 +1932,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("Layer_PlayStop: no test file");
-                results.Skip("Layer_PlayStop", "No test file");
+                logger.Fail("Layer_PlayStop: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("Layer_PlayStop", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -1981,8 +2083,8 @@ public class MainViewController : UIViewController
                     }
                     else
                     {
-                        logger.Skip("SetValueProvider Color: no test file");
-                        results.Skip("L1L2_SetValueProvider_Color", "No test file");
+                        logger.Fail("SetValueProvider Color: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                        results.Fail("L1L2_SetValueProvider_Color", "bundled fixture PlaneAnimation.json is missing");
                     }
                 }
                 catch (Exception ex)
@@ -2078,8 +2180,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("L6 AnimatedButton with animation: no test file");
-                results.Skip("L6_AnimatedButton_WithAnimation", "No test file");
+                logger.Fail("L6 AnimatedButton with animation: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("L6_AnimatedButton_WithAnimation", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)
@@ -2128,8 +2230,8 @@ public class MainViewController : UIViewController
             }
             else
             {
-                logger.Skip("L8 LogKeypaths: no test file");
-                results.Skip("L8_LogHierarchyKeypaths", "No test file");
+                logger.Fail("L8 LogKeypaths: bundled fixture PlaneAnimation.json is missing from the app bundle");
+                results.Fail("L8_LogHierarchyKeypaths", "bundled fixture PlaneAnimation.json is missing");
             }
         }
         catch (Exception ex)

@@ -264,6 +264,10 @@ public class MainViewController : UIViewController
         logger.Info("=== Phase 9: Coverage Gap Tests ===");
         RunCoverageGapTests(logger, results);
 
+        // Phase 10: Behavioural tests against a locally served, byte-known image
+        logger.Info("=== Phase 10: Loopback Behaviour Tests ===");
+        await RunLoopbackBehaviourTests(logger, results);
+
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
 
@@ -1250,15 +1254,28 @@ public class MainViewController : UIViewController
             var task = pipeline.ImageTask(request);
             task.Priority = ImageRequest.PriorityKind.VeryHigh;
             var priority = task.Priority;
+            // A setter that silently drops the value is a marshalling defect, not an
+            // acceptable outcome — the round trip must return exactly what was written.
             if (priority == ImageRequest.PriorityKind.VeryHigh)
             {
-                logger.Pass("ImageTask.Priority set/get: VeryHigh");
-                results.Pass("ImageTask_PrioritySet");
+                // Second value so a getter hard-wired to VeryHigh cannot pass.
+                task.Priority = ImageRequest.PriorityKind.Low;
+                var lowered = task.Priority;
+                if (lowered == ImageRequest.PriorityKind.Low)
+                {
+                    logger.Pass("ImageTask.Priority set/get: VeryHigh then Low round-tripped exactly");
+                    results.Pass("ImageTask_PrioritySet");
+                }
+                else
+                {
+                    logger.Fail($"ImageTask.Priority set to Low returned {lowered}");
+                    results.Fail("ImageTask_PrioritySet", $"set Low, got {lowered}");
+                }
             }
             else
             {
-                logger.Pass($"ImageTask.Priority set: accessible (got {priority})");
-                results.Pass("ImageTask_PrioritySet");
+                logger.Fail($"ImageTask.Priority set to VeryHigh returned {priority}");
+                results.Fail("ImageTask_PrioritySet", $"set VeryHigh, got {priority}");
             }
             task.Cancel();
         }
@@ -1371,31 +1388,90 @@ public class MainViewController : UIViewController
             results.Fail("DataAsync_ImageRequest", ex.Message);
         }
 
-        // Async with CancellationToken — cancel immediately
-        logger.Info("--- Async CancellationToken ---");
-        try
+        // Cancellation against a loopback route that never answers. A stalled source can
+        // never be served from cache, so "it completed anyway" is a real failure here
+        // rather than an outcome the test has to tolerate.
+        logger.Info("--- Async CancellationToken (stalling loopback source) ---");
+        using (var server = new LoopbackHttpServer())
         {
-            var pipeline = ImagePipeline.Shared;
-            var cts = new CancellationTokenSource();
-            cts.Cancel(); // Cancel immediately
-            var request = new ImageRequest(TestImageUrl("cancel"));
+            // Two distinct stalling routes rather than one route with different query
+            // strings: the loopback server matches and counts on the path alone, so a
+            // shared route would let the pre-cancelled load's own request satisfy the
+            // "my request reached the server" wait below. The delayed-cancellation test
+            // would then cancel a load that never left the process and still report
+            // that it had proven in-flight cancellation.
+            const string preCancelRoute = "/stall-precancel.png";
+            const string inFlightRoute = "/stall-inflight.png";
+            server.Map(preCancelRoute, new LoopbackResponse { Stall = true, ContentType = "image/png" });
+            server.Map(inFlightRoute, new LoopbackResponse { Stall = true, ContentType = "image/png" });
+
+            // Pre-cancelled token: must surface as a cancellation, never as a result.
             try
             {
-                var image = await pipeline.ImageAsync(request, cts.Token);
-                // If it somehow succeeds (cached), that's also acceptable
-                logger.Pass("Async with pre-cancelled token: completed (likely cached)");
-                results.Pass("Async_Cancellation");
+                var pipeline = ImagePipeline.Shared;
+                var cts = new CancellationTokenSource();
+                cts.Cancel();
+                var request = new ImageRequest(server.Url(preCancelRoute));
+                try
+                {
+                    var image = await Await.WithTimeoutAsync(
+                        pipeline.ImageAsync(request, cts.Token), 10000, "pre-cancelled load");
+                    logger.Fail($"Pre-cancelled token still produced an image ({image?.Size.Width}x{image?.Size.Height}) from a stalled source");
+                    results.Fail("Async_Cancellation", "pre-cancelled token produced an image from a stalled source");
+                }
+                catch (OperationCanceledException)
+                {
+                    logger.Pass("Async with pre-cancelled token: cancelled as expected");
+                    results.Pass("Async_Cancellation");
+                }
             }
-            catch (OperationCanceledException)
+            catch (Exception ex)
             {
-                logger.Pass("Async with pre-cancelled token: cancelled as expected");
-                results.Pass("Async_Cancellation");
+                logger.Fail($"Async cancellation: {ex.GetType().Name}: {ex.Message}");
+                results.Fail("Async_Cancellation", ex.Message);
             }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"Async cancellation: {ex.Message}");
-            results.Fail("Async_Cancellation", ex.Message);
+
+            // Delayed cancellation: prove the task is genuinely in flight (the server has
+            // accepted the connection and is holding it) before cancelling it.
+            try
+            {
+                var pipeline = ImagePipeline.Shared;
+                var cts = new CancellationTokenSource();
+                var request = new ImageRequest(server.Url(inFlightRoute));
+                var loadTask = pipeline.ImageAsync(request, cts.Token);
+
+                var reachedServer = await Await.UntilAsync(() => server.HitsFor(inFlightRoute) >= 1, 8000);
+                if (!reachedServer)
+                {
+                    logger.Fail("Delayed cancellation: request never reached the loopback server");
+                    results.Fail("Async_DelayedCancellation", "request never reached the loopback server");
+                }
+                else if (loadTask.IsCompleted)
+                {
+                    logger.Fail("Delayed cancellation: load completed before it was cancelled (server never answered)");
+                    results.Fail("Async_DelayedCancellation", "load completed against a stalled source");
+                }
+                else
+                {
+                    cts.Cancel();
+                    try
+                    {
+                        await Await.WithTimeoutAsync(loadTask, 10000, "delayed cancellation");
+                        logger.Fail("Delayed cancellation: in-flight load produced an image from a stalled source");
+                        results.Fail("Async_DelayedCancellation", "in-flight load completed after cancel");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        logger.Pass("Delayed cancellation: in-flight load cancelled after reaching the server");
+                        results.Pass("Async_DelayedCancellation");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Fail($"Delayed cancellation: {ex.GetType().Name}: {ex.Message}");
+                results.Fail("Async_DelayedCancellation", ex.Message);
+            }
         }
 
         // Multiple concurrent image loads (using ImageRequest, not NSUrl)
@@ -1585,69 +1661,561 @@ public class MainViewController : UIViewController
             var cache = pipeline.Cache;
             var request = new ImageRequest(TestImageUrl("n6"));
 
-            // First load image to populate cache
-            var image = await pipeline.ImageAsync(request);
-            if (image == null)
+            // Start from a known-empty entry so nothing below can be satisfied by a
+            // leftover from an earlier phase.
+            cache.RemoveCachedImage(request);
+
+            // Store an image we built ourselves, so the container that comes back out can
+            // be compared against known pixel dimensions rather than merely being non-null.
+            var stored = ImageFixtures.SolidUIImage(37, 21, 0.0, 0.0, 1.0);
+            cache.StoreCachedImage(new ImageContainer(stored), request);
+            logger.Pass($"N6: StoreCachedImage stored {stored.Size.Width}x{stored.Size.Height}");
+            results.Pass("N6_Cache_StoreImage");
+
+            var contains = cache.ContainsCachedImage(request);
+            if (contains)
             {
-                logger.Fail("N6: Failed to load image for cache test");
-                results.Fail("N6_Cache_CachedImage", "Failed to load");
-                results.Skip("N6_Cache_ContainsImage", "Depends on load");
-                results.Skip("N6_Cache_RemoveImage", "Depends on load");
+                logger.Pass("N6: ContainsCachedImage true after store");
+                results.Pass("N6_Cache_ContainsImage");
             }
             else
             {
-                // ContainsCachedImage
-                var contains = cache.ContainsCachedImage(request);
-                logger.Pass($"N6: ContainsCachedImage: {contains}");
-                results.Pass("N6_Cache_ContainsImage");
+                logger.Fail("N6: ContainsCachedImage false immediately after StoreCachedImage");
+                results.Fail("N6_Cache_ContainsImage", "ContainsCachedImage false after store");
+            }
 
-                // CachedImage
-                var cached = cache.CachedImage(request);
-                if (cached != null)
-                {
-                    logger.Pass("N6: CachedImage returned container");
-                    results.Pass("N6_Cache_CachedImage");
+            var cached = cache.CachedImage(request);
+            if (cached == null)
+            {
+                logger.Fail("N6: CachedImage returned null for an image just stored in the memory cache");
+                results.Fail("N6_Cache_CachedImage", "CachedImage null after StoreCachedImage");
+            }
+            else if ((int)cached.Image.Size.Width != 37 || (int)cached.Image.Size.Height != 21)
+            {
+                logger.Fail($"N6: CachedImage returned {cached.Image.Size.Width}x{cached.Image.Size.Height}, expected 37x21");
+                results.Fail("N6_Cache_CachedImage", $"got {cached.Image.Size.Width}x{cached.Image.Size.Height}, expected 37x21");
+            }
+            else
+            {
+                logger.Pass("N6: CachedImage round-tripped the stored 37x21 container");
+                results.Pass("N6_Cache_CachedImage");
+            }
 
-                    // StoreCachedImage (re-store same image)
-                    try
-                    {
-                        var storeRequest = new ImageRequest(TestImageUrl("store"));
-                        cache.StoreCachedImage(cached, storeRequest);
-                        logger.Pass("N6: StoreCachedImage succeeded");
-                        results.Pass("N6_Cache_StoreImage");
-                    }
-                    catch (Exception ex2)
-                    {
-                        logger.Fail($"N6 StoreCachedImage: {ex2.Message}");
-                        results.Fail("N6_Cache_StoreImage", ex2.Message);
-                    }
-                }
-                else
-                {
-                    // Image might only be in disk cache, not memory
-                    logger.Pass("N6: CachedImage returned null (disk-only cache)");
-                    results.Pass("N6_Cache_CachedImage");
-                    results.Skip("N6_Cache_StoreImage", "No cached container to store");
-                }
-
-                // RemoveCachedImage
-                try
-                {
-                    cache.RemoveCachedImage(request);
-                    logger.Pass("N6: RemoveCachedImage succeeded");
-                    results.Pass("N6_Cache_RemoveImage");
-                }
-                catch (Exception ex2)
-                {
-                    logger.Fail($"N6 RemoveCachedImage: {ex2.Message}");
-                    results.Fail("N6_Cache_RemoveImage", ex2.Message);
-                }
+            // RemoveCachedImage must actually remove it.
+            cache.RemoveCachedImage(request);
+            var afterRemove = cache.CachedImage(request);
+            var containsAfterRemove = cache.ContainsCachedImage(request);
+            if (afterRemove == null && !containsAfterRemove)
+            {
+                logger.Pass("N6: RemoveCachedImage cleared both the entry and the containment flag");
+                results.Pass("N6_Cache_RemoveImage");
+            }
+            else
+            {
+                logger.Fail($"N6: after RemoveCachedImage, CachedImage={(afterRemove == null ? "null" : "non-null")} Contains={containsAfterRemove}");
+                results.Fail("N6_Cache_RemoveImage", "entry survived RemoveCachedImage");
             }
         }
         catch (Exception ex)
         {
             logger.Fail($"N6 Cache methods: {ex.Message}");
             results.Fail("N6_Cache_CachedImage", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Behavioural tests served from an in-process loopback HTTP server. Serving the
+    /// fixture ourselves gives three things a bundled file cannot: the exact bytes (so
+    /// decoded pixels can be asserted), a count of how many times the network was
+    /// actually touched (so a cache hit is proof rather than inference), and control over
+    /// failure shapes (404, corrupt body, a connection that never answers).
+    /// </summary>
+    private async Task RunLoopbackBehaviourTests(TestLogger logger, TestResults results)
+    {
+        LoopbackHttpServer server;
+        try
+        {
+            server = new LoopbackHttpServer();
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Loopback server could not start: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_ServerStart", ex.Message);
+            return;
+        }
+
+        using (server)
+        {
+            var redPng = ImageFixtures.SolidPng(24, 16, 1.0, 0.0, 0.0);
+            server.Map("/red.png", new LoopbackResponse { ContentType = "image/png", Body = redPng });
+            server.Map("/missing.png", new LoopbackResponse { StatusCode = 404, ReasonPhrase = "Not Found", ContentType = "text/plain", Body = Encoding.UTF8.GetBytes("no such image") });
+            server.Map("/corrupt.png", new LoopbackResponse { ContentType = "image/png", Body = ImageFixtures.CorruptImageBytes() });
+            server.Map("/cachehit.png", new LoopbackResponse { ContentType = "image/png", Body = redPng });
+            server.Map("/prefetch.png", new LoopbackResponse { ContentType = "image/png", Body = redPng });
+            server.Map("/raw.bin", new LoopbackResponse { ContentType = "application/octet-stream", Body = Encoding.UTF8.GetBytes("raw-loader-payload") });
+            logger.Info($"Loopback server listening on {server.BaseUrl}; fixture png is {redPng.Length} bytes");
+
+            await LoopbackPixelRoundTrip(logger, results, server);
+            await LoopbackCacheHitLoadCount(logger, results, server);
+            await LoopbackFailurePaths(logger, results, server);
+            await LoopbackProcessorPixels(logger, results, server);
+            await LoopbackPrefetchCompletes(logger, results, server);
+            await DataLoaderResponseCallback(logger, results, server);
+            DataCacheRoundTrip(logger, results);
+        }
+    }
+
+    private async Task LoopbackPixelRoundTrip(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            var request = new ImageRequest(server.Url("/red.png"));
+            var image = await Await.WithTimeoutAsync(pipeline.ImageAsync(request), 15000, "loopback image load");
+
+            if (image is null)
+            {
+                logger.Fail("Loopback load returned a null image");
+                results.Fail("Loopback_PixelRoundTrip", "null image");
+                return;
+            }
+
+            var px = ImageFixtures.CenterPixel(image);
+            bool sized = (int)image.Size.Width == 24 && (int)image.Size.Height == 16;
+            bool red = px.R > 240 && px.G < 15 && px.B < 15 && px.A == 255;
+            if (sized && red)
+            {
+                logger.Pass($"Loopback image decoded 24x16 with centre pixel {px}");
+                results.Pass("Loopback_PixelRoundTrip");
+            }
+            else
+            {
+                logger.Fail($"Loopback image was {image.Size.Width}x{image.Size.Height} with centre pixel {px}, expected 24x16 solid red");
+                results.Fail("Loopback_PixelRoundTrip", $"{image.Size.Width}x{image.Size.Height} px={px}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Loopback pixel round trip: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_PixelRoundTrip", ex.Message);
+        }
+    }
+
+    private async Task LoopbackCacheHitLoadCount(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        // An isolated pipeline so the shared pipeline's cache state cannot decide the
+        // outcome, and a server hit counter so "it was cached" is measured, not assumed.
+        try
+        {
+            var config = new ImagePipeline.ConfigurationInfo(ImagePipeline.Shared.Configuration.DataLoader);
+            using var pipeline = new ImagePipeline(config);
+
+            var url = server.Url("/cachehit.png");
+            var first = await Await.WithTimeoutAsync(pipeline.ImageAsync(new ImageRequest(url)), 15000, "cache-hit first load");
+            int hitsAfterFirst = server.HitsFor("/cachehit.png");
+            var second = await Await.WithTimeoutAsync(pipeline.ImageAsync(new ImageRequest(url)), 15000, "cache-hit second load");
+            int hitsAfterSecond = server.HitsFor("/cachehit.png");
+
+            if (first is null || second is null)
+            {
+                logger.Fail($"Cache-hit test: first={(first is null ? "null" : "ok")} second={(second is null ? "null" : "ok")}");
+                results.Fail("Loopback_CacheHit", "a load returned null");
+            }
+            else if (hitsAfterFirst != 1)
+            {
+                logger.Fail($"Cache-hit test: first load produced {hitsAfterFirst} server hits, expected exactly 1");
+                results.Fail("Loopback_CacheHit", $"first load hits={hitsAfterFirst}");
+            }
+            else if (hitsAfterSecond != 1)
+            {
+                logger.Fail($"Cache-hit test: second load went back to the network (hits {hitsAfterFirst} -> {hitsAfterSecond})");
+                results.Fail("Loopback_CacheHit", $"second load hits={hitsAfterSecond}");
+            }
+            else
+            {
+                logger.Pass("Cache hit proven: two loads, exactly one server hit");
+                results.Pass("Loopback_CacheHit");
+            }
+
+            // The pipeline's own cache facade must agree with what the hit count showed.
+            var cached = pipeline.Cache.CachedImage(new ImageRequest(url));
+            if (cached is not null && (int)cached.Image.Size.Width == 24)
+            {
+                logger.Pass("Pipeline.Cache.CachedImage returned the 24x16 entry the second load was served from");
+                results.Pass("Loopback_CacheHit_Facade");
+            }
+            else
+            {
+                logger.Fail($"Pipeline.Cache.CachedImage returned {(cached is null ? "null" : $"{cached.Image.Size.Width}x{cached.Image.Size.Height}")} after a proven memory-cache hit");
+                results.Fail("Loopback_CacheHit_Facade", cached is null ? "null" : "wrong size");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Cache-hit load count: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_CacheHit", ex.Message);
+        }
+    }
+
+    private async Task LoopbackFailurePaths(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        // 404: the pipeline must surface a failure, not an image.
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            try
+            {
+                var image = await Await.WithTimeoutAsync(
+                    pipeline.ImageAsync(new ImageRequest(server.Url("/missing.png"))), 15000, "404 load");
+                logger.Fail($"404 response produced an image ({image?.Size.Width}x{image?.Size.Height})");
+                results.Fail("Loopback_404", "404 produced an image");
+            }
+            catch (TimeoutException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (server.HitsFor("/missing.png") < 1)
+                {
+                    logger.Fail("404 test failed before reaching the server: " + ex.Message);
+                    results.Fail("Loopback_404", "request never reached the server");
+                }
+                else
+                {
+                    logger.Pass($"404 surfaced as {ex.GetType().Name}: {ex.Message}");
+                    results.Pass("Loopback_404");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"404 path: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_404", ex.Message);
+        }
+
+        // Corrupt body: a 200 whose payload cannot be decoded must fail, not yield a
+        // blank or zero-sized image.
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            try
+            {
+                var image = await Await.WithTimeoutAsync(
+                    pipeline.ImageAsync(new ImageRequest(server.Url("/corrupt.png"))), 15000, "corrupt load");
+                logger.Fail($"Corrupt image body produced an image ({image?.Size.Width}x{image?.Size.Height})");
+                results.Fail("Loopback_CorruptImage", "corrupt body produced an image");
+            }
+            catch (TimeoutException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (server.HitsFor("/corrupt.png") < 1)
+                {
+                    logger.Fail("Corrupt-image test failed before reaching the server: " + ex.Message);
+                    results.Fail("Loopback_CorruptImage", "request never reached the server");
+                }
+                else
+                {
+                    logger.Pass($"Corrupt image body surfaced as {ex.GetType().Name}: {ex.Message}");
+                    results.Pass("Loopback_CorruptImage");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Corrupt-image path: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_CorruptImage", ex.Message);
+        }
+    }
+
+    private async Task LoopbackProcessorPixels(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        // Resize through the request pipeline: assert the delivered image's dimensions,
+        // which is the processor's actual output rather than the fact it was accepted.
+        try
+        {
+            var pipeline = ImagePipeline.Shared;
+            // Pixels, not points: a points-based size is multiplied by the screen scale,
+            // which would make the expected dimensions depend on the simulator device.
+            var resize = new ImageProcessors.Resize(
+                new Swift.CGSize(8, 8), ImageProcessingOptions.Unit.Pixels, crop: true);
+            var request = new ImageRequest(
+                new NSUrl(server.Url("/red.png#resized")),
+                new IImageProcessing[] { resize });
+            var image = await Await.WithTimeoutAsync(pipeline.ImageAsync(request), 15000, "resize load");
+
+            if (image is null)
+            {
+                logger.Fail("Resize processor: pipeline returned null");
+                results.Fail("Loopback_ProcessorResize", "null image");
+            }
+            else if ((int)image.Size.Width == 8 && (int)image.Size.Height == 8)
+            {
+                var px = ImageFixtures.CenterPixel(image);
+                if (px.R > 240 && px.G < 15 && px.B < 15)
+                {
+                    logger.Pass($"Resize processor produced 8x8 and preserved the colour ({px})");
+                    results.Pass("Loopback_ProcessorResize");
+                }
+                else
+                {
+                    logger.Fail($"Resize processor produced 8x8 but the centre pixel was {px}, expected red");
+                    results.Fail("Loopback_ProcessorResize", $"centre pixel {px}");
+                }
+            }
+            else
+            {
+                logger.Fail($"Resize processor produced {image.Size.Width}x{image.Size.Height}, expected 8x8");
+                results.Fail("Loopback_ProcessorResize", $"{image.Size.Width}x{image.Size.Height}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Resize processor: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_ProcessorResize", ex.Message);
+        }
+
+        // Circle: the corner of a circular crop must become transparent while the centre
+        // keeps the source colour. This reads the processor's own output pixels.
+        try
+        {
+            var source = ImageFixtures.SolidUIImage(32, 32, 0.0, 1.0, 0.0);
+            var circle = new ImageProcessors.Circle();
+            var processed = circle.Process(source);
+
+            if (processed is null)
+            {
+                logger.Fail("Circle processor returned null");
+                results.Fail("Loopback_ProcessorCircle", "null output");
+            }
+            else
+            {
+                var corner = ImageFixtures.PixelAt(processed, 1, 1);
+                var centre = ImageFixtures.PixelAt(processed, 16, 16);
+                if (corner.A == 0 && centre.A > 200 && centre.G > 200 && centre.R < 60)
+                {
+                    logger.Pass($"Circle processor cleared the corner (a={corner.A}) and kept the centre green ({centre})");
+                    results.Pass("Loopback_ProcessorCircle");
+                }
+                else
+                {
+                    logger.Fail($"Circle processor output: corner={corner} centre={centre}; expected a transparent corner and a green centre");
+                    results.Fail("Loopback_ProcessorCircle", $"corner={corner} centre={centre}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Circle processor: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_ProcessorCircle", ex.Message);
+        }
+        await Task.CompletedTask;
+    }
+
+    private async Task LoopbackPrefetchCompletes(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        try
+        {
+            var config = new ImagePipeline.ConfigurationInfo(ImagePipeline.Shared.Configuration.DataLoader);
+            using var pipeline = new ImagePipeline(config);
+            var prefetcher = new ImagePrefetcher(pipeline);
+
+            int completions = 0;
+            prefetcher.DidComplete = () => Interlocked.Increment(ref completions);
+
+            var url = server.Url("/prefetch.png");
+            prefetcher.StartPrefetching(new[] { new NSUrl(url) });
+
+            bool completed = await Await.UntilAsync(() => Volatile.Read(ref completions) > 0, 20000);
+            if (!completed)
+            {
+                logger.Fail("ImagePrefetcher.DidComplete never fired within 20s");
+                results.Fail("Loopback_PrefetchCompletes", "DidComplete never fired");
+                return;
+            }
+
+            // Completion alone would still pass if nothing was fetched — require the
+            // prefetched image to be in the pipeline's cache too.
+            var cached = pipeline.Cache.CachedImage(new ImageRequest(url));
+            if (cached is not null && (int)cached.Image.Size.Width == 24 && (int)cached.Image.Size.Height == 16)
+            {
+                logger.Pass($"Prefetcher completed ({completions} callback(s)) and left a 24x16 image in the pipeline cache");
+                results.Pass("Loopback_PrefetchCompletes");
+            }
+            else
+            {
+                logger.Fail($"Prefetcher completed but the cache holds {(cached is null ? "nothing" : $"{cached.Image.Size.Width}x{cached.Image.Size.Height}")}");
+                results.Fail("Loopback_PrefetchCompletes", "prefetched image absent from cache");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"Prefetch completion: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Loopback_PrefetchCompletes", ex.Message);
+        }
+    }
+
+    private async Task DataLoaderResponseCallback(TestLogger logger, TestResults results, LoopbackHttpServer server)
+    {
+        // Exercises the data loader's LoadData entry point directly, so the NSUrlResponse
+        // handed to the didReceiveData callback is inspected rather than merely received
+        // — an ObjC-class callback argument is the shape most likely to be mismarshalled.
+        // The binding's only public DataLoader constructor is an always-throwing SB0005
+        // stub, and the shared pipeline vends its loader through the IDataLoading
+        // projection, so the call goes through the interface.
+        try
+        {
+            var loader = ImagePipeline.Shared.Configuration.DataLoader;
+            if (loader is null)
+            {
+                logger.Fail("Shared pipeline's Configuration.DataLoader was null");
+                results.Fail("DataLoader_LoadDataResponse", "no data loader available");
+                return;
+            }
+
+            string url = server.Url("/raw.bin");
+            long totalBytes = 0;
+            string? seenUrl = null;
+            long seenStatus = -1;
+            Exception? callbackError = null;
+            var completed = new TaskCompletionSource<Swift.Foundation.AnyError?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var cancellable = loader.LoadData(
+                new NSUrlRequest(new NSUrl(url)),
+                (data, response) =>
+                {
+                    try
+                    {
+                        Interlocked.Add(ref totalBytes, data?.Length ?? 0);
+                        seenUrl = response?.Url?.AbsoluteString;
+                        if (response is NSHttpUrlResponse http)
+                            seenStatus = http.StatusCode;
+                    }
+                    catch (Exception ex)
+                    {
+                        callbackError = ex;
+                    }
+                },
+                error => completed.TrySetResult(error));
+
+            // Nothing holds the delegates but the native side; collecting here is what
+            // makes a missing GC root show up as a crash or a lost callback.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            var finalError = await Await.WithTimeoutAsync(completed.Task, 20000, "DataLoader.LoadData");
+            GC.KeepAlive(cancellable);
+
+            if (callbackError is not null)
+            {
+                logger.Fail($"DataLoader response callback threw: {callbackError.GetType().Name}: {callbackError.Message}");
+                results.Fail("DataLoader_LoadDataResponse", callbackError.Message);
+            }
+            else if (finalError is not null)
+            {
+                logger.Fail($"DataLoader.LoadData completed with an error for a 200 response: {finalError}");
+                results.Fail("DataLoader_LoadDataResponse", "completion carried an error");
+            }
+            else if (seenStatus != 200)
+            {
+                logger.Fail($"DataLoader response status was {seenStatus}, expected 200 (url={seenUrl ?? "null"})");
+                results.Fail("DataLoader_LoadDataResponse", $"status {seenStatus}");
+            }
+            else if (seenUrl is null || !seenUrl.Contains("/raw.bin", StringComparison.Ordinal))
+            {
+                logger.Fail($"DataLoader response URL was {seenUrl ?? "null"}, expected it to contain /raw.bin");
+                results.Fail("DataLoader_LoadDataResponse", $"url {seenUrl ?? "null"}");
+            }
+            else if (Interlocked.Read(ref totalBytes) != 18)
+            {
+                logger.Fail($"DataLoader delivered {Interlocked.Read(ref totalBytes)} bytes, expected 18");
+                results.Fail("DataLoader_LoadDataResponse", $"{Interlocked.Read(ref totalBytes)} bytes");
+            }
+            else
+            {
+                logger.Pass($"DataLoader.LoadData delivered 18 bytes with status 200 from {seenUrl}, surviving a GC mid-flight");
+                results.Pass("DataLoader_LoadDataResponse");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DataLoader.LoadData: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("DataLoader_LoadDataResponse", ex.Message);
+        }
+    }
+
+    private void DataCacheRoundTrip(TestLogger logger, TestResults results)
+    {
+        // write -> read -> remove -> reopen, so persistence across instances is asserted
+        // rather than just the absence of an exception.
+        try
+        {
+            string name = "swiftbindings.datacache.roundtrip";
+            var payload = Encoding.UTF8.GetBytes("nuke-datacache-round-trip-payload");
+
+            using (var cache = new DataCache(name))
+            {
+                cache.RemoveAll();
+                cache.StoreData(payload, "k1");
+                cache.Flush();
+
+                var read = cache.CachedData("k1");
+                if (read is null || !read.AsSpan().SequenceEqual(payload))
+                {
+                    logger.Fail($"DataCache read back {(read is null ? "null" : read.Length + " bytes")}, expected the {payload.Length} bytes written");
+                    results.Fail("DataCache_RoundTrip", "stored payload did not read back");
+                    return;
+                }
+                if (!cache.ContainsData("k1"))
+                {
+                    logger.Fail("DataCache.ContainsData false for a key just stored and flushed");
+                    results.Fail("DataCache_RoundTrip", "ContainsData false after store");
+                    return;
+                }
+            }
+
+            // Reopen: the bytes must still be there after the first instance is gone.
+            using (var reopened = new DataCache(name))
+            {
+                var persisted = reopened.CachedData("k1");
+                if (persisted is null || !persisted.AsSpan().SequenceEqual(payload))
+                {
+                    logger.Fail($"DataCache reopened by name returned {(persisted is null ? "null" : persisted.Length + " bytes")}, expected the persisted payload");
+                    results.Fail("DataCache_RoundTrip", "payload did not survive reopen");
+                    return;
+                }
+
+                reopened.RemoveData("k1");
+                reopened.Flush();
+                var afterRemove = reopened.CachedData("k1");
+                if (afterRemove is not null)
+                {
+                    logger.Fail($"DataCache still returned {afterRemove.Length} bytes after RemoveData");
+                    results.Fail("DataCache_RoundTrip", "RemoveData did not remove the entry");
+                    return;
+                }
+            }
+
+            using (var afterReopen = new DataCache(name))
+            {
+                if (afterReopen.CachedData("k1") is not null)
+                {
+                    logger.Fail("DataCache removal did not survive a reopen — the entry came back");
+                    results.Fail("DataCache_RoundTrip", "removal did not persist");
+                    return;
+                }
+            }
+
+            logger.Pass("DataCache round trip: write, read, reopen, remove, reopen all behaved");
+            results.Pass("DataCache_RoundTrip");
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"DataCache round trip: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("DataCache_RoundTrip", ex.Message);
         }
     }
 

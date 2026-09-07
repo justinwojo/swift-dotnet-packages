@@ -404,9 +404,12 @@ public static class StyleTests
 
 #region Main View Controller
 
-public class MapTestViewController : UIViewController
+public partial class MapTestViewController : UIViewController
 {
-    private const string DemoStyle = "https://demotiles.maplibre.org/style.json";
+    // Served by this process over loopback (see LocalStyleServer). Pointing the map at
+    // a third-party demo endpoint made every render assertion depend on someone else's
+    // uptime, which is why "did it finish rendering?" used to be a Skip.
+    private static string DemoStyle => LocalStyleServer.StyleUrl;
 
     private MLNMapView? _map;
     private SpikeMapDelegate? _delegate;
@@ -464,13 +467,37 @@ public class MapTestViewController : UIViewController
             return (Status.Pass, "flight started with a managed completion block (delivery asserted separately)");
         });
 
-        // Defer the async/coverage verdict until tiles + delegate callbacks have
-        // had time to fire over the network.
+        // Defer the async/coverage verdict until the delegate callbacks have landed.
+        // The style is served from this process, so this is a bounded wait on the
+        // actual conditions rather than a fixed sleep: it finishes as soon as the
+        // callbacks arrive, and a stall still reports (as a failure) instead of hanging.
         _ = Task.Run(async () =>
         {
-            await Task.Delay(14000);
-            BeginInvokeOnMainThread(() => FinishAndReport());
+            await Await.UntilAsync(AsyncSignalsSettled, 60000);
+            BeginInvokeOnMainThread(() => _ = FinishAndReportAsync());
         });
+    }
+
+    private static bool AsyncSignalsSettled() =>
+        TestState.DidFinishLoadingStyle
+        && TestState.DidFinishLoadingMap
+        && TestState.DidFinishRenderingMapFully
+        && TestState.RegionDidChange
+        && TestState.FlyToCameraCompleted
+        && TestState.OfflinePackStatus == Status.Pass;
+
+    private async Task FinishAndReportAsync()
+    {
+        try
+        {
+            await RunBehaviourTests();
+        }
+        catch (Exception ex)
+        {
+            TestState.Record("behaviour suite", Status.Fail, $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        FinishAndReport();
     }
 
     private void RunSynchronousPatterns()
@@ -1201,11 +1228,10 @@ public class MapTestViewController : UIViewController
                    && !options.ShowsLogo
                    && copy != null
                    && Math.Abs(copy.ZoomLevel - 9) < 1e-9;
-            // The snapshotter itself is constructed but never started: startWithCompletionHandler
-            // downloads tiles, which belongs to the async/network part of the matrix.
-            // Constructing the snapshotter is itself the assertion — it throws or returns a
-            // live peer, so `snapshotter != null` would add no signal. Assert instead that the
-            // options survived the trip into the snapshotter's own `options` property.
+            // This probe covers only the options/NSCopying surface; the snapshotter is
+            // actually started, and its image inspected, in the behaviour suite. Assert
+            // here that the options survived the trip into the snapshotter's own
+            // `options` property — `snapshotter != null` would add no signal.
             using var snapshotter = new MLNMapSnapshotter(options);
             bool optionsRoundTrip = Math.Abs(snapshotter.Options.ZoomLevel - 9) < 1e-9
                                  && Math.Abs((double)snapshotter.Options.Size.Width - 120) < 1e-9
@@ -1466,25 +1492,22 @@ public class MapTestViewController : UIViewController
                 ? "ObjC -> C# override invoked"
                 : "override never called. These two callbacks are kept as hard failures on purpose: they " +
                   "are the binding-level signal that the ObjC delegate dispatches into a managed subclass " +
-                  "at all. If the rest of the run is green, suspect the style download " +
-                  "(demotiles.maplibre.org) rather than the bindings, and re-run with network access.");
+                  "at all. The style is served by this process over loopback, so there is no remote " +
+                  "dependency left to blame.");
         TestState.Record("delegate: mapViewDidFinishLoadingMap:",
             TestState.DidFinishLoadingMap ? Status.Pass : Status.Fail,
             TestState.DidFinishLoadingMap
                 ? "ObjC -> C# override invoked"
-                : "override never called (see the didFinishLoadingStyle note above — a remote style " +
-                  "fetch failure or a >14s stall presents identically here)");
-        // fullyRendered=true requires every visible tile to have arrived from
-        // https://demotiles.maplibre.org within the fixed report window, so a slow or
-        // rate-limited network fails it on a perfectly healthy binding. The delegate
-        // *wiring* is already gated above (didFinishLoadingStyle / didFinishLoadingMap
-        // are hard Fails), so non-delivery here is a Skip, not a Fail.
+                : "override never called (see the didFinishLoadingStyle note above)");
+        // Every source this style names is served by this process, so a fully-rendered
+        // frame is reachable without touching the network and non-delivery is a real
+        // signal rather than someone else's latency.
         TestState.Record("delegate: mapViewDidFinishRenderingMap:fullyRendered:",
-            TestState.DidFinishRenderingMapFully ? Status.Pass : Status.Skip,
+            TestState.DidFinishRenderingMapFully ? Status.Pass : Status.Fail,
             TestState.DidFinishRenderingMapFully
-                ? "fullyRendered=true delivered"
-                : "fullyRendered=true not delivered inside the report window — depends on remote " +
-                  "tile delivery, so it is not a binding-level signal (style/map load callbacks gate instead)");
+                ? "fullyRendered=true delivered for the locally-served style"
+                : "fullyRendered=true never delivered within 60s for a style served from this process — " +
+                  "either the render loop never completed a frame or the callback did not reach managed code");
         TestState.Record("delegate: mapView:regionDidChangeAnimated: (camera pipeline)",
             TestState.RegionDidChange ? Status.Pass : Status.Fail,
             TestState.RegionDidChange ? "programmatic camera change drove region callback" : "no region callback");

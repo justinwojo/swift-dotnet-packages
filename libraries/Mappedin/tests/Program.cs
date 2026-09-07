@@ -106,7 +106,7 @@ public class AppDelegate : UIApplicationDelegate
 
 #region Main View Controller
 
-public class MainViewController : UIViewController
+public partial class MainViewController : UIViewController
 {
     private UILabel? _titleLabel;
     private UILabel? _resultLabel;
@@ -164,7 +164,7 @@ public class MainViewController : UIViewController
         RunAllTests();
     }
 
-    private void RunAllTests()
+    private async void RunAllTests()
     {
         var logger = new TestLogger();
         var results = new TestResults();
@@ -189,6 +189,9 @@ public class MainViewController : UIViewController
 
         logger.Info("=== Section 7: WKWebView Inheritance ===");
         RunInheritanceTests(logger, results);
+
+        logger.Info("=== Section 8: MapView Lifecycle & Data Behaviour ===");
+        await RunBehaviourTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -699,21 +702,21 @@ public class MainViewController : UIViewController
     private void RunRawValueTests(TestLogger logger, TestResults results)
     {
         // --- RawValue access ---
-        TestRawValue(logger, results, "BearingType", "Straight", () => BearingType.Straight.RawValue);
-        TestRawValue(logger, results, "BearingType", "Right", () => BearingType.Right.RawValue);
-        TestRawValue(logger, results, "BearingType", "Left", () => BearingType.Left.RawValue);
-        TestRawValue(logger, results, "ActionType", "Departure", () => ActionType.Departure.RawValue);
-        TestRawValue(logger, results, "ActionType", "Arrival", () => ActionType.Arrival.RawValue);
-        TestRawValue(logger, results, "ConnectionType", "Stairs", () => ConnectionType.Stairs.RawValue);
-        TestRawValue(logger, results, "ConnectionType", "Elevator", () => ConnectionType.Elevator.RawValue);
-        TestRawValue(logger, results, "EasingFunction", "Linear", () => EasingFunction.Linear.RawValue);
-        TestRawValue(logger, results, "EasingFunction", "EaseInOut", () => EasingFunction.EaseInOut.RawValue);
-        TestRawValue(logger, results, "BlueDotStatus", "Active", () => BlueDotStatus.Active.RawValue);
-        TestRawValue(logger, results, "CollisionRankingTier", "Medium", () => CollisionRankingTier.Medium.RawValue);
+        TestRawValue(logger, results, "BearingType", "Straight", "Straight", () => BearingType.Straight.RawValue);
+        TestRawValue(logger, results, "BearingType", "Right", "Right", () => BearingType.Right.RawValue);
+        TestRawValue(logger, results, "BearingType", "Left", "Left", () => BearingType.Left.RawValue);
+        TestRawValue(logger, results, "ActionType", "Departure", "Departure", () => ActionType.Departure.RawValue);
+        TestRawValue(logger, results, "ActionType", "Arrival", "Arrival", () => ActionType.Arrival.RawValue);
+        TestRawValue(logger, results, "ConnectionType", "Stairs", "stairs", () => ConnectionType.Stairs.RawValue);
+        TestRawValue(logger, results, "ConnectionType", "Elevator", "elevator", () => ConnectionType.Elevator.RawValue);
+        TestRawValue(logger, results, "EasingFunction", "Linear", "linear", () => EasingFunction.Linear.RawValue);
+        TestRawValue(logger, results, "EasingFunction", "EaseInOut", "ease-in-out", () => EasingFunction.EaseInOut.RawValue);
+        TestRawValue(logger, results, "BlueDotStatus", "Active", "active", () => BlueDotStatus.Active.RawValue);
+        TestRawValue(logger, results, "CollisionRankingTier", "Medium", "medium", () => CollisionRankingTier.Medium.RawValue);
         // Nested-enum RawValue access:
-        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Medium",
+        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Medium", "medium",
             () => AntialiasingOptions.QualityKind.Medium.RawValue);
-        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Ultra",
+        TestRawValue(logger, results, "AntialiasingOptions.QualityKind", "Ultra", "ultra",
             () => AntialiasingOptions.QualityKind.Ultra.RawValue);
 
         // --- FromRawValue round-trip ---
@@ -742,21 +745,24 @@ public class MainViewController : UIViewController
             () => ConnectionType.FromRawValue("not_a_connection_type"));
     }
 
+    // The raw value is the wire literal Mappedin's JS layer sees, so the assertion is
+    // the exact string, not merely "something non-empty" — a truncated or re-cased
+    // string would have passed the old check.
     private void TestRawValue(TestLogger logger, TestResults results,
-        string enumName, string caseName, Func<string> getRawValue)
+        string enumName, string caseName, string expected, Func<string> getRawValue)
     {
         try
         {
             var raw = getRawValue();
-            if (!string.IsNullOrEmpty(raw))
+            if (raw == expected)
             {
                 logger.Pass($"{enumName}.{caseName}.RawValue = \"{raw}\"");
                 results.Pass($"RawValue_{enumName}_{caseName}");
             }
             else
             {
-                logger.Fail($"{enumName}.{caseName}.RawValue: empty or null");
-                results.Fail($"RawValue_{enumName}_{caseName}", "Empty or null RawValue");
+                logger.Fail($"{enumName}.{caseName}.RawValue: expected \"{expected}\", got \"{raw}\"");
+                results.Fail($"RawValue_{enumName}_{caseName}", $"expected \"{expected}\", got \"{raw}\"");
             }
         }
         catch (Exception ex)
@@ -808,10 +814,12 @@ public class MainViewController : UIViewController
             }
             else
             {
-                // Some Swift enums fall back to a default case for unknown raw values.
-                // Either behavior is acceptable here as long as it doesn't crash.
-                logger.Skip($"{enumName}.FromRawValue(invalid): non-null result (Swift may return default)");
-                results.Skip($"FromRawValue_{enumName}_Invalid", "Non-null result — Swift may use default case");
+                // These are RawRepresentable Swift enums: init?(rawValue:) is failable
+                // and returns nil for an unknown raw value. A non-null result here means
+                // the binding manufactured a case that Swift never produced, which is a
+                // defect, not a dialect difference.
+                logger.Fail($"{enumName}.FromRawValue(invalid) returned a non-null case for an unknown raw value");
+                results.Fail($"FromRawValue_{enumName}_Invalid", "non-null result for an invalid raw value");
             }
         }
         catch (Exception ex)

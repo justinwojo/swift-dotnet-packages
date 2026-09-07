@@ -104,7 +104,7 @@ public class AppDelegate : UIApplicationDelegate
 
 #region Main View Controller
 
-public class MainViewController : UIViewController
+public partial class MainViewController : UIViewController
 {
     private UILabel? _titleLabel;
     private UILabel? _resultLabel;
@@ -162,7 +162,7 @@ public class MainViewController : UIViewController
         RunAllTests();
     }
 
-    private void RunAllTests()
+    private async void RunAllTests()
     {
         var logger = new TestLogger();
         var results = new TestResults();
@@ -180,7 +180,7 @@ public class MainViewController : UIViewController
         RunImageDownloaderPropertyTests(logger, results);
 
         logger.Info("=== Section 5: ImageCache Methods ===");
-        RunImageCacheMethodTests(logger, results);
+        await RunImageCacheMethodTests(logger, results);
 
         logger.Info("=== Section 6: KingfisherManager Properties ===");
         RunKingfisherManagerTests(logger, results);
@@ -283,6 +283,9 @@ public class MainViewController : UIViewController
 
         logger.Info("=== Section 39: Cross-Type Interactions ===");
         RunCrossTypeTests(logger, results);
+
+        logger.Info("=== Section 40: Behavioural Image Pipeline ===");
+        await RunBehaviourTests(logger, results);
 
         // Summary
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
@@ -582,7 +585,7 @@ public class MainViewController : UIViewController
     // Section 5: ImageCache Methods
     // ──────────────────────────────────────────────
 
-    private void RunImageCacheMethodTests(TestLogger logger, TestResults results)
+    private async Task RunImageCacheMethodTests(TestLogger logger, TestResults results)
     {
         // CleanExpiredMemoryCache
         try
@@ -696,19 +699,35 @@ public class MainViewController : UIViewController
             results.Fail("ImageCache_CleanExpiredCache_null", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // CalculateDiskStorageSize with callback
+        // CalculateDiskStorageSize: the callback must actually arrive and carry a
+        // success value. Sleeping and then passing regardless of whether the callback
+        // ran made this test unable to fail.
         try
         {
             var cache = ImageCache.Default;
-            bool callbackReceived = false;
+            Swift.SwiftResult<nuint, KingfisherError>? received = null;
             cache.CalculateDiskStorageSize((Swift.SwiftResult<nuint, KingfisherError> result) =>
             {
-                callbackReceived = true;
+                received = result;
             });
-            // Brief wait for async callback
-            System.Threading.Thread.Sleep(200);
-            logger.Pass($"ImageCache.CalculateDiskStorageSize: callbackReceived={callbackReceived}");
-            results.Pass("ImageCache_CalculateDiskStorageSize");
+
+            bool arrived = await Await.UntilAsync(() => received is not null, 10000);
+            if (!arrived)
+            {
+                logger.Fail("ImageCache.CalculateDiskStorageSize: callback never fired within 10s");
+                results.Fail("ImageCache_CalculateDiskStorageSize", "callback never fired");
+            }
+            else if (!received!.TryGetSuccess(out var size))
+            {
+                received.TryGetFailure(out var err);
+                logger.Fail($"ImageCache.CalculateDiskStorageSize: reported failure {err?.GetType().Name}");
+                results.Fail("ImageCache_CalculateDiskStorageSize", "result was a failure");
+            }
+            else
+            {
+                logger.Pass($"ImageCache.CalculateDiskStorageSize: callback delivered size={size}");
+                results.Pass("ImageCache_CalculateDiskStorageSize");
+            }
         }
         catch (Exception ex)
         {
@@ -778,8 +797,16 @@ public class MainViewController : UIViewController
         {
             var disk = (CacheType)2;
             bool ok = disk == CacheType.Disk;
-            logger.Pass($"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
-            results.Pass("CacheType_roundtrip");
+            if (ok)
+            {
+                logger.Pass($"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
+                results.Pass("CacheType_roundtrip");
+            }
+            else
+            {
+                logger.Fail($"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
+                results.Fail("CacheType_roundtrip", $"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -807,8 +834,16 @@ public class MainViewController : UIViewController
         {
             var fit = (ContentMode)1;
             bool ok = fit == ContentMode.AspectFit;
-            logger.Pass($"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
-            results.Pass("ContentMode_roundtrip");
+            if (ok)
+            {
+                logger.Pass($"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
+                results.Pass("ContentMode_roundtrip");
+            }
+            else
+            {
+                logger.Fail($"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
+                results.Fail("ContentMode_roundtrip", $"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -908,8 +943,16 @@ public class MainViewController : UIViewController
                    && date.Tag == StorageExpiration.CaseTag.Date
                    && never.Tag == StorageExpiration.CaseTag.Never
                    && expired.Tag == StorageExpiration.CaseTag.Expired;
-            logger.Pass($"StorageExpiration tag values all correct: {ok}");
-            results.Pass("StorageExpiration_tag_values");
+            if (ok)
+            {
+                logger.Pass($"StorageExpiration tag values all correct: {ok}");
+                results.Pass("StorageExpiration_tag_values");
+            }
+            else
+            {
+                logger.Fail($"StorageExpiration tag values all correct: {ok}");
+                results.Fail("StorageExpiration_tag_values", $"StorageExpiration tag values all correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -993,8 +1036,16 @@ public class MainViewController : UIViewController
             bool ok = wf.Tag == Radius.CaseTag.WidthFraction
                    && hf.Tag == Radius.CaseTag.HeightFraction
                    && pt.Tag == Radius.CaseTag.Point;
-            logger.Pass($"Radius tag values all correct: {ok}");
-            results.Pass("Radius_tag_values");
+            if (ok)
+            {
+                logger.Pass($"Radius tag values all correct: {ok}");
+                results.Pass("Radius_tag_values");
+            }
+            else
+            {
+                logger.Fail($"Radius tag values all correct: {ok}");
+                results.Fail("Radius_tag_values", $"Radius tag values all correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -1039,8 +1090,16 @@ public class MainViewController : UIViewController
                 var fmt = create();
                 var tag = fmt.Tag;
                 bool ok = tag == expectedTag;
-                logger.Pass($"ImageFormat.{name}: Tag={tag}, correct={ok}");
-                results.Pass($"ImageFormat_{name}");
+                if (ok)
+                {
+                    logger.Pass($"ImageFormat.{name}: Tag={tag}, correct={ok}");
+                    results.Pass($"ImageFormat_{name}");
+                }
+                else
+                {
+                    logger.Fail($"ImageFormat.{name}: Tag={tag}, correct={ok}");
+                    results.Fail($"ImageFormat_{name}", $"ImageFormat.{name}: Tag={tag}, correct={ok}");
+                }
             }
             catch (Exception ex)
             {
@@ -1072,8 +1131,16 @@ public class MainViewController : UIViewController
                 using var transition = create();
                 var tag = transition.Tag;
                 bool ok = tag == expectedTag;
-                logger.Pass($"ImageTransition.{name}: Tag={tag}, correct={ok}");
-                results.Pass($"ImageTransition_{name}");
+                if (ok)
+                {
+                    logger.Pass($"ImageTransition.{name}: Tag={tag}, correct={ok}");
+                    results.Pass($"ImageTransition_{name}");
+                }
+                else
+                {
+                    logger.Fail($"ImageTransition.{name}: Tag={tag}, correct={ok}");
+                    results.Fail($"ImageTransition_{name}", $"ImageTransition.{name}: Tag={tag}, correct={ok}");
+                }
             }
             catch (Exception ex)
             {
@@ -1157,8 +1224,16 @@ public class MainViewController : UIViewController
             bool ok = et.Tag == ExpirationExtending.CaseTag.ExpirationTime
                    && none.Tag == ExpirationExtending.CaseTag.None
                    && ct.Tag == ExpirationExtending.CaseTag.CacheTime;
-            logger.Pass($"ExpirationExtending tag values correct: {ok}");
-            results.Pass("ExpirationExtending_tag_values");
+            if (ok)
+            {
+                logger.Pass($"ExpirationExtending tag values correct: {ok}");
+                results.Pass("ExpirationExtending_tag_values");
+            }
+            else
+            {
+                logger.Fail($"ExpirationExtending tag values correct: {ok}");
+                results.Fail("ExpirationExtending_tag_values", $"ExpirationExtending tag values correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -1274,8 +1349,16 @@ public class MainViewController : UIViewController
             bool ok = finite.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Finite
                    && once.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Once
                    && infinite.Tag == AnimatedImageView.RepeatCountKind.CaseTag.Infinite;
-            logger.Pass($"RepeatCountKind tag values correct: {ok}");
-            results.Pass("RepeatCountType_tag_values");
+            if (ok)
+            {
+                logger.Pass($"RepeatCountKind tag values correct: {ok}");
+                results.Pass("RepeatCountType_tag_values");
+            }
+            else
+            {
+                logger.Fail($"RepeatCountKind tag values correct: {ok}");
+                results.Fail("RepeatCountType_tag_values", $"RepeatCountKind tag values correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -1975,8 +2058,16 @@ public class MainViewController : UIViewController
                    && (uint)KingfisherError.CaseTag.CacheError == 2
                    && (uint)KingfisherError.CaseTag.ProcessorError == 3
                    && (uint)KingfisherError.CaseTag.ImageSettingError == 4;
-            logger.Pass($"KingfisherError.CaseTag numeric values correct: {ok}");
-            results.Pass("KingfisherError_CaseTag_numeric");
+            if (ok)
+            {
+                logger.Pass($"KingfisherError.CaseTag numeric values correct: {ok}");
+                results.Pass("KingfisherError_CaseTag_numeric");
+            }
+            else
+            {
+                logger.Fail($"KingfisherError.CaseTag numeric values correct: {ok}");
+                results.Fail("KingfisherError_CaseTag_numeric", $"KingfisherError.CaseTag numeric values correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -2036,9 +2127,17 @@ public class MainViewController : UIViewController
             dl.DownloadTimeout = 30.0;
             var readBack = dl.DownloadTimeout;
             bool ok = Math.Abs(readBack - 30.0) < 0.001;
-            logger.Pass($"ImageDownloader.DownloadTimeout roundtrip: set=30.0, get={readBack}, ok={ok}");
             dl.Dispose();
-            results.Pass("ImageDownloader_DownloadTimeout_roundtrip");
+            if (ok)
+            {
+                logger.Pass($"ImageDownloader.DownloadTimeout roundtrip: set=30.0, get={readBack}, ok={ok}");
+                results.Pass("ImageDownloader_DownloadTimeout_roundtrip");
+            }
+            else
+            {
+                logger.Fail($"ImageDownloader.DownloadTimeout roundtrip: set=30.0, get={readBack}, ok={ok}");
+                results.Fail("ImageDownloader_DownloadTimeout_roundtrip", $"ImageDownloader.DownloadTimeout roundtrip: set=30.0, get={readBack}, ok={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -2070,9 +2169,17 @@ public class MainViewController : UIViewController
             dl.DownloadTimeout = 60.0;
             var newTimeout = dl.DownloadTimeout;
             bool ok = Math.Abs(newTimeout - 60.0) < 0.001 && Math.Abs(defaultTimeout - 60.0) > 0.001;
-            logger.Pass($"ImageDownloader.DownloadTimeout custom: default={defaultTimeout}, new={newTimeout}, changed={ok}");
             dl.Dispose();
-            results.Pass("ImageDownloader_DownloadTimeout_custom");
+            if (ok)
+            {
+                logger.Pass($"ImageDownloader.DownloadTimeout custom: default={defaultTimeout}, new={newTimeout}, changed={ok}");
+                results.Pass("ImageDownloader_DownloadTimeout_custom");
+            }
+            else
+            {
+                logger.Fail($"ImageDownloader.DownloadTimeout custom: default={defaultTimeout}, new={newTimeout}, changed={ok}");
+                results.Fail("ImageDownloader_DownloadTimeout_custom", $"ImageDownloader.DownloadTimeout custom: default={defaultTimeout}, new={newTimeout}, changed={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3222,8 +3329,16 @@ public class MainViewController : UIViewController
         {
             using var i = DelayRetryStrategy.Interval.Seconds(1.0);
             bool ok = i.Tag == DelayRetryStrategy.Interval.CaseTag.Seconds;
-            logger.Pass($"Interval.Seconds tag correct: {ok}");
-            results.Pass("Interval_Seconds_tag");
+            if (ok)
+            {
+                logger.Pass($"Interval.Seconds tag correct: {ok}");
+                results.Pass("Interval_Seconds_tag");
+            }
+            else
+            {
+                logger.Fail($"Interval.Seconds tag correct: {ok}");
+                results.Fail("Interval_Seconds_tag", $"Interval.Seconds tag correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3236,8 +3351,16 @@ public class MainViewController : UIViewController
         {
             using var i = DelayRetryStrategy.Interval.Accumulated(2.0);
             bool ok = i.Tag == DelayRetryStrategy.Interval.CaseTag.Accumulated;
-            logger.Pass($"Interval.Accumulated tag correct: {ok}");
-            results.Pass("Interval_Accumulated_tag");
+            if (ok)
+            {
+                logger.Pass($"Interval.Accumulated tag correct: {ok}");
+                results.Pass("Interval_Accumulated_tag");
+            }
+            else
+            {
+                logger.Fail($"Interval.Accumulated tag correct: {ok}");
+                results.Fail("Interval_Accumulated_tag", $"Interval.Accumulated tag correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3293,8 +3416,16 @@ public class MainViewController : UIViewController
             bool ok = (uint)DelayRetryStrategy.Interval.CaseTag.Seconds == 0
                    && (uint)DelayRetryStrategy.Interval.CaseTag.Accumulated == 1
                    && (uint)DelayRetryStrategy.Interval.CaseTag.Custom == 2;
-            logger.Pass($"Interval.CaseTag numeric values correct: {ok}");
-            results.Pass("Interval_CaseTag_numeric");
+            if (ok)
+            {
+                logger.Pass($"Interval.CaseTag numeric values correct: {ok}");
+                results.Pass("Interval_CaseTag_numeric");
+            }
+            else
+            {
+                logger.Fail($"Interval.CaseTag numeric values correct: {ok}");
+                results.Fail("Interval_CaseTag_numeric", $"Interval.CaseTag numeric values correct: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3357,8 +3488,16 @@ public class MainViewController : UIViewController
             var uiImage = new UIKit.UIImage();
             using var item = ImageProcessItem.Image(uiImage);
             bool ok = item.Tag == ImageProcessItem.CaseTag.Image;
-            logger.Pass($"ImageProcessItem.Image tag == CaseTag.Image: {ok}");
-            results.Pass("ImageProcessItem_Image_tag");
+            if (ok)
+            {
+                logger.Pass($"ImageProcessItem.Image tag == CaseTag.Image: {ok}");
+                results.Pass("ImageProcessItem_Image_tag");
+            }
+            else
+            {
+                logger.Fail($"ImageProcessItem.Image tag == CaseTag.Image: {ok}");
+                results.Fail("ImageProcessItem_Image_tag", $"ImageProcessItem.Image tag == CaseTag.Image: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3371,8 +3510,16 @@ public class MainViewController : UIViewController
         {
             using var item = ImageProcessItem.Data(new byte[] { 0xFF, 0xD8 });
             bool ok = item.Tag == ImageProcessItem.CaseTag.Data;
-            logger.Pass($"ImageProcessItem.Data tag == CaseTag.Data: {ok}");
-            results.Pass("ImageProcessItem_Data_tag");
+            if (ok)
+            {
+                logger.Pass($"ImageProcessItem.Data tag == CaseTag.Data: {ok}");
+                results.Pass("ImageProcessItem_Data_tag");
+            }
+            else
+            {
+                logger.Fail($"ImageProcessItem.Data tag == CaseTag.Data: {ok}");
+                results.Fail("ImageProcessItem_Data_tag", $"ImageProcessItem.Data tag == CaseTag.Data: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3385,8 +3532,16 @@ public class MainViewController : UIViewController
         {
             bool ok = (uint)ImageProcessItem.CaseTag.Image == 0
                    && (uint)ImageProcessItem.CaseTag.Data == 1;
-            logger.Pass($"ImageProcessItem.CaseTag numeric values: {ok}");
-            results.Pass("ImageProcessItem_CaseTag_numeric");
+            if (ok)
+            {
+                logger.Pass($"ImageProcessItem.CaseTag numeric values: {ok}");
+                results.Pass("ImageProcessItem_CaseTag_numeric");
+            }
+            else
+            {
+                logger.Fail($"ImageProcessItem.CaseTag numeric values: {ok}");
+                results.Fail("ImageProcessItem_CaseTag_numeric", $"ImageProcessItem.CaseTag numeric values: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3417,8 +3572,16 @@ public class MainViewController : UIViewController
             using var r = Radius.Point(42.0);
             r.TryGetPoint(out var value);
             bool ok = Math.Abs(value - 42.0) < 0.001;
-            logger.Pass($"Radius.Point(42).TryGetPoint: value={value}, correct={ok}");
-            results.Pass("Radius_Point_value_verify");
+            if (ok)
+            {
+                logger.Pass($"Radius.Point(42).TryGetPoint: value={value}, correct={ok}");
+                results.Pass("Radius_Point_value_verify");
+            }
+            else
+            {
+                logger.Fail($"Radius.Point(42).TryGetPoint: value={value}, correct={ok}");
+                results.Fail("Radius_Point_value_verify", $"Radius.Point(42).TryGetPoint: value={value}, correct={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3432,8 +3595,16 @@ public class MainViewController : UIViewController
             using var exp = StorageExpiration.Seconds(7200.0);
             exp.TryGetSeconds(out var seconds);
             bool ok = Math.Abs(seconds - 7200.0) < 0.001;
-            logger.Pass($"StorageExpiration.Seconds(7200).TryGetSeconds: value={seconds}, correct={ok}");
-            results.Pass("StorageExpiration_Seconds_value_verify");
+            if (ok)
+            {
+                logger.Pass($"StorageExpiration.Seconds(7200).TryGetSeconds: value={seconds}, correct={ok}");
+                results.Pass("StorageExpiration_Seconds_value_verify");
+            }
+            else
+            {
+                logger.Fail($"StorageExpiration.Seconds(7200).TryGetSeconds: value={seconds}, correct={ok}");
+                results.Fail("StorageExpiration_Seconds_value_verify", $"StorageExpiration.Seconds(7200).TryGetSeconds: value={seconds}, correct={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3447,8 +3618,16 @@ public class MainViewController : UIViewController
             using var blur = new BlurImageProcessor(12.5);
             var radius = blur.BlurRadius;
             bool ok = Math.Abs(radius - 12.5) < 0.001;
-            logger.Pass($"BlurImageProcessor(12.5).BlurRadius: {radius}, correct={ok}");
-            results.Pass("BlurImageProcessor_value_verify");
+            if (ok)
+            {
+                logger.Pass($"BlurImageProcessor(12.5).BlurRadius: {radius}, correct={ok}");
+                results.Pass("BlurImageProcessor_value_verify");
+            }
+            else
+            {
+                logger.Fail($"BlurImageProcessor(12.5).BlurRadius: {radius}, correct={ok}");
+                results.Fail("BlurImageProcessor_value_verify", $"BlurImageProcessor(12.5).BlurRadius: {radius}, correct={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3462,8 +3641,16 @@ public class MainViewController : UIViewController
             using var proc = new ResizingImageProcessor(new Swift.CGSize(123.0, 456.0));
             var size = proc.ReferenceSize;
             bool ok = Math.Abs(size.Width - 123.0) < 0.001 && Math.Abs(size.Height - 456.0) < 0.001;
-            logger.Pass($"ResizingImageProcessor(123x456).ReferenceSize: ({size.Width}, {size.Height}), correct={ok}");
-            results.Pass("ResizingImageProcessor_size_verify");
+            if (ok)
+            {
+                logger.Pass($"ResizingImageProcessor(123x456).ReferenceSize: ({size.Width}, {size.Height}), correct={ok}");
+                results.Pass("ResizingImageProcessor_size_verify");
+            }
+            else
+            {
+                logger.Fail($"ResizingImageProcessor(123x456).ReferenceSize: ({size.Width}, {size.Height}), correct={ok}");
+                results.Fail("ResizingImageProcessor_size_verify", $"ResizingImageProcessor(123x456).ReferenceSize: ({size.Width}, {size.Height}), correct={ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3485,8 +3672,16 @@ public class MainViewController : UIViewController
             var mgrCache = mgr.Cache;
             var defaultCache = ImageCache.Default;
             bool ok = mgrCache != null && defaultCache != null;
-            logger.Pass($"KingfisherManager.Shared.Cache and ImageCache.Default both valid: {ok}");
-            results.Pass("CrossType_Manager_Cache");
+            if (ok)
+            {
+                logger.Pass($"KingfisherManager.Shared.Cache and ImageCache.Default both valid: {ok}");
+                results.Pass("CrossType_Manager_Cache");
+            }
+            else
+            {
+                logger.Fail($"KingfisherManager.Shared.Cache and ImageCache.Default both valid: {ok}");
+                results.Fail("CrossType_Manager_Cache", $"KingfisherManager.Shared.Cache and ImageCache.Default both valid: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3501,8 +3696,16 @@ public class MainViewController : UIViewController
             var mgrDl = mgr.Downloader;
             var defaultDl = ImageDownloader.Default;
             bool ok = mgrDl != null && defaultDl != null;
-            logger.Pass($"KingfisherManager.Shared.Downloader and ImageDownloader.Default both valid: {ok}");
-            results.Pass("CrossType_Manager_Downloader");
+            if (ok)
+            {
+                logger.Pass($"KingfisherManager.Shared.Downloader and ImageDownloader.Default both valid: {ok}");
+                results.Pass("CrossType_Manager_Downloader");
+            }
+            else
+            {
+                logger.Fail($"KingfisherManager.Shared.Downloader and ImageDownloader.Default both valid: {ok}");
+                results.Fail("CrossType_Manager_Downloader", $"KingfisherManager.Shared.Downloader and ImageDownloader.Default both valid: {ok}");
+            }
         }
         catch (Exception ex)
         {
@@ -3519,11 +3722,19 @@ public class MainViewController : UIViewController
             var mgrCache = mgr.Cache;
             var mgrDl = mgr.Downloader;
             bool ok = mgrCache != null && mgrDl != null;
-            logger.Pass($"Custom KingfisherManager cross-type: cache valid={mgrCache != null}, dl valid={mgrDl != null}");
             mgr.Dispose();
             customDl.Dispose();
             customCache.Dispose();
-            results.Pass("CrossType_Custom_Manager");
+            if (ok)
+            {
+                logger.Pass($"Custom KingfisherManager cross-type: cache valid={mgrCache != null}, dl valid={mgrDl != null}");
+                results.Pass("CrossType_Custom_Manager");
+            }
+            else
+            {
+                logger.Fail($"Custom KingfisherManager cross-type: cache valid={mgrCache != null}, dl valid={mgrDl != null}");
+                results.Fail("CrossType_Custom_Manager", $"Custom KingfisherManager cross-type: cache valid={mgrCache != null}, dl valid={mgrDl != null}");
+            }
         }
         catch (Exception ex)
         {
@@ -3536,10 +3747,18 @@ public class MainViewController : UIViewController
         {
             var cache = new ImageCache("IsCachedTest");
             bool cached = cache.IsCached("totally_nonexistent_key_xyz");
-            bool ok = !cached; // Should be false
-            logger.Pass($"New ImageCache.IsCached for non-existent key: {cached} (expected false, ok={ok})");
+            bool ok = !cached;
             cache.Dispose();
-            results.Pass("CrossType_IsCached_false");
+            if (ok)
+            {
+                logger.Pass($"New ImageCache.IsCached for non-existent key: {cached} (expected false)");
+                results.Pass("CrossType_IsCached_false");
+            }
+            else
+            {
+                logger.Fail("New ImageCache.IsCached returned true for a key that was never stored");
+                results.Fail("CrossType_IsCached_false", "IsCached returned true for a never-stored key");
+            }
         }
         catch (Exception ex)
         {
