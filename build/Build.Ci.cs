@@ -287,7 +287,7 @@ partial class Build
     //
     // Preserves the six resilience features the design doc calls out:
     //   1. Parallel boot + build  (Task.WhenAll, ci_ios_test.py:354–384)
-    //   2. Test-timeout retry     (deadline-aware, ci_ios_test.py:166–230)
+    //   2. Deadline-aware install capping, so the run budget is never shortened
     //   3. Infra-failure retry    (is_infra_failure, ci_ios_test.py:329–438)
     //   4. Diagnostics on failure (sim_manager.collect_diagnostics)
     //   5. Deadline budgeting     (subprocess timeout arithmetic 169–195)
@@ -299,6 +299,13 @@ partial class Build
     /// Mirrors <c>INSTALL_OVERHEAD = 480</c> at <c>ci_ios_test.py:163</c>.
     /// </summary>
     public const int InstallOverheadSeconds = 480;
+
+    /// <summary>
+    /// Floor under the install cap. The install is the part of an attempt that yields to the
+    /// step deadline, but it can never be squeezed to nothing — an install given no time fails
+    /// as an infrastructure error instead of running the tests.
+    /// </summary>
+    public const int MinInstallCapSeconds = 60;
 
     /// <summary>
     /// Patterns in error messages that indicate retryable infrastructure
@@ -323,6 +330,9 @@ partial class Build
         "SimulatorReadinessTimeout",
         "domain error",
         "Unable to negotiate with CoreSimulatorService",
+        // The launcher quit before the app image was entered (see LaunchDiagnostics).
+        // No product signal was produced, so the pipeline may re-attempt it — and only it.
+        "launcher aborted before the app started",
     };
 
     /// <summary>Classifier mirroring <c>is_infra_failure</c>.</summary>
@@ -335,15 +345,16 @@ partial class Build
 
     /// <summary>
     /// Outcome of running the inner test phase. Distinct from
-    /// <see cref="TestRunStatus"/> because the orchestrator's retry decision
-    /// only cares about three states: success, retryable timeout, hard failure.
+    /// <see cref="TestRunStatus"/> because the orchestrator only cares about three
+    /// states: success, a run that produced no verdict, and a reported failure. All
+    /// three are terminal — the distinction shapes the message, not a retry.
     /// </summary>
     enum TestPhaseOutcome { Success, Timeout, Failed }
 
     /// <summary>
     /// CI test execution target. Composes:
     ///   parallel(boot sim || build test app)
-    ///     → run inner test (with subprocess timeout arithmetic + retry on TIMEOUT)
+    ///     → run inner test (one attempt, under an install cap + launch/run budgets)
     ///     → on infra failure, collect diagnostics + retry pipeline
     ///     → cleanup on terminal exit
     /// </summary>
@@ -358,9 +369,12 @@ partial class Build
             var pipelineStart = DateTime.UtcNow;
             var deadline = pipelineStart.AddSeconds(StepTimeout);
 
+            var runBudget = ResolveRunBudgetSeconds(library, Timeout);
+            var launchBudget = LaunchBudgetSeconds;
+
             Log.Information(
-                "RunCiSimTest {Library}: timeout={Timeout}s, step-timeout={Step}s, max-test-retries={Tr}, max-infra-retries={Ir}, reuse-sim={Reuse}, diag-dir={Diag}",
-                library, Timeout, StepTimeout, MaxTestRetries, MaxInfraRetries, ReuseSim, DiagDir);
+                "RunCiSimTest {Library}: run-budget={Run}s (requested {Timeout}s), launch-budget={Launch}s, step-timeout={Step}s, max-infra-retries={Ir}, reuse-sim={Reuse}, diag-dir={Diag}",
+                library, runBudget, Timeout, launchBudget, StepTimeout, MaxInfraRetries, ReuseSim, DiagDir);
 
             var fleet = new SimulatorFleet();
             string? createdUdid = null;
@@ -411,22 +425,21 @@ partial class Build
                         skipBuild = true;
                     }
 
-                    // ── Phase 3: Run tests with retry-on-timeout ──────────
+                    // ── Phase 3: Run the tests (one attempt) ──────────────
                     GhaGroup("Run iOS Simulator Tests");
-                    var outcome = RunInnerTestWithRetry(
-                        appName, bundleId, testDir, deviceUdid!, deadline);
+                    var outcome = RunInnerTest(
+                        appName, bundleId, testDir, deviceUdid!, deadline, runBudget, launchBudget);
                     GhaEndGroup();
 
                     if (outcome == TestPhaseOutcome.Success)
                         return;
 
-                    // Test failure (real or out-of-budget timeout) — terminal,
-                    // not retryable.
+                    // Test failure or timeout — terminal, not retryable.
                     CollectDiagnosticsBestEffort(fleet, deviceUdid, appName);
                     throw new InvalidOperationException(
                         outcome == TestPhaseOutcome.Timeout
-                            ? "Inner test timed out (no budget for retry)"
-                            : "Inner test failed (real failure or crash)");
+                            ? "Inner test timed out before the app produced output"
+                            : "Inner test failed (real failure, crash, or mid-run timeout)");
                 }
                 catch (Exception ex)
                 {
@@ -482,17 +495,32 @@ partial class Build
         });
 
     /// <summary>
-    /// Phase 3 of the orchestrator: run the inner test with deadline-aware
-    /// timeout arithmetic and one retry on TIMEOUT (and only on TIMEOUT).
-    /// Mirrors <c>run_tests</c> at <c>ci_ios_test.py:143–244</c>.
+    /// Phase 3 of the orchestrator: install the app, watch it under the launch and run
+    /// budgets, and report what happened. Exactly one attempt.
+    ///
+    /// <para>The predecessor (<c>run_tests</c> at <c>ci_ios_test.py:143–244</c>) retried once
+    /// on any timeout. A timeout is not evidence of an infrastructure fault: it is silence,
+    /// and silence is what a hung app and a stalled runner have in common. Re-running it is
+    /// how an intermittent hang becomes a green, so a timeout is terminal here in both phases.
+    /// The one condition that carries no verdict — the launcher aborting before the app was
+    /// ever entered — is raised as an infrastructure failure, and the outer loop answers it by
+    /// re-preparing a simulator rather than by re-running the same one.</para>
     /// </summary>
-    TestPhaseOutcome RunInnerTestWithRetry(
+    TestPhaseOutcome RunInnerTest(
         string appName,
         string bundleId,
         AbsolutePath testDir,
         string udid,
-        DateTime deadline)
+        DateTime deadline,
+        int runBudgetSeconds,
+        int launchBudgetSeconds)
     {
+        // The watcher spends at most launch + run: the first budget bounds the wait for
+        // the app's first line, the second bounds the suite from there. Every envelope
+        // below is computed from that sum rather than from the run budget alone, so a
+        // slow cold start cannot eat the time the tests were given.
+        var watchBudgetSeconds = runBudgetSeconds + launchBudgetSeconds;
+
         var rid = ResolveRid("iossimulator-arm64");
         var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
         if (!Directory.Exists(appPath))
@@ -503,123 +531,115 @@ partial class Build
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Library", "Logs", "DiagnosticReports");
 
-        for (var attempt = 1; attempt <= MaxTestRetries + 1; attempt++)
+        // Deadline-aware caps for the install+launch+watch sequence. The predecessor
+        // (ci_ios_test.py:192–197) computed ONE subprocess timeout covering all of it;
+        // that is what this replaces, because a single number cannot say which phase
+        // was allowed to be slow.
+        // The install and the watch happen one after the other, so they get sequential
+        // caps rather than two draws on one countdown. The watcher's launch+run budgets
+        // are reserved first — they are the only part of this that produces a verdict —
+        // and the install gets whatever the step deadline leaves, bounded above by the
+        // empirical overhead and below by MinInstallCapSeconds. A slow install then
+        // delays the run instead of shortening it; sharing one countdown let it eat the
+        // run budget, which is the mid-suite kill the budgets exist to prevent.
+        var rem = (deadline - DateTime.UtcNow).TotalSeconds;
+        var installCapSeconds = ResolveInstallCapSeconds(rem, watchBudgetSeconds);
+        var attemptEnvelopeSeconds = installCapSeconds + watchBudgetSeconds;
+
+        // Preparation and the build come out of the same step budget, so they can leave less
+        // than one attempt needs. The attempt still runs at full budget and says so: shortening
+        // it would trade a late verdict for no verdict, which is the failure mode this whole
+        // arrangement exists to remove. The overrun is visible here rather than arriving later
+        // as an unexplained job kill.
+        if (rem < MinInstallCapSeconds + watchBudgetSeconds)
+            Log.Warning(
+                "Only {Rem:F0}s of the {Step}s step budget remain, less than the {Need}s an attempt needs "
+                + "(install floor + launch + run) — this run will overrun the step deadline rather than be cut short",
+                rem, StepTimeout, MinInstallCapSeconds + watchBudgetSeconds);
+
+        Log.Information(
+            "=== TESTS: Running inner sim test (launch budget={Launch}s, run budget={Run}s, install cap={Install:F0}s, envelope={Env:F0}s) ===",
+            launchBudgetSeconds, runBudgetSeconds, installCapSeconds, attemptEnvelopeSeconds);
+
+        // Mirror validate-sim.sh: install + launch + parse stdout.
+        var beforeCrashCount = CountCrashLogs(crashDir, appName);
+        try
         {
-            if (attempt > 1)
-            {
-                // Deadline arithmetic — ci_ios_test.py:169–178.
-                var minRetryTime = Timeout + 30;
-                var remaining = (deadline - DateTime.UtcNow).TotalSeconds;
-                if (remaining < minRetryTime)
-                {
-                    Log.Warning("Only {Rem:F0}s remaining (need {Need}s for retry) — skipping retry",
-                        remaining, minRetryTime);
-                    return TestPhaseOutcome.Timeout;
-                }
-                Log.Information("{Rem:F0}s remaining — enough for retry (need {Need}s)", remaining, minRetryTime);
-
-                // Settle before the retry attempt — ci_ios_test.py:181–188.
-                sim.TerminateApp(bundleId);
-                Thread.Sleep(2000);
-                Log.Information("=== TESTS: Retry attempt {Attempt} (previous run timed out) ===", attempt);
-                GhaWarning($"Test retry attempt {attempt} after timeout/hang");
-            }
-
-            // Deadline-aware subprocess timeout — exact mirror of
-            // ci_ios_test.py:192–197. This is the OUTER wall-clock cap on the
-            // entire install+launch+watch sequence, equivalent to Python's
-            //   subprocess.run([... "validate-sim.sh", str(timeout), udid],
-            //                  timeout=subprocess_timeout)
-            // The inner test timeout (`Timeout` param) still bounds the
-            // per-line watcher loop; this outer cap protects against an
-            // unresponsive `simctl install` consuming all remaining budget.
-            double subprocessTimeoutSeconds;
-            var rem = (deadline - DateTime.UtcNow).TotalSeconds;
-            if (rem > 0)
-            {
-                subprocessTimeoutSeconds = Math.Min(
-                    Timeout + InstallOverheadSeconds,
-                    Math.Max(rem - 30, Timeout + 60));
-            }
-            else
-            {
-                subprocessTimeoutSeconds = Timeout + InstallOverheadSeconds;
-            }
-            var subprocessDeadline = DateTime.UtcNow.AddSeconds(subprocessTimeoutSeconds);
-
-            Log.Information(
-                "=== TESTS: Running inner sim test (timeout={Timeout}s, attempt={Attempt}, subprocess_timeout={Sub:F0}s) ===",
-                Timeout, attempt, subprocessTimeoutSeconds);
-
-            // Mirror validate-sim.sh: install + launch + parse stdout.
-            var beforeCrashCount = CountCrashLogs(crashDir, appName);
-            try
-            {
-                // Cap install at min(InstallOverhead, time remaining in the
-                // subprocess envelope). This is the half of the
-                // subprocess_timeout enforcement that protects against a
-                // hung install on slow GHA macOS-26 runners.
-                var installCap = TimeSpan.FromSeconds(Math.Max(1,
-                    Math.Min(InstallOverheadSeconds,
-                             (subprocessDeadline - DateTime.UtcNow).TotalSeconds)));
-                sim.InstallApp(appPath, installCap);
-            }
-            catch (Exception installEx)
-            {
-                // Install failures are usually infra (CoreSim glitches) — bubble
-                // up so the outer infra-retry layer can handle them.
-                throw new InvalidOperationException($"simctl install failed: {installEx.Message}", installEx);
-            }
-
-            var psi = sim.BuildLaunchPsi(bundleId);
-            // Watcher cap = min(user test timeout, time remaining in the
-            // subprocess envelope). The inner Timeout matches bash's
-            // `validate-sim.sh <TIMEOUT>` arg; the second clause enforces
-            // the OUTER subprocess_timeout from ci_ios_test.py:192–197.
-            var watcherTimeout = TimeSpan.FromSeconds(Math.Max(1,
-                Math.Min(Timeout, (subprocessDeadline - DateTime.UtcNow).TotalSeconds)));
-
-            var result = StdoutWatcher
-                .RunAsync(psi, watcherTimeout, onLine: line => Log.Information("{Line}", line))
-                .GetAwaiter().GetResult();
-
-            sim.TerminateApp(bundleId);
-
-            // Crash log post-check.
-            var afterCrashCount = CountCrashLogs(crashDir, appName);
-            if (afterCrashCount > beforeCrashCount)
-            {
-                var newest = NewestCrashLog(crashDir, appName);
-                Log.Error("=== CRASH LOG DETECTED ===");
-                if (newest is not null)
-                    Log.Error("{Path}\n{Head}", newest, HeadOfFile(newest, 50));
-                return TestPhaseOutcome.Failed;
-            }
-
-            switch (result.Status)
-            {
-                case TestRunStatus.Success:
-                    Log.Information("=== TESTS: PASSED ===");
-                    return TestPhaseOutcome.Success;
-                case TestRunStatus.Failed:
-                case TestRunStatus.Crashed:
-                case TestRunStatus.Exited:
-                    // Real failure — do NOT retry. Matches ci_ios_test.py:228–230.
-                    Log.Error("=== TESTS: FAILED ({Status}: {Reason}) ===", result.Status, result.Reason);
-                    Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
-                    return TestPhaseOutcome.Failed;
-                case TestRunStatus.Timeout:
-                    Log.Warning("Tests timed out — will retry if budget permits");
-                    if (attempt > MaxTestRetries)
-                    {
-                        Log.Error("=== TESTS: TIMED OUT (no retries left) ===");
-                        Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
-                        return TestPhaseOutcome.Timeout;
-                    }
-                    continue;
-            }
+            // Protects against a hung install on slow GHA macOS-26 runners without
+            // borrowing from the watcher's budgets.
+            sim.InstallApp(appPath, TimeSpan.FromSeconds(installCapSeconds));
         }
-        return TestPhaseOutcome.Timeout;
+        catch (Exception installEx)
+        {
+            // Install failures are usually infra (CoreSim glitches) — bubble
+            // up so the outer infra-retry layer can handle them.
+            throw new InvalidOperationException($"simctl install failed: {installEx.Message}", installEx);
+        }
+
+        var psi = sim.BuildLaunchPsi(bundleId);
+        // The watcher gets its budgets whole: it bounds itself at launch budget until
+        // the app speaks and run budget after, so the watch phase is already capped at
+        // their sum. Trimming them by whatever the install left over is what made a
+        // library's declared run budget stop applying on a slow runner.
+        var watcherRunTimeout = TimeSpan.FromSeconds(runBudgetSeconds);
+        var watcherLaunchTimeout = TimeSpan.FromSeconds(launchBudgetSeconds);
+
+        var result = StdoutWatcher
+            .RunAsync(psi, watcherRunTimeout, watcherLaunchTimeout,
+                onLine: line => Log.Information("{Line}", line))
+            .GetAwaiter().GetResult();
+
+        sim.TerminateApp(bundleId);
+
+        // Crash log post-check.
+        var afterCrashCount = CountCrashLogs(crashDir, appName);
+        if (afterCrashCount > beforeCrashCount)
+        {
+            var newest = NewestCrashLog(crashDir, appName);
+            Log.Error("=== CRASH LOG DETECTED ===");
+            if (newest is not null)
+                Log.Error("{Path}\n{Head}", newest, HeadOfFile(newest, 50));
+            return TestPhaseOutcome.Failed;
+        }
+
+        switch (result.Status)
+        {
+            case TestRunStatus.Success:
+                Log.Information("=== TESTS: PASSED ===");
+                return TestPhaseOutcome.Success;
+            case TestRunStatus.Failed:
+            case TestRunStatus.Crashed:
+            case TestRunStatus.Exited:
+                // Real failure — do NOT retry. Matches ci_ios_test.py:228–230.
+                Log.Error("=== TESTS: FAILED ({Status}: {Reason}) ===", result.Status, result.Reason);
+                Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+                return TestPhaseOutcome.Failed;
+            case TestRunStatus.LauncherAborted:
+                // The validator path retries the launch itself; by the time one of
+                // these reaches here the app has still never been entered. Raise it
+                // as an infrastructure condition so the outer pipeline re-prepares a
+                // simulator, rather than recording a test verdict that was never taken.
+                Log.Error("=== LAUNCH ABORTED ({Reason}) — no verdict was produced ===", result.Reason);
+                Log.Information("=== LAUNCHER OUTPUT ===\n{Output}", result.Output);
+                throw new InvalidOperationException(
+                    $"launcher aborted before the app started: {result.Reason}");
+            case TestRunStatus.Timeout:
+                // Both phases are terminal. Mid-run silence is a verdict about the code
+                // under test; silence before the app ever speaks is a hang whose cause the
+                // run cannot name — an app deadlocked in startup and a stalled runner look
+                // identical from here, and re-running either is how one of them turns green.
+                // The launcher's own aborts are the identified infrastructure case and are
+                // handled above.
+                Log.Error(result.IsLaunchPhaseTimeout
+                        ? "=== TESTS: TIMED OUT DURING LAUNCH ({Reason}) — not retried ==="
+                        : "=== TESTS: TIMED OUT MID-RUN ({Reason}) — not retried ===",
+                    result.Reason);
+                Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+                return result.IsLaunchPhaseTimeout ? TestPhaseOutcome.Timeout : TestPhaseOutcome.Failed;
+        }
+
+        throw new InvalidOperationException(
+            $"the watcher returned the non-terminal status {result.Status} — no verdict was produced");
     }
 
     void BuildTestAppForRunCi(string library, AbsolutePath testDir)
@@ -633,7 +653,7 @@ partial class Build
         var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
         if (IsMultiTfmTestProject(testDir))
             args.AddRange(new[] { "-f", ResolveTfm("ios") });
-        // Honor --runtime-identifier so the path used by RunInnerTestWithRetry
+        // Honor --runtime-identifier so the path used by RunInnerTest
         // to locate the built .app agrees with the one dotnet build produces.
         if (!string.IsNullOrEmpty(RuntimeIdentifier))
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");

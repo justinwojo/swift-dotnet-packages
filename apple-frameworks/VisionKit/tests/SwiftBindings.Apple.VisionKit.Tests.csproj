@@ -25,15 +25,14 @@
 
   <!-- ProjectReference, not PackageReference — a PR changing the sibling csproj
        must be validated against the local change, not a nuget.org version.
-       The release-evidence path is the exception: passing
-       -p:VisionKitPackageVersion=X swaps in a PackageReference so the app
-       consumes the packed nupkg (and its runtime dependency) exactly as a
-       consumer would, instead of the sibling project's build output. -->
-  <ItemGroup Condition="'$(VisionKitPackageVersion)' == ''">
+       Consuming the packed nupkg instead is the release-consumption lane's job
+       (`nuke ReleaseConsume`), which rewrites this reference for every library
+       through the repo-root Directory.Build.targets hook. This csproj carried a
+       hand-written $(VisionKitPackageVersion) switch for that before the lane
+       existed; it was removed so VisionKit is not the one library whose
+       consumption path differs from every other library's. -->
+  <ItemGroup>
     <ProjectReference Include="../SwiftBindings.Apple.VisionKit.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(VisionKitPackageVersion)' != ''">
-    <PackageReference Include="SwiftBindings.Apple.VisionKit" Version="$(VisionKitPackageVersion)" />
   </ItemGroup>
 
 </Project>

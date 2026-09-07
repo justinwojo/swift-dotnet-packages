@@ -290,15 +290,17 @@ partial class Build
         });
 
     /// <summary>
-    /// Aggregate entry point for the harness's in-process self-tests. Cheap
-    /// (no simulator, no device, no packages) and safe to run on every change
-    /// to <c>build/</c>.
+    /// Aggregate entry point for the harness's in-process self-tests. No
+    /// simulator, no device, no packages — the watcher checks drive short-lived
+    /// <c>/bin/sh</c> processes, so the whole set is still tens of seconds and
+    /// safe to run on every change to <c>build/</c>.
     /// </summary>
     Target TestHarness => _ => _
         .Description(
             "Run every in-process harness self-test " +
-            "(rewriter + dependency injection + regression artifacts + release-wave planning + Apple version split)")
+            "(rewriter + dependency injection + regression artifacts + release-wave planning + Apple version split " +
+            "+ release consumption + run budgets + stdout watcher)")
         .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts,
-            TestReleaseWave, TestAppleVersionSplit)
+            TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, ValidateWatcherSelfTest)
         .Executes(() => Log.Information("Harness self-tests complete."));
 }

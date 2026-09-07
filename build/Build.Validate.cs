@@ -39,14 +39,45 @@ partial class Build
     TestRunResult ValidateSimFor(string library, int timeoutSeconds, string? deviceUdid, string rid,
         Action<string>? onLine = null)
     {
-        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
-        void Err(string line) { if (onLine is null) Log.Error("{Line}", line); else onLine(line); }
-
         var (testDir, appName, bundleId) = ResolveTestNames(library);
         var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
         if (!Directory.Exists(appPath))
             throw new InvalidOperationException(
                 $"Error: App not found at {appPath}\nRun BuildTestApp --library {library} first.");
+
+        return ValidateSimAt(appPath, appName, bundleId,
+            ResolveRunBudgetSeconds(library, timeoutSeconds), deviceUdid, onLine);
+    }
+
+    /// <summary>
+    /// Install + launch an already-located <c>.app</c> on the simulator.
+    ///
+    /// <para>Split out of <see cref="ValidateSimFor"/> so a lane that builds the
+    /// same test app into a different output tree — the release-consumption lane
+    /// redirects <c>BaseOutputPath</c> to keep its package-mode restore out of
+    /// the tree the ProjectReference lanes use — runs through exactly the same
+    /// install/launch/crash-log path rather than a parallel copy of it.</para>
+    /// </summary>
+    TestRunResult ValidateSimAt(AbsolutePath appPath, string appName, string bundleId,
+        int timeoutSeconds, string? deviceUdid, Action<string>? onLine = null)
+    {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+        void Err(string line) { if (onLine is null) Log.Error("{Line}", line); else onLine(line); }
+
+        // Resolve a concrete iOS-family simulator rather than installing to
+        // simctl's `booted` alias. That alias picks a booted device without
+        // regard to device family, so one Apple TV (or watch) left booted on the
+        // host makes every iOS install fail with "This app was not built to
+        // support this device family" — a red that has nothing to do with the
+        // code under test. EnsureReusable is the same resolution the fleet
+        // already uses: it reuses the first booted iPhone (so a host with one
+        // booted iPhone picks exactly the device it always did), probes it for
+        // readiness, and boots one only when nothing is booted.
+        if (string.IsNullOrEmpty(deviceUdid))
+        {
+            deviceUdid = new SimulatorFleet().EnsureReusable();
+            Info($"Resolved iOS simulator {deviceUdid} (no --device-udid given)");
+        }
 
         var sim = new SimctlClient(deviceUdid);
         var crashDir = Path.Combine(
@@ -57,12 +88,40 @@ partial class Build
         sim.InstallApp(appPath);
         sim.CleanStaleConsoleFifos();
 
-        Info($"Launching {appName} on {sim.Device} (timeout: {timeoutSeconds}s)");
-        var psi = sim.BuildLaunchPsi(bundleId);
-        var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
-            .GetAwaiter().GetResult();
+        var launchBudget = LaunchBudgetSeconds;
+        TestRunResult result;
+        var priorAttempts = new List<string>();
+        for (var attempt = 1; ; attempt++)
+        {
+            Info($"Launching {appName} on {sim.Device} " +
+                 $"(launch budget: {launchBudget}s, run budget: {timeoutSeconds}s, attempt {attempt})");
+            var psi = sim.BuildLaunchPsi(bundleId);
+            result = StdoutWatcher
+                .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(launchBudget), onLine: Info)
+                .GetAwaiter().GetResult();
 
+            if (result.Status != TestRunStatus.LauncherAborted)
+                break;
+
+            // The app was never entered, so there is nothing to report about the code
+            // under test — re-attempt the launch (and only the launch) a bounded number
+            // of times before reporting the abort as itself. Every attempt's transcript
+            // is kept: the re-launch replaces the verdict, never the evidence.
+            if (LaunchDiagnostics.LauncherAbortBudgetExhausted(attempt))
+            {
+                Err($"The launcher aborted before {appName} started, {attempt} time(s): {result.Reason}");
+                break;
+            }
+
+            priorAttempts.Add(result.Output);
+            var settle = LaunchDiagnostics.SettleDelayAfterAbort(attempt);
+            Info($"Launcher aborted before {appName} started ({result.Reason}) — " +
+                 $"settling {settle.TotalSeconds:F0}s and re-launching");
+            sim.TerminateApp(bundleId);
+            Thread.Sleep(settle);
+        }
+
+        result = LaunchDiagnostics.WithPriorAttempts(result, priorAttempts);
         sim.TerminateApp(bundleId);
 
         var afterCrashCount = CountCrashLogs(crashDir, appName);
@@ -77,6 +136,81 @@ partial class Build
 
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
+    }
+
+    /// <summary>
+    /// Install and validate a tvOS test app on a tvOS Simulator.
+    /// </summary>
+    Target ValidateTvOs => _ => _
+        .Description("Install and validate the test app on a tvOS simulator (--library Foo [--timeout N])")
+        .Requires(() => Library)
+        .Executes(() =>
+        {
+            var (result, unavailable) = ValidateTvOsFor(Library!, Timeout);
+            if (unavailable is not null)
+                throw new InvalidOperationException(
+                    $"=== TVOS UNAVAILABLE ({Library}) === {unavailable}");
+            ReportTerminalStatus(result!, Library!);
+        });
+
+    /// <summary>
+    /// Build-adjacent tvOS runtime validation: locate the built tvOS app,
+    /// find (and if necessary boot) a tvOS simulator, then run it through the
+    /// same install/launch/crash-log path as the iOS simulator lane.
+    ///
+    /// <para>Returns <c>(null, reason)</c> — never a pass, never a fail — when
+    /// the host has no tvOS runtime installed. tvOS packages SHIP, so silently
+    /// downgrading their cell to "built fine" claims coverage that does not
+    /// exist; and failing a matrix because a developer has not downloaded a
+    /// multi-gigabyte Xcode runtime would make the gate about the machine
+    /// rather than the code. Naming the leg unavailable is the honest third
+    /// answer.</para>
+    /// </summary>
+    (TestRunResult? Result, string? Unavailable) ValidateTvOsFor(
+        string library, int timeoutSeconds, Action<string>? onLine = null)
+    {
+        void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
+
+        timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
+        var (testDir, appName, bundleId) = ResolveTestNames(library);
+
+        // The tvOS sim build is not given an explicit RID, so the SDK picks the
+        // host's — probe both rather than hard-coding Apple silicon.
+        var rids = string.IsNullOrEmpty(RuntimeIdentifier)
+            ? new[] { "tvossimulator-arm64", "tvossimulator-x64" }
+            : new[] { RuntimeIdentifier };
+        var candidates = rids.Select(r => ResolveAppPath(testDir, "Debug", "tvos", r, appName)).ToList();
+        var appPath = candidates.FirstOrDefault(c => Directory.Exists(c));
+        if (appPath is null)
+            throw new InvalidOperationException(
+                "tvOS app bundle not found. Checked:\n  " + string.Join("\n  ", candidates) + "\n" +
+                $"Run BuildTestApp --library {library} --platform tvos first.");
+
+        var fleet = new SimulatorFleet();
+        var tv = fleet.FindTvOsSimulator();
+        if (tv is null)
+            return (null, "no tvOS simulator is available on this host (install a tvOS runtime in Xcode)");
+
+        Info($"tvOS simulator: {tv.Name} [{tv.Runtime}] {tv.Udid} (booted={tv.WasBooted})");
+        if (tv.WasBooted)
+            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine), null);
+
+        // A tvOS sim we booted ourselves must not outlive this leg. Other lanes
+        // install with `simctl install booted`, which becomes ambiguous once a
+        // non-iPhone device is also booted and fails with "This app is not made
+        // for this device" — a leaked tvOS sim turns every later iOS install on
+        // the host red. A sim that was already booted belongs to whoever booted
+        // it, so leave that one running.
+        fleet.BootAndWaitForReady(tv.Udid);
+        try
+        {
+            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine), null);
+        }
+        finally
+        {
+            try { fleet.ShutdownOne(tv.Udid); }
+            catch (Exception ex) { Info($"tvOS simulator {tv.Udid} could not be shut down: {ex.Message}"); }
+        }
     }
 
     /// <summary>
@@ -103,6 +237,7 @@ partial class Build
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
+        timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var (testDir, appName, bundleId) = ResolveTestNames(library);
 
         var config = aot ? "Release" : "Debug";
@@ -129,12 +264,41 @@ partial class Build
         var dev = new DevicectlClient(udid);
         dev.InstallApp(appPath);
 
-        Info($"Launching {appName} on {udid} (timeout: {timeoutSeconds}s)");
-        var psi = dev.BuildLaunchPsi(bundleId);
-        var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
-            .GetAwaiter().GetResult();
+        var launchBudget = LaunchBudgetSeconds;
+        TestRunResult result;
+        var priorAttempts = new List<string>();
+        for (var attempt = 1; ; attempt++)
+        {
+            Info($"Launching {appName} on {udid} " +
+                 $"(launch budget: {launchBudget}s, run budget: {timeoutSeconds}s, attempt {attempt})");
+            var psi = dev.BuildLaunchPsi(bundleId);
+            result = StdoutWatcher
+                .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(launchBudget), onLine: Info)
+                .GetAwaiter().GetResult();
 
+            if (result.Status != TestRunStatus.LauncherAborted)
+                break;
+
+            // devicectl aborting before it sends the launch request leaves the app image
+            // unentered; that is a launcher condition, not a verdict, so it is the one
+            // thing worth re-attempting here. A transcript with loader or crash evidence
+            // never classifies as an abort, so a device-side startup crash — which has no
+            // host crash log to fall back on — is reported, not re-launched. Every attempt's
+            // transcript is kept.
+            if (LaunchDiagnostics.LauncherAbortBudgetExhausted(attempt))
+            {
+                Info($"The launcher aborted before {appName} started, {attempt} time(s): {result.Reason}");
+                break;
+            }
+
+            priorAttempts.Add(result.Output);
+            var settle = LaunchDiagnostics.SettleDelayAfterAbort(attempt);
+            Info($"Launcher aborted before {appName} started ({result.Reason}) — " +
+                 $"settling {settle.TotalSeconds:F0}s and re-launching");
+            Thread.Sleep(settle);
+        }
+
+        result = LaunchDiagnostics.WithPriorAttempts(result, priorAttempts);
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
@@ -226,6 +390,7 @@ partial class Build
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
+        timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var (testDir, appName, _) = ResolveTestNames(library);
 
         var config = "Debug";
@@ -254,7 +419,8 @@ partial class Build
                 string.Join("\n  ", candidates) + "\n" +
                 $"Run BuildTestApp --library {library} --platform macos first.");
 
-        Info($"Launching Mac test: {binaryPath} (timeout: {timeoutSeconds}s)");
+        Info($"Launching Mac test: {binaryPath} " +
+             $"(launch budget: {LaunchBudgetSeconds}s, run budget: {timeoutSeconds}s)");
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -264,7 +430,7 @@ partial class Build
             UseShellExecute = false,
         };
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(LaunchBudgetSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
         Info("=== APP OUTPUT ===\n" + result.Output);
@@ -301,6 +467,7 @@ partial class Build
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
+        timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var (testDir, appName, _) = ResolveTestNames(library);
         var appPath = ResolveAppPath(testDir, "Debug", "maccatalyst", rid, appName);
         var binaryPath = appPath / "Contents" / "MacOS" / appName;
@@ -310,7 +477,8 @@ partial class Build
                 $"MacCatalyst binary not found at {binaryPath}\n" +
                 $"Run BuildTestApp --library {library} --platform maccatalyst first.");
 
-        Info($"Launching MacCatalyst test: {binaryPath} (timeout: {timeoutSeconds}s)");
+        Info($"Launching MacCatalyst test: {binaryPath} " +
+             $"(launch budget: {LaunchBudgetSeconds}s, run budget: {timeoutSeconds}s)");
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -320,7 +488,7 @@ partial class Build
             UseShellExecute = false,
         };
         var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), onLine: Info)
+            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(LaunchBudgetSeconds), onLine: Info)
             .GetAwaiter().GetResult();
 
         Info("=== APP OUTPUT ===\n" + result.Output);
@@ -342,6 +510,13 @@ partial class Build
                 throw new InvalidOperationException($"=== TIMEOUT ({library}) === {result.Reason}");
             case TestRunStatus.Exited:
                 throw new InvalidOperationException($"=== APP EXITED without success marker ({library}) === {result.Reason}");
+            case TestRunStatus.LauncherAborted:
+                // Still terminal and still loud — but named for what it is. The app was never
+                // entered, so this run says nothing about the library either way, and reading
+                // it as a test failure sends the next person hunting for a defect the evidence
+                // does not support.
+                throw new InvalidOperationException(
+                    $"=== LAUNCHER ABORTED ({library}) === {result.Reason}; the app never ran, so this run carries no verdict");
             default:
                 throw new InvalidOperationException($"Unexpected terminal status: {result.Status}");
         }

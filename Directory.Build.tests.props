@@ -26,6 +26,19 @@
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.tests.props.local"
           Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.tests.props.local')" />
 
+  <!-- The SDK excludes the intermediate/output directories from the default
+       **/*.cs glob by their PATH ($(BaseIntermediateOutputPath), $(BaseOutputPath)),
+       not by their name. A lane that redirects those paths elsewhere — the
+       release-consumption lane keeps its package-mode restore out of the tree
+       the ProjectReference lanes use — therefore stops excluding the literal
+       obj/ and bin/ next to the csproj, and any generated AssemblyInfo.cs left
+       there by an ordinary build gets compiled in a second time (CS0579
+       duplicate attributes). Excluding them by name as well is a no-op for a
+       normal build, where they are already excluded by path. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+
   <!-- tvOS test apps: Apple disallows JIT on any tvOS target, so the default
        Debug pipeline AOT-compiles managed code, which surfaces the Swift
        stdlib P/Invokes (Swift.Array.init, Swift.Dictionary.*, …) declared in

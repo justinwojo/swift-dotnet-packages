@@ -12,7 +12,7 @@ using SwiftBindings.Build.Models;
 
 partial class Build
 {
-    [Parameter("RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device, macos, maccatalyst, tvos")]
+    [Parameter("RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT), macos, maccatalyst, tvos")]
     readonly string? Platforms;
 
     [Parameter("RegressionValidate: max parallel cells (default 4, capped at 16). NativeAOT publish + concurrent app-bundle builds can push a 32 GB box into swap before CPU saturates — bump only after observing actual memory headroom.")]
@@ -27,8 +27,9 @@ partial class Build
     /// <c>--regression-jobs</c>-sized semaphore; the physical-iPhone lane is
     /// additionally serialized via a dedicated single-slot. iOS sim runs
     /// MonoJIT against an N-sized booted simulator fleet, iOS device runs
-    /// NativeAOT publish. macOS validates via direct binary run. MacCatalyst
-    /// and tvOS build only — no validator yet, recorded as <c>BUILD-ONLY</c>.
+    /// NativeAOT publish. macOS and MacCatalyst validate via direct binary
+    /// run. tvOS validates on the tvOS Simulator, and records
+    /// <c>UNAVAIL</c> when the host has no tvOS runtime installed.
     /// </summary>
     Target RegressionValidate => _ => _
         .Description("Build + validate every package across every declared TFM (--version X.Y.Z --apple-version NN.N.N [--apple-bindings-version NN.N.N] [--filter Foo] [--platforms ios-sim,macos] [--regression-jobs N] [--regression-serial])")
@@ -118,7 +119,7 @@ partial class Build
             var libObjDeps = InferInterLibraryObjDeps(cells);
 
             // Cache resolved device UDID once so each device cell doesn't re-detect.
-            string? deviceUdid = cells.Any(c => c.Platform == CellPlatform.IosDevice)
+            string? deviceUdid = cells.Any(c => IsDeviceCell(c.Platform))
                 ? (DeviceUdid ?? DevicectlClient.AutoDetectDevice())
                 : null;
 
@@ -195,8 +196,9 @@ partial class Build
                     // PreRestoreCells / BuildTestAppNativeAot) cannot race a
                     // concurrent sim cell that's still mid-build under
                     // --no-restore. A library without a paired sim cell just
-                    // skips this wait.
-                    if (cell.Platform == CellPlatform.IosDevice)
+                    // skips this wait. Both device runtimes restore, so both
+                    // wait.
+                    if (IsDeviceCell(cell.Platform))
                     {
                         var simSibling = new Cell(cell.Library, CellPlatform.IosSim);
                         if (cellComplete.TryGetValue(simSibling, out var simTcs))
@@ -220,7 +222,7 @@ partial class Build
                     CellOutcome? cellOutcomeForTcs = null;
                     try
                     {
-                        if (cell.Platform == CellPlatform.IosDevice)
+                        if (IsDeviceCell(cell.Platform))
                         {
                             await deviceLock.WaitAsync();
                             tookDeviceLock = true;
@@ -362,7 +364,7 @@ partial class Build
             // *why* (2 = cells failed, 3 = harness abort), the console names every
             // failing cell with its log path, and the artifact carries the same
             // list under `failedCells` for a release gate to consume.
-            var failedCells = outcomeList.Where(IsFailure).ToList();
+            var failedCells = outcomeList.Where(o => IsFailure(o, AllowUnavailable)).ToList();
             if (failedCells.Count > 0 || abortReason is not null)
             {
                 var sb = new System.Text.StringBuilder();
@@ -372,6 +374,11 @@ partial class Build
                     sb.AppendLine($"  {CellLabel(o.Result),-10} {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}" +
                                   $"{(o.Reason is null ? "" : $" — {o.Reason}")}" +
                                   $"\n             log: {cellLogDir / $"{o.Cell.Library}-{PlatformLabel(o.Cell.Platform)}.log"}");
+                if (failedCells.Any(o => o.Result == CellResult.Unavailable))
+                    sb.AppendLine(
+                        "  note:      an UNAVAIL cell is declared matrix coverage this host did not supply, so it fails" +
+                        "\n             the run. Install the missing runtime, or re-run with --allow-unavailable to" +
+                        "\n             accept the gap deliberately (the run still reports complete=false).");
                 if (abortReason is not null)
                     sb.AppendLine($"  ABORTED    harness — {abortReason}");
                 sb.AppendLine($"  artifact:  {written.RunArtifact}");
@@ -447,15 +454,49 @@ partial class Build
     /// </summary>
     internal static int? RegressionExitCodeOverride;
 
-    static bool IsFailure(CellOutcome o) =>
-        o.Result is CellResult.Fail or CellResult.Timeout or CellResult.Crashed or CellResult.Error;
+    /// <summary>
+    /// A cell that did not produce a passing run. <see cref="CellResult.Unavailable"/>
+    /// belongs in that set by default: the leg is part of the declared matrix and
+    /// simply did not run, so letting it pass silently turns "this host has no
+    /// tvOS runtime" into a green full-matrix verdict — coverage the release gate
+    /// never got, reported as coverage it did. Opting out is
+    /// <see cref="AllowUnavailable"/>, which is explicit, recorded in the
+    /// artifact, and still leaves the run <c>complete=false</c>.
+    ///
+    /// <para><see cref="CellResult.Skip"/> and <see cref="CellResult.BuildOnly"/>
+    /// stay non-failures: those are the matrix's own declared shape for a cell
+    /// (a package that does not target the platform, a leg that is build-gated),
+    /// not coverage this host failed to supply.</para>
+    /// </summary>
+    static bool IsFailure(CellOutcome o, bool allowUnavailable) =>
+        o.Result is CellResult.Fail or CellResult.Timeout or CellResult.Crashed or CellResult.Error
+        || (o.Result is CellResult.Unavailable && !allowUnavailable);
 
     [Parameter("RegressionValidate: package filter — one name or a comma-separated list (parity with --library)")]
     readonly string? Filter;
 
-    enum CellPlatform { IosSim, IosDevice, MacOs, MacCatalyst, TvOs }
+    [Parameter("RegressionValidate: accept legs this host cannot provide (no tvOS runtime, no device on the required OS) " +
+               "as coverage gaps instead of failures. Off by default — a declared cell that did not run is a false green. " +
+               "The run still reports complete=false and the artifact records the opt-out.")]
+    readonly bool AllowUnavailable;
 
-    enum CellResult { Pass, Fail, BuildOnly, Skip, Timeout, Crashed, Error }
+    /// <summary>
+    /// <see cref="IosDevice"/> is the NativeAOT device lane;
+    /// <see cref="IosDeviceMonoAot"/> is Mono full-AOT — the .NET-for-iOS
+    /// default runtime for a physical device. They are separate platforms
+    /// rather than a flag on one, because they run different runtimes and
+    /// neither may grade or stand in for the other.
+    /// </summary>
+    enum CellPlatform { IosSim, IosDevice, IosDeviceMonoAot, MacOs, MacCatalyst, TvOs }
+
+    /// <summary>
+    /// <see cref="Unavailable"/> is distinct from <see cref="Skip"/> and
+    /// <see cref="BuildOnly"/>: the leg is real and would have run, but this
+    /// host cannot provide what it needs (no tvOS simulator runtime, no device
+    /// on the older OS the matrix wants). It is recorded with its reason so the
+    /// report states what was NOT covered instead of leaving a silent hole.
+    /// </summary>
+    enum CellResult { Pass, Fail, BuildOnly, Skip, Timeout, Crashed, Error, Unavailable }
 
     sealed record Cell(string Library, CellPlatform Platform);
 
@@ -469,15 +510,21 @@ partial class Build
     {
         CellPlatform.IosSim,
         CellPlatform.IosDevice,
+        CellPlatform.IosDeviceMonoAot,
         CellPlatform.MacOs,
         CellPlatform.MacCatalyst,
         CellPlatform.TvOs,
     };
 
+    /// <summary>Both device lanes contend for the one physical iPhone.</summary>
+    static bool IsDeviceCell(CellPlatform p) =>
+        p is CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot;
+
     static string PlatformLabel(CellPlatform p) => p switch
     {
         CellPlatform.IosSim => "ios-sim",
         CellPlatform.IosDevice => "ios-device",
+        CellPlatform.IosDeviceMonoAot => "ios-device-monoaot",
         CellPlatform.MacOs => "macos",
         CellPlatform.MacCatalyst => "maccatalyst",
         CellPlatform.TvOs => "tvos",
@@ -486,7 +533,7 @@ partial class Build
 
     static string PlatformTfm(CellPlatform p) => p switch
     {
-        CellPlatform.IosSim or CellPlatform.IosDevice => "net10.0-ios",
+        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot => "net10.0-ios",
         CellPlatform.MacOs => "net10.0-macos",
         CellPlatform.MacCatalyst => "net10.0-maccatalyst",
         CellPlatform.TvOs => "net10.0-tvos",
@@ -504,11 +551,14 @@ partial class Build
             {
                 "ios-sim" or "ios" or "iossim" => CellPlatform.IosSim,
                 "ios-device" or "device" or "iosdevice" => CellPlatform.IosDevice,
+                "ios-device-monoaot" or "device-monoaot" or "monoaot" or "mono-aot"
+                    => CellPlatform.IosDeviceMonoAot,
                 "macos" or "mac" => CellPlatform.MacOs,
                 "maccatalyst" or "catalyst" => CellPlatform.MacCatalyst,
                 "tvos" => CellPlatform.TvOs,
                 _ => throw new InvalidOperationException(
-                    $"Unknown platform '{token}'. Valid: ios-sim, ios-device, macos, maccatalyst, tvos"),
+                    $"Unknown platform '{token}'. Valid: ios-sim, ios-device, ios-device-monoaot, " +
+                    "macos, maccatalyst, tvos"),
             };
             if (!result.Contains(p)) result.Add(p);
         }
@@ -617,7 +667,7 @@ partial class Build
             (ApplePackageId, appleVersion));
 
         var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim);
-        var needsDevice = cells.Any(c => c.Platform == CellPlatform.IosDevice);
+        var needsDevice = cells.Any(c => IsDeviceCell(c.Platform));
 
         // 2. Booted simulator if any sim cells
         if (needsSim)
@@ -1183,7 +1233,9 @@ partial class Build
 
     /// <summary>
     /// Build + validate a single cell. Each platform dispatches to its
-    /// matching build helper and validator (or build-only for catalyst/tvos).
+    /// matching build helper and validator. Every platform has a validator;
+    /// tvOS is the one that can report <c>UNAVAIL</c> instead of a run, when
+    /// the host has no tvOS simulator runtime.
     /// All process output for the cell is routed through <paramref name="sink"/>
     /// so the parallel harness can tee it into a per-cell log file.
     /// </summary>
@@ -1200,14 +1252,19 @@ partial class Build
             }
             case CellPlatform.IosDevice:
             {
-                // Device cell does its own restore — see PreRestoreCells:
-                // a multi-RID assets.json can't be produced cleanly in .NET 10
-                // (NETSDK1083), so this publish does an implicit restore that
-                // overwrites the sim-RID assets file. The same-library sim
-                // cell has already finished (see ScheduleProducerWaits below)
-                // so the overwrite can't race a --no-restore reader.
-                BuildTestAppNativeAot(cell.Library, testDir, onLine: sink, noRestore: false);
-                var result = ValidateDeviceFor(cell.Library, Timeout, deviceUdid, aot: true, "ios-arm64", onLine: sink);
+                // NativeAOT — the opt-in device runtime. RunDeviceLane checks
+                // the built bundle's shape before install and the app's own
+                // runtime banner after the run, so this cell cannot report a
+                // green for a bundle the Mono lane produced.
+                var result = RunDeviceLane(cell.Library, testDir, mono: false, deviceUdid, sink);
+                return ToOutcome(cell, result, sw.Elapsed);
+            }
+            case CellPlatform.IosDeviceMonoAot:
+            {
+                // Mono full-AOT — the .NET-for-iOS DEFAULT for a device, and
+                // the runtime most consumers actually ship. Same suite, same
+                // device slice, different managed build.
+                var result = RunDeviceLane(cell.Library, testDir, mono: true, deviceUdid, sink);
                 return ToOutcome(cell, result, sw.Elapsed);
             }
             case CellPlatform.MacOs:
@@ -1225,7 +1282,10 @@ partial class Build
             case CellPlatform.TvOs:
             {
                 BuildTestAppSimulator(cell.Library, testDir, "tvos", onLine: sink, noRestore: true);
-                return new CellOutcome(cell, CellResult.BuildOnly, "no tvos validator yet", sw.Elapsed);
+                var (result, unavailable) = ValidateTvOsFor(cell.Library, Timeout, sink);
+                return unavailable is not null
+                    ? new CellOutcome(cell, CellResult.Unavailable, unavailable, sw.Elapsed)
+                    : ToOutcome(cell, result!, sw.Elapsed);
             }
             default:
                 return new CellOutcome(cell, CellResult.Error, $"unhandled platform {cell.Platform}", sw.Elapsed);
@@ -1240,6 +1300,14 @@ partial class Build
             TestRunStatus.Crashed => new CellOutcome(cell, CellResult.Crashed, result.Reason, duration),
             TestRunStatus.Timeout => new CellOutcome(cell, CellResult.Timeout, result.Reason, duration),
             TestRunStatus.Exited => new CellOutcome(cell, CellResult.Fail, result.Reason ?? "app exited without TEST SUCCESS", duration),
+            // The app image was never entered after the retries the validator already spent, so
+            // the cell has no product signal. ERROR rather than FAIL: it still counts against the
+            // run (nothing is waved through), but the artifact says the run produced no verdict
+            // instead of implying the library failed its tests.
+            TestRunStatus.LauncherAborted => new CellOutcome(
+                cell, CellResult.Error,
+                "LAUNCHER ABORTED — the app never started, so this cell carries no verdict" +
+                (result.Reason is null ? "" : $": {result.Reason}"), duration),
             _ => new CellOutcome(cell, CellResult.Error, $"unexpected status {result.Status}", duration),
         };
 
@@ -1248,6 +1316,7 @@ partial class Build
         CellResult.Pass => "PASS",
         CellResult.Fail => "FAIL",
         CellResult.BuildOnly => "BUILD-ONLY",
+        CellResult.Unavailable => "UNAVAIL",
         CellResult.Skip => "SKIP",
         CellResult.Timeout => "TIMEOUT",
         CellResult.Crashed => "CRASH",
@@ -1310,17 +1379,164 @@ partial class Build
                  + counts.GetValueOrDefault(CellResult.Error);
         var buildOnly = counts.GetValueOrDefault(CellResult.BuildOnly);
         var skip = counts.GetValueOrDefault(CellResult.Skip);
-        sb.AppendLine($"Verdict: {fail} FAIL, {pass} PASS, {buildOnly} BUILD-ONLY, {skip} SKIP");
+        var unavailable = counts.GetValueOrDefault(CellResult.Unavailable);
+        sb.AppendLine($"Verdict: {fail} FAIL, {pass} PASS, {buildOnly} BUILD-ONLY, {skip} SKIP, " +
+                      $"{unavailable} UNAVAILABLE");
 
-        if (fail > 0)
+        // An unavailable leg is coverage this run did NOT provide. Naming each
+        // one with its reason is the whole point of the state: a matrix that
+        // rendered it as a dash would read as "nothing to run here". Whether it
+        // also reds the run is the operator's explicit choice, so the heading
+        // says which way this run counted it.
+        if (unavailable > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("Failures:");
-            foreach (var o in outcomes.Where(IsFailure))
+            sb.AppendLine(AllowUnavailable
+                ? "Not run on this host (accepted as coverage gaps via --allow-unavailable):"
+                : "Not run on this host (counted as failures — pass --allow-unavailable to accept them):");
+            foreach (var o in outcomes.Where(o => o.Result == CellResult.Unavailable))
                 sb.AppendLine($"  {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}: {o.Reason}");
         }
 
+        // Every cell runs on whatever OS this host happens to have installed —
+        // in practice the newest one. The packages declare support back to an
+        // older minimum, and nothing in the matrix ever ran that minimum. A
+        // green matrix that stays silent about it reads as "the supported range
+        // is covered", so the range that was NOT covered is named here.
+        var minOsGaps = CollectMinOsGaps(packages, platforms);
+        if (minOsGaps.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Minimum-OS legs not obtainable on this host (declared support that was never run):");
+            foreach (var g in minOsGaps)
+                sb.AppendLine($"  {g.Library} {g.Platform}: declares {g.MinimumOs}+, host has {g.Available}");
+        }
+
+        var failing = outcomes.Where(o => IsFailure(o, AllowUnavailable)).ToList();
+        if (failing.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Failures:");
+            foreach (var o in failing)
+                sb.AppendLine($"  {CellLabel(o.Result)} {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}: {o.Reason}");
+        }
+
         return sb.ToString();
+    }
+
+    /// <summary>One declared-but-unrunnable minimum-OS leg.</summary>
+    internal sealed record MinOsGap(string Library, string Platform, string MinimumOs, string Available);
+
+    static readonly Regex MinOsPattern = new(
+        @"<SupportedOSPlatformVersion(?<cond>[^>]*)>(?<v>[^<]+)</SupportedOSPlatformVersion>",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The minimum OS a test csproj declares for one platform, honoring the
+    /// per-TFM <c>Condition</c> form these csprojs use. Returns null when the
+    /// project declares none for that platform.
+    /// </summary>
+    internal static string? ReadMinimumOs(string csprojText, string platformToken)
+    {
+        string? unconditional = null;
+        foreach (Match m in MinOsPattern.Matches(csprojText))
+        {
+            var condition = m.Groups["cond"].Value;
+            var value = m.Groups["v"].Value.Trim();
+            if (condition.Contains($"-{platformToken}", StringComparison.OrdinalIgnoreCase))
+                return value;
+            if (!condition.Contains("Condition", StringComparison.OrdinalIgnoreCase))
+                unconditional ??= value;
+        }
+        return unconditional;
+    }
+
+    /// <summary>
+    /// Pure core of the minimum-OS coverage record: a leg is a gap when the
+    /// project declares a minimum and NO OS this host can run shares that
+    /// minimum's major version. A platform with no entry in
+    /// <paramref name="availableByPlatform"/> is not evaluated at all (rather
+    /// than reported as a gap), because "we did not enumerate it" and "the
+    /// runtime is missing" are different claims.
+    /// </summary>
+    internal static IReadOnlyList<MinOsGap> MinOsGaps(
+        IEnumerable<(string Library, string Platform, string? MinimumOs)> legs,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> availableByPlatform)
+    {
+        static string Major(string v) => v.Split('.')[0].Trim();
+
+        var gaps = new List<MinOsGap>();
+        foreach (var (library, platform, minimumOs) in legs)
+        {
+            if (string.IsNullOrWhiteSpace(minimumOs)) continue;
+            if (!availableByPlatform.TryGetValue(platform, out var available)) continue;
+
+            if (available.Any(v => Major(v) == Major(minimumOs!))) continue;
+            gaps.Add(new MinOsGap(library, platform, minimumOs!,
+                available.Count == 0 ? "(no runtime installed)" : string.Join(", ", available)));
+        }
+        return gaps;
+    }
+
+    /// <summary>
+    /// Gather the minimum-OS gaps for the cells this run planned. Simulator
+    /// platforms are enumerated from the installed runtimes; the macOS and
+    /// Mac Catalyst legs run on the host's own OS. The two device lanes are
+    /// deliberately NOT evaluated — the connected phone runs the OS it runs,
+    /// and reporting that as a missing "runtime" would be misleading.
+    /// </summary>
+    IReadOnlyList<MinOsGap> CollectMinOsGaps(IReadOnlyList<string> packages, IReadOnlyList<CellPlatform> platforms)
+    {
+        try
+        {
+            var available = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            var fleet = new SimulatorFleet();
+            if (platforms.Contains(CellPlatform.IosSim))
+                available["ios-sim"] = fleet.AvailableOsVersions("iOS");
+            if (platforms.Contains(CellPlatform.TvOs))
+                available["tvos"] = fleet.AvailableOsVersions("tvOS");
+            if (platforms.Contains(CellPlatform.MacOs) || platforms.Contains(CellPlatform.MacCatalyst))
+            {
+                var host = new[] { Environment.OSVersion.Version.ToString() };
+                if (platforms.Contains(CellPlatform.MacOs)) available["macos"] = host;
+                if (platforms.Contains(CellPlatform.MacCatalyst)) available["maccatalyst"] = host;
+            }
+
+            var legs = new List<(string, string, string?)>();
+            foreach (var library in packages)
+            {
+                var (testDir, _, _) = ResolveTestNames(library);
+                var csproj = Directory.EnumerateFiles(testDir, "*.csproj")
+                    .OrderBy(p => p, StringComparer.Ordinal).FirstOrDefault();
+                if (csproj is null) continue;
+                var text = File.ReadAllText(csproj);
+
+                foreach (var p in platforms)
+                {
+                    var label = PlatformLabel(p);
+                    if (!available.ContainsKey(label)) continue;
+                    var token = p switch
+                    {
+                        CellPlatform.IosSim => "ios",
+                        CellPlatform.TvOs => "tvos",
+                        CellPlatform.MacOs => "macos",
+                        CellPlatform.MacCatalyst => "maccatalyst",
+                        _ => null,
+                    };
+                    if (token is null) continue;
+                    legs.Add((library, label, ReadMinimumOs(text, token)));
+                }
+            }
+
+            return MinOsGaps(legs, available);
+        }
+        catch (Exception ex)
+        {
+            // The coverage record must never take down a matrix run: a missing
+            // simctl or an unreadable csproj is worth a line, not a red matrix.
+            Log.Warning("Minimum-OS coverage record unavailable: {Message}", ex.Message);
+            return Array.Empty<MinOsGap>();
+        }
     }
 
     // ── F1: self-describing, un-clobberable matrix artifact ─────────────────
@@ -1375,7 +1591,8 @@ partial class Build
         IReadOnlyList<CellPlatform> platforms,
         int cellsPlanned,
         IReadOnlyList<Cell> unreached,
-        string? abortReason)
+        string? abortReason,
+        IReadOnlyList<CellOutcome>? outcomes = null)
     {
         var reasons = new List<string>();
         if (!string.IsNullOrWhiteSpace(filter))
@@ -1389,6 +1606,19 @@ partial class Build
             reasons.Add($"{unreached.Count} of {cellsPlanned} planned cell(s) produced no outcome: " +
                         string.Join(", ", unreached.Take(8).Select(c => $"{c.Library}/{PlatformLabel(c.Platform)}")) +
                         (unreached.Count > 8 ? ", …" : ""));
+
+        // A leg the host could not provide is missing coverage, so the run is
+        // not a complete matrix and must not claim the canonical slot. The
+        // reason names the legs, so "complete=false" is readable rather than
+        // mysterious.
+        var unavailable = outcomes?.Where(o => o.Result == CellResult.Unavailable).ToList()
+            ?? new List<CellOutcome>();
+        if (unavailable.Count > 0)
+            reasons.Add($"{unavailable.Count} leg(s) unavailable on this host: " +
+                        string.Join(", ", unavailable.Take(8)
+                            .Select(o => $"{o.Cell.Library}/{PlatformLabel(o.Cell.Platform)} ({o.Reason})")) +
+                        (unavailable.Count > 8 ? ", …" : ""));
+
         return (reasons.Count == 0, reasons);
     }
 
@@ -1418,9 +1648,9 @@ partial class Build
         Directory.CreateDirectory(runDir);
 
         var (complete, incompleteReasons) = EvaluateCompleteness(
-            filter, platforms, cellsPlanned, unreached, abortReason);
+            filter, platforms, cellsPlanned, unreached, abortReason, outcomes);
 
-        var failed = outcomes.Where(IsFailure).ToList();
+        var failed = outcomes.Where(o => IsFailure(o, AllowUnavailable)).ToList();
         var verdict = abortReason is not null ? "ABORTED" : failed.Count > 0 ? "FAIL" : "PASS";
 
         var payload = new
@@ -1436,6 +1666,13 @@ partial class Build
             complete,
             incompleteReasons = incompleteReasons.ToArray(),
             abortReason,
+
+            // Whether this run was told to accept legs the host could not
+            // provide. Recorded because it changes what a PASS means: with the
+            // opt-out on, a green verdict can coexist with declared cells that
+            // never ran, and a consumer of this artifact has to be able to see
+            // that rather than infer it from `unavailableCells` being non-empty.
+            allowUnavailable = AllowUnavailable,
             exitCode = verdict switch
             {
                 "ABORTED" => RegressionExitAborted,
@@ -1451,7 +1688,33 @@ partial class Build
                 fail = failed.Count,
                 buildOnly = outcomes.Count(o => o.Result == CellResult.BuildOnly),
                 skip = outcomes.Count(o => o.Result == CellResult.Skip),
+                unavailable = outcomes.Count(o => o.Result == CellResult.Unavailable),
             },
+
+            // Legs that were planned and could not run on this host. Carried
+            // separately from `cells` so a consumer of the artifact can state
+            // what the run did NOT cover without re-deriving it.
+            unavailableCells = outcomes
+                .Where(o => o.Result == CellResult.Unavailable)
+                .Select(o => new
+                {
+                    library = o.Cell.Library,
+                    platform = PlatformLabel(o.Cell.Platform),
+                    reason = o.Reason,
+                }).ToArray(),
+
+            // Declared support this host could not exercise at all: the packages
+            // support back to an older minimum OS than any runtime installed
+            // here. Recorded so a green matrix cannot be read as covering the
+            // whole supported range.
+            minOsGaps = CollectMinOsGaps(packages, platforms).Select(g => new
+            {
+                library = g.Library,
+                platform = g.Platform,
+                minimumOs = g.MinimumOs,
+                availableOnHost = g.Available,
+            }).ToArray(),
+
             failedCells = failed.Select(o => new
             {
                 library = o.Cell.Library,

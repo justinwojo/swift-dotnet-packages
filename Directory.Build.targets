@@ -1,0 +1,40 @@
+<Project>
+  <!--
+    Harness lane hook.
+
+    Imported after the project body (and before the SDK's own targets), which
+    is the only point where a shared file can see — and therefore rewrite —
+    the ProjectReference items a test csproj declared. Two harness lanes use
+    it, both by passing -p:SwiftBindingsLaneProps=<path> to `dotnet
+    build`/`restore`:
+
+      * ReleaseConsume (build/Build.ReleaseConsumption.cs) writes a props file
+        that REMOVES the sibling <ProjectReference> items and adds the matching
+        <PackageReference> items, so the test app consumes the packed .nupkg
+        exactly as a third-party consumer would instead of the sibling
+        project's build output.
+
+      * The lane-evidence legs (release consumption + the Mono full-AOT device
+        cell) add a generated <Compile> item carrying a module initializer that
+        prints what the process actually loaded — the runtime flavor and the
+        identity of every SwiftBindings assembly. The harness reads those lines
+        back out of the app's console output.
+
+    Unset by default, so an ordinary `dotnet build` of any project in this repo
+    is byte-for-byte what it was before this file existed. Restricted to
+    *.Tests projects: nothing else in the repo is a lane app, and a stray
+    global property must not be able to rewrite a library's references.
+
+    The path is required to exist when the property is set — a typo that
+    silently produced an ordinary ProjectReference build would make the
+    consumption lane a false green about the very thing it exists to prove.
+  -->
+  <Target Name="_SwiftBindingsLanePropsMissing"
+          BeforeTargets="CollectPackageReferences;Restore;Build"
+          Condition="'$(SwiftBindingsLaneProps)' != '' and !Exists('$(SwiftBindingsLaneProps)') and $(MSBuildProjectName.EndsWith('.Tests'))">
+    <Error Text="SwiftBindingsLaneProps was set to '$(SwiftBindingsLaneProps)' but no such file exists. The lane would silently fall back to a ProjectReference build." />
+  </Target>
+
+  <Import Project="$(SwiftBindingsLaneProps)"
+          Condition="'$(SwiftBindingsLaneProps)' != '' and Exists('$(SwiftBindingsLaneProps)') and $(MSBuildProjectName.EndsWith('.Tests'))" />
+</Project>

@@ -66,11 +66,11 @@ partial class Build : NukeBuild
     [Parameter("Reuse already-booted simulator (CI)")]
     readonly bool ReuseSim;
 
-    [Parameter("Outer wall-clock budget for RunCiSimTest in seconds (default: 1140)")]
-    readonly int StepTimeout = 1140;
-
-    [Parameter("Max retries for test-timeout (RunCiSimTest)")]
-    readonly int MaxTestRetries = 1;
+    // One attempt is install + launch + run + reporting. The largest per-library run budget
+    // (see Build.RunBudgets.cs) plus the launch budget plus the empirical install overhead has
+    // to fit here, or the install is squeezed on a slow runner; TestRunBudgets asserts that.
+    [Parameter("Outer wall-clock budget for RunCiSimTest in seconds (default: 1620)")]
+    readonly int StepTimeout = 1620;
 
     [Parameter("Max retries for infrastructure failures (RunCiSimTest)")]
     readonly int MaxInfraRetries = 1;

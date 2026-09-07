@@ -128,7 +128,7 @@ public static class StdoutWatcher
 
     /// <summary>
     /// Run a process and watch its merged stdout/stderr until a terminal state
-    /// is reached or the deadline elapses.
+    /// is reached or a deadline elapses.
     ///
     /// <para>
     /// Behaviour notes:
@@ -143,10 +143,23 @@ public static class StdoutWatcher
     ///         WITHOUT killing the process — the caller decides whether to
     ///         terminate, kill, or leave it for the next retry.</item>
     /// </list>
+    ///
+    /// <para><b>Two budgets, not one.</b> <paramref name="launchTimeout"/> bounds the wait for
+    /// the APP's first line — launcher-owned lines, per
+    /// <see cref="LaunchDiagnostics.IsLauncherOwnedLine"/>, do not end the launch phase;
+    /// <paramref name="timeout"/> bounds the wait for a terminal marker measured from that
+    /// first app line. They answer different questions: the first is
+    /// install/boot/dyld cost and is sensitive to whatever else the host is doing, the second
+    /// is how long the suite itself takes. Sharing one number means a library whose tests
+    /// legitimately need minutes also gets minutes of silent-launch tolerance, while a library
+    /// with a slow cold start eats its own test budget before printing a line. Omit
+    /// <paramref name="launchTimeout"/> and both phases share <paramref name="timeout"/>,
+    /// which is the single-budget behaviour this method has always had.</para>
     /// </summary>
     public static async Task<TestRunResult> RunAsync(
         ProcessStartInfo psi,
         TimeSpan timeout,
+        TimeSpan? launchTimeout = null,
         Action<string>? onLine = null,
         bool killOnTerminal = true,
         CancellationToken cancellationToken = default)
@@ -158,15 +171,25 @@ public static class StdoutWatcher
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process: {psi.FileName}");
 
+        var startedUtc = DateTime.UtcNow;
+        var launchBudget = launchTimeout ?? timeout;
+
         var buffer = new StringBuilder();
         var bufferLock = new object();
         var status = TestRunStatus.Running;
         string? reason = null;
         var statusLock = new object();
+        DateTime? firstOutputUtc = null;
+        var firstOutputLock = new object();
 
         void Handle(string? data)
         {
             if (data is null) return;
+            // Only the APP's first line ends the launch phase. The watched process is the
+            // launcher, and its own chatter ("Launched application with pid …", an abort
+            // diagnostic) says nothing about whether the app is running yet.
+            if (!LaunchDiagnostics.IsLauncherOwnedLine(data))
+                lock (firstOutputLock) { firstOutputUtc ??= DateTime.UtcNow; }
             lock (bufferLock) { buffer.AppendLine(data); }
             onLine?.Invoke(data);
 
@@ -188,7 +211,7 @@ public static class StdoutWatcher
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        var deadline = DateTime.UtcNow + timeout;
+        var exitedOnItsOwn = false;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -196,21 +219,51 @@ public static class StdoutWatcher
             if (status != TestRunStatus.Running)
                 break;
 
+            DateTime? firstOutput;
+            lock (firstOutputLock) { firstOutput = firstOutputUtc; }
+
             if (process.HasExited)
             {
                 // Brief drain to let any final lines flush through the
                 // BeginOutputReadLine pump (mirrors validate-device.sh:122).
                 try { await Task.Delay(500, cancellationToken).ConfigureAwait(false); } catch { }
+                exitedOnItsOwn = true;
+                string outputSoFar;
+                lock (bufferLock) { outputSoFar = buffer.ToString(); }
+                // Re-read after draining: a final ordinary app line is start evidence too.
+                bool appOutputObserved;
+                lock (firstOutputLock) { appOutputObserved = firstOutputUtc is not null; }
                 lock (statusLock)
                 {
                     if (status == TestRunStatus.Running)
                     {
-                        status = TestRunStatus.Exited;
-                        reason = $"process exited with code {process.ExitCode} (no marker)";
+                        // An exit with no marker is a product result — the app ran and
+                        // stopped without saying it passed — UNLESS the evidence says the
+                        // launcher itself quit before the app was ever entered. Only the
+                        // second is re-attemptable, and the classifier requires the
+                        // specific transport/boot failure plus a complete absence of app
+                        // output, so a real failure can never be re-run into a pass.
+                        if (LaunchDiagnostics.LauncherNeverStartedApp(outputSoFar, appOutputObserved))
+                        {
+                            status = TestRunStatus.LauncherAborted;
+                            reason = $"launcher exited with code {process.ExitCode} before the app produced output";
+                        }
+                        else
+                        {
+                            status = TestRunStatus.Exited;
+                            reason = $"process exited with code {process.ExitCode} (no marker)";
+                        }
                     }
                 }
                 break;
             }
+
+            // Which budget is running depends on whether anything has been printed
+            // yet: until the first line the process is still starting up, and after
+            // it the suite is running.
+            var deadline = firstOutput is null
+                ? startedUtc + launchBudget
+                : firstOutput.Value + timeout;
 
             if (DateTime.UtcNow >= deadline)
             {
@@ -219,7 +272,10 @@ public static class StdoutWatcher
                     if (status == TestRunStatus.Running)
                     {
                         status = TestRunStatus.Timeout;
-                        reason = $"no marker after {timeout.TotalSeconds:F0}s";
+                        reason = firstOutput is null
+                            ? $"no output from the app after {launchBudget.TotalSeconds:F0}s (launch budget)"
+                            : $"no marker after {timeout.TotalSeconds:F0}s of app output (run budget; " +
+                              $"first line at {(firstOutput.Value - startedUtc).TotalSeconds:F1}s)";
                     }
                 }
                 break;
@@ -246,6 +302,21 @@ public static class StdoutWatcher
         string output;
         lock (bufferLock) { output = buffer.ToString(); }
 
-        return new TestRunResult(status, reason, output, Array.Empty<string>());
+        DateTime? firstOutputAt;
+        lock (firstOutputLock) { firstOutputAt = firstOutputUtc; }
+
+        int? exitCode = null;
+        if (exitedOnItsOwn)
+        {
+            try { exitCode = process.ExitCode; } catch { /* raced with teardown */ }
+        }
+
+        return new TestRunResult(
+            status,
+            reason,
+            output,
+            Array.Empty<string>(),
+            exitCode,
+            firstOutputAt is null ? null : firstOutputAt.Value - startedUtc);
     }
 }

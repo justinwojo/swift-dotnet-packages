@@ -57,8 +57,15 @@ partial class Build
             Log.Information("=== Build complete ===");
         });
 
+    /// <summary>
+    /// <paramref name="extraArgs"/> carries lane-specific MSBuild properties
+    /// (isolated obj/bin, an isolated package cache, the lane props hook). It is
+    /// appended last so a lane can override anything computed above it, and it
+    /// is empty for every ordinary build — a lane must not be able to change the
+    /// shape of the default one.
+    /// </summary>
     void BuildTestAppSimulator(string library, AbsolutePath testDir, string platform = "ios",
-        Action<string>? onLine = null, bool noRestore = false)
+        Action<string>? onLine = null, bool noRestore = false, IEnumerable<string>? extraArgs = null)
     {
         var startLine = $"=== Building {library} tests for {platform} ===";
         if (onLine is null) Log.Information("{Line}", startLine);
@@ -78,13 +85,23 @@ partial class Build
             args.Add($"-p:RuntimeIdentifier={RuntimeIdentifier}");
         if (noRestore)
             args.Add("--no-restore");
+        if (extraArgs is not null)
+            args.AddRange(extraArgs);
         var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build ({platform}) failed with exit {exit}");
     }
 
+    /// <summary>
+    /// Mono full-AOT device build: <c>dotnet build -c Debug -r ios-arm64</c>
+    /// with no <c>PublishAot</c>. This is the .NET-for-iOS default for a
+    /// physical device — what a MAUI app ships on unless its author opts into
+    /// NativeAOT — and it is a different runtime from the NativeAOT lane rather
+    /// than a cheaper flavor of it. See <paramref name="extraArgs"/> on
+    /// <see cref="BuildTestAppSimulator"/> for the lane-property convention.
+    /// </summary>
     void BuildTestAppDevice(string library, AbsolutePath testDir,
-        Action<string>? onLine = null, bool noRestore = false)
+        Action<string>? onLine = null, bool noRestore = false, IEnumerable<string>? extraArgs = null)
     {
         var startLine = $"=== Building {library} tests for device ===";
         if (onLine is null) Log.Information("{Line}", startLine);
@@ -98,13 +115,15 @@ partial class Build
             args.AddRange(new[] { "-f", ResolveTfm("ios") });
         if (noRestore)
             args.Add("--no-restore");
+        if (extraArgs is not null)
+            args.AddRange(extraArgs);
         var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)
             throw new InvalidOperationException($"dotnet build (device) failed with exit {exit}");
     }
 
     void BuildTestAppNativeAot(string library, AbsolutePath testDir,
-        Action<string>? onLine = null, bool noRestore = false)
+        Action<string>? onLine = null, bool noRestore = false, IEnumerable<string>? extraArgs = null)
     {
         // Codesign properties (CodesignKey / CodesignProvision / TeamIdentifierPrefix)
         // come from Directory.Build.tests.props.local — a gitignored, per-developer
@@ -139,6 +158,8 @@ partial class Build
             args.Add($"-p:TeamIdentifierPrefix={teamId}");
         if (noRestore)
             args.Add("--no-restore");
+        if (extraArgs is not null)
+            args.AddRange(extraArgs);
 
         var exit = RunDotnet(args.ToArray(), onLine);
         if (exit != 0)

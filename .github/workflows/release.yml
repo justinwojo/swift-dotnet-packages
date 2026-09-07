@@ -153,16 +153,53 @@ jobs:
       # rebuilds. Optimizing this is tracked as a follow-up; for now,
       # the Release artifacts and the simulator validation are independent.
       - name: Build and validate on iOS Simulator
-        # 30 min total gives Nuke's --step-timeout 1140 (19 min) headroom for
-        # cleanup, diagnostics collection, and binlog upload; the prior 20 min
-        # left <1 min after Nuke exits.
-        timeout-minutes: 30
+        # 40 min total gives Nuke's --step-timeout 1620 (27 min) headroom for
+        # cleanup, diagnostics collection, and binlog upload. The step budget
+        # has to cover install + launch + the library's run budget in one attempt.
+        timeout-minutes: 40
         run: |
+          # --timeout is the RUN budget: how long the suite may take to reach a
+          # marker, measured from the app's FIRST line. A library whose test app
+          # awaits more than this raises it from the harness's own per-library
+          # table, so this is a floor for the rest, not a cap for them.
+          # --launch-timeout is the separate budget for reaching that first line
+          # (install/boot/dyld); a hung launch is called there instead of eating
+          # the run budget.
           dotnet nuke RunCiSimTest \
             --library "${{ steps.parse.outputs.library }}" \
             --timeout 60 \
-            --step-timeout 1140 \
+            --launch-timeout 120 \
+            --step-timeout 1620 \
             --reuse-sim
+
+      # The step above validates the code through <ProjectReference>; it never
+      # opens the .nupkg that is about to be published. This step closes that
+      # gap: it restores the EXACT staged packages into the same test app
+      # (PackageReference mode, an isolated package cache, and a feed holding
+      # only the staged packages plus nuget.org for transitive SDK/runtime
+      # deps), runs it on the simulator, and asserts the assemblies that
+      # actually loaded came from those packages. A failure fails the release —
+      # a package that cannot be consumed must not be published.
+      - name: Consume the packed packages from the staged feed
+        # Restore + rebuild + a full simulator run, so it needs the same headroom
+        # as the sim job above: the largest per-library run budget plus its launch
+        # budget on top of package restore and an app build.
+        timeout-minutes: 40
+        run: |
+          # --timeout is the RUN budget: how long the suite may take to reach a
+          # marker, measured from the app's FIRST line. A library whose test app
+          # awaits more than this raises it from the harness's own per-library
+          # table, so this is a floor for the rest, not a cap for them.
+          # --launch-timeout is the separate budget for reaching that first line
+          # (install/boot/dyld); a hung launch is called there instead of eating
+          # the run budget.
+          dotnet nuke ReleaseConsume \
+            --library "${{ steps.parse.outputs.library }}" \
+            --version "${{ steps.parse.outputs.version }}" \
+            --consume-feed "${{ runner.temp }}/packages" \
+            --timeout 60 \
+            --launch-timeout 120 \
+            --step-timeout 1620
 
       - name: Upload simulator diagnostics
         if: failure()

@@ -47,6 +47,7 @@
         "PackValidateAppleFramework",
         "PublishRelease",
         "RegressionValidate",
+        "ReleaseConsume",
         "ReleaseWave",
         "Restore",
         "RunCiSimTest",
@@ -57,12 +58,16 @@
         "TestProjectRefInjection",
         "TestProjectRefRewriter",
         "TestRegressionArtifacts",
+        "TestReleaseConsumption",
         "TestReleaseWave",
+        "TestRunBudgets",
         "ValidateDevice",
+        "ValidateDeviceLane",
         "ValidateMac",
         "ValidateMacCatalyst",
         "ValidateRewriter",
         "ValidateSim",
+        "ValidateTvOs",
         "ValidateWatcherSelfTest"
       ]
     },
@@ -141,6 +146,10 @@
           "type": "boolean",
           "description": "ListChangedLibraries: every library. ReleaseWave: every already-published library"
         },
+        "AllowUnavailable": {
+          "type": "boolean",
+          "description": "RegressionValidate: accept legs this host cannot provide (no tvOS runtime, no device on the required OS) as coverage gaps instead of failures. Off by default — a declared cell that did not run is a false green. The run still reports complete=false and the artifact records the opt-out"
+        },
         "AllProducts": {
           "type": "boolean",
           "description": "Build all products in library.json"
@@ -177,6 +186,18 @@
             "Release"
           ]
         },
+        "ConsumeFeed": {
+          "type": "string",
+          "description": "ReleaseConsume: directory holding the staged .nupkg files to consume (default: local-packages/)"
+        },
+        "ConsumeOutput": {
+          "type": "string",
+          "description": "ReleaseConsume: scratch root for the isolated obj/bin/package cache (default: artifacts/release-consumption/)"
+        },
+        "ConsumeVersions": {
+          "type": "string",
+          "description": "ReleaseConsume: per-package version overrides, \"Id=Version;Id2=Version2\" (default: --version for every referenced package)"
+        },
         "Device": {
           "type": "boolean",
           "description": "Build the test app for a physical device (ios-arm64) instead of the simulator"
@@ -208,6 +229,11 @@
           "type": "boolean",
           "description": "ListChangedLibraries: emit GHA matrix JSON instead of newline-delimited names"
         },
+        "LaunchTimeout": {
+          "type": "integer",
+          "description": "Seconds a test app may take to print its FIRST line before the run is called a launch timeout (default: 120)",
+          "format": "int32"
+        },
         "Libraries": {
           "type": "array",
           "description": "ReleaseWave: libraries to release (comma-separated); needs --auto-version",
@@ -232,10 +258,9 @@
           "description": "ReleaseWave: how many libraries to build concurrently (default 3)",
           "format": "int32"
         },
-        "MaxTestRetries": {
-          "type": "integer",
-          "description": "Max retries for test-timeout (RunCiSimTest)",
-          "format": "int32"
+        "MonoAot": {
+          "type": "boolean",
+          "description": "ValidateDeviceLane: run the Mono full-AOT device lane (dotnet build -c Debug, no PublishAot) instead of the NativeAOT one. Mono full-AOT is the .NET-for-iOS default; NativeAOT is opt-in"
         },
         "NuGetApiKey": {
           "type": "string",
@@ -255,7 +280,7 @@
         },
         "Platforms": {
           "type": "string",
-          "description": "RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device, macos, maccatalyst, tvos"
+          "description": "RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT), macos, maccatalyst, tvos"
         },
         "Products": {
           "type": "array",
@@ -291,7 +316,7 @@
         },
         "StepTimeout": {
           "type": "integer",
-          "description": "Outer wall-clock budget for RunCiSimTest in seconds (default: 1140)",
+          "description": "Outer wall-clock budget for RunCiSimTest in seconds (default: 1620)",
           "format": "int32"
         },
         "Timeout": {

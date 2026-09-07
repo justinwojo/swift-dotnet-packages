@@ -529,10 +529,146 @@ public sealed class SimulatorFleet
         return JsonDocument.Parse(stdout);
     }
 
+    /// <summary>Raw <c>simctl list devices -j</c> text, for the pure selectors.</summary>
+    public string ListDevicesJson()
+    {
+        var (_, stdout, _) = RunSimctl(new[] { "list", "devices", "-j" }, retries: 2);
+        return stdout;
+    }
+
+    /// <summary>
+    /// Pick a booted simulator of the right device family out of a
+    /// <c>simctl list devices -j</c> payload, or <c>null</c> when the host has
+    /// none booted for that family.
+    ///
+    /// <para>This exists because simctl's <c>booted</c> alias is family-blind:
+    /// with an Apple TV and an iPhone both booted it can resolve to either, and
+    /// installing an iOS app onto the tvOS one fails with "This app was not
+    /// built to support this device family". Runtime identity is the
+    /// discriminator rather than the device name — a runtime key contains
+    /// <c>iOS</c>, <c>tvOS</c>, <c>watchOS</c> or <c>xrOS</c>, and none of the
+    /// others contains the substring <c>iOS</c>.</para>
+    ///
+    /// <para>Within the iOS family a booted iPhone wins over any other iOS
+    /// device, so the choice stays stable on a host that also keeps an iPad
+    /// booted; that is the device the ProjectReference lanes have always
+    /// picked.</para>
+    /// </summary>
+    public static string? SelectBootedUdid(string devicesJson, SimulatorFamily family)
+    {
+        using var doc = JsonDocument.Parse(devicesJson);
+        if (!doc.RootElement.TryGetProperty("devices", out var byRuntime))
+            return null;
+
+        var keyword = RuntimeKeyword(family);
+        string? fallback = null;
+
+        foreach (var runtime in byRuntime.EnumerateObject())
+        {
+            if (!runtime.Name.Contains(keyword, StringComparison.Ordinal)) continue;
+            foreach (var d in runtime.Value.EnumerateArray())
+            {
+                if (State(d) != "Booted") continue;
+                if (Udid(d) is not { } udid) continue;
+
+                var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                if (family == SimulatorFamily.Ios && !name.Contains("iPhone", StringComparison.Ordinal))
+                {
+                    fallback ??= udid;
+                    continue;
+                }
+                return udid;
+            }
+        }
+        return fallback;
+    }
+
+    /// <summary>Runtime-identifier substring that identifies a device family.</summary>
+    public static string RuntimeKeyword(SimulatorFamily family) => family switch
+    {
+        SimulatorFamily.TvOs => "tvOS",
+        _ => "iOS",
+    };
+
+    /// <summary>
+    /// Live counterpart of <see cref="SelectBootedUdid"/> — the booted
+    /// simulator of <paramref name="family"/> this host would install onto.
+    /// </summary>
+    public string? FindBootedUdid(SimulatorFamily family) =>
+        SelectBootedUdid(ListDevicesJson(), family);
+
+    /// <summary>One tvOS simulator this host can actually run.</summary>
+    public sealed record TvOsSimulator(string Udid, string Name, string Runtime, bool WasBooted);
+
+    /// <summary>
+    /// Find a usable tvOS simulator: an already-booted one first (free), then
+    /// any available shutdown Apple TV (boot cost only). Returns <c>null</c>
+    /// when the host has no tvOS runtime installed — the caller records that as
+    /// an explicitly unavailable leg rather than inventing a verdict, since the
+    /// tvOS runtime is a separate Xcode download and is genuinely absent on
+    /// many machines.
+    ///
+    /// <para>Deliberately separate from the iPhone fleet: the fleet's
+    /// preferred-device and preferred-runtime lists are iOS-specific, and a
+    /// tvOS cell needs exactly one device rather than a parallel fleet.</para>
+    /// </summary>
+    public TvOsSimulator? FindTvOsSimulator()
+    {
+        using var devices = ListDevices();
+        if (!devices.RootElement.TryGetProperty("devices", out var byRuntime)) return null;
+
+        TvOsSimulator? shutdown = null;
+        foreach (var runtime in byRuntime.EnumerateObject())
+        {
+            if (!runtime.Name.Contains("tvOS", StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (var d in runtime.Value.EnumerateArray())
+            {
+                var udid = Udid(d);
+                if (udid is null || !IsAvailable(d)) continue;
+                var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "(unnamed)" : "(unnamed)";
+
+                if (State(d) == "Booted")
+                    return new TvOsSimulator(udid, name, runtime.Name, WasBooted: true);
+
+                shutdown ??= new TvOsSimulator(udid, name, runtime.Name, WasBooted: false);
+            }
+        }
+        return shutdown;
+    }
+
     public JsonDocument ListRuntimes()
     {
         var (_, stdout, _) = RunSimctl(new[] { "list", "runtimes", "-j" }, retries: 2);
         return JsonDocument.Parse(stdout);
+    }
+
+    /// <summary>
+    /// Every installed, available simulator OS version for a platform
+    /// (<c>"iOS"</c>, <c>"tvOS"</c>, …), newest first. Used to state which
+    /// minimum-supported OS versions this host could not have run, so a matrix
+    /// can name that gap instead of implying the whole supported range was
+    /// exercised.
+    /// </summary>
+    public IReadOnlyList<string> AvailableOsVersions(string platformKeyword)
+    {
+        using var runtimes = ListRuntimes();
+        if (!runtimes.RootElement.TryGetProperty("runtimes", out var list))
+            return Array.Empty<string>();
+
+        var versions = new List<string>();
+        foreach (var r in list.EnumerateArray())
+        {
+            if (r.TryGetProperty("isAvailable", out var avail) && !avail.GetBoolean()) continue;
+            var name = r.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            var identifier = r.TryGetProperty("identifier", out var i) ? i.GetString() ?? "" : "";
+            if (!name.Contains(platformKeyword, StringComparison.OrdinalIgnoreCase)
+                && !identifier.Contains(platformKeyword, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (r.TryGetProperty("version", out var v) && v.GetString() is { Length: > 0 } version)
+                versions.Add(version);
+        }
+
+        return versions.Distinct(StringComparer.Ordinal).OrderByDescending(v => v, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
@@ -829,6 +965,20 @@ public sealed class SimulatorFleet
 
     private static bool DeviceMatches(JsonElement d, string name) =>
         d.TryGetProperty("name", out var n) && n.GetString() == name;
+}
+
+/// <summary>
+/// Simulator device family. An app bundle is built for exactly one of these,
+/// and installing it onto a device of another family fails, so any code that
+/// picks a device on the caller's behalf has to say which family it means.
+/// </summary>
+public enum SimulatorFamily
+{
+    /// <summary>iPhone / iPad simulators (iOS runtimes).</summary>
+    Ios,
+
+    /// <summary>Apple TV simulators (tvOS runtimes).</summary>
+    TvOs,
 }
 
 /// <summary>simctl command failed (after retries) — equivalent of <c>SimctlCommandError</c> in Python.</summary>

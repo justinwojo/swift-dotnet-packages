@@ -274,6 +274,76 @@ partial class Build
                         report.Contains("—"), "no marker for cells with no outcome");
                 }
 
+                // ── Case 7b: a leg the host could not provide reds the run ──
+                // A declared cell that never ran is not coverage. Left as a
+                // non-failure it produced the worst possible artifact: verdict
+                // PASS, exit 0, and a `complete=false` field nobody reads —
+                // a release gate would take that as a full green matrix.
+                {
+                    var unavailable = new CellOutcome(
+                        new Cell("Kingfisher", CellPlatform.TvOs),
+                        CellResult.Unavailable,
+                        "no tvOS simulator is available on this host",
+                        TimeSpan.Zero);
+
+                    Assert("an unavailable leg is a failure by default",
+                        IsFailure(unavailable, allowUnavailable: false), "unavailable was treated as a pass");
+                    Assert("--allow-unavailable is the only way to accept it",
+                        !IsFailure(unavailable, allowUnavailable: true), "opt-out did not take effect");
+
+                    // Skip and BuildOnly describe the matrix's own declared
+                    // shape for a cell, not coverage the host failed to supply,
+                    // so widening the failure set must not have swept them in.
+                    foreach (var benign in new[] { CellResult.Skip, CellResult.BuildOnly, CellResult.Pass })
+                    {
+                        var o = new CellOutcome(new Cell("Kingfisher", CellPlatform.TvOs), benign, null, TimeSpan.Zero);
+                        Assert($"{benign} stays a non-failure in both modes",
+                            !IsFailure(o, allowUnavailable: false) && !IsFailure(o, allowUnavailable: true),
+                            $"{benign} was counted as a failure");
+                    }
+
+                    var runId = ComposeRunId(new DateTime(2026, 9, 6, 11, 0, 0, DateTimeKind.Utc), "ccccccc");
+                    var result = WriteRegressionArtifacts(
+                        version: version, runId: runId, runDir: runsDir / runId,
+                        platforms: AllPlatforms, filter: null,
+                        packages: new[] { "Kingfisher" },
+                        cellsPlanned: 2,
+                        unreached: Array.Empty<Cell>(),
+                        outcomes: new[] { Pass("Kingfisher", CellPlatform.IosSim, 30), unavailable },
+                        abortReason: null,
+                        totalDuration: TimeSpan.FromSeconds(30),
+                        inputs: new { sdkVersion = version }, apiSurface: new { filesCollected = 0 });
+
+                    using var doc = Read(result.RunArtifact);
+                    var root = doc.RootElement;
+                    Assert("verdict FAIL when a declared leg did not run",
+                        root.GetProperty("verdict").GetString() == "FAIL",
+                        root.GetProperty("verdict").GetString() ?? "<null>");
+                    Assert("exitCode 2 rather than a silent 0",
+                        root.GetProperty("exitCode").GetInt32() == RegressionExitCellsFailed,
+                        root.GetProperty("exitCode").GetInt32().ToString());
+                    Assert("the artifact records which way unavailable legs were counted",
+                        root.TryGetProperty("allowUnavailable", out var allow) && !allow.GetBoolean(),
+                        "allowUnavailable missing from the artifact");
+                    Assert("the unavailable leg is still named with its reason",
+                        root.GetProperty("unavailableCells")[0].GetProperty("platform").GetString() == "tvos",
+                        "unavailableCells lost the leg");
+                    Assert("an unavailable leg still leaves the run incomplete",
+                        !result.Complete, "complete=true despite missing coverage");
+
+                    var report = RenderMatrix(
+                        new[] { "Kingfisher" },
+                        new[] { CellPlatform.IosSim, CellPlatform.TvOs },
+                        new[] { Pass("Kingfisher", CellPlatform.IosSim, 30), unavailable },
+                        TimeSpan.FromSeconds(30));
+                    Assert("the matrix says the gap was counted as a failure",
+                        report.Contains("counted as failures") && report.Contains("--allow-unavailable"),
+                        "matrix heading does not state how the gap was counted");
+                    Assert("the matrix lists the unavailable leg under Failures",
+                        report.Contains("UNAVAIL Kingfisher tvos"),
+                        "unavailable leg absent from the failure list");
+                }
+
                 // ── Case 8: run ids are unique per run and carry the tree state ──
                 {
                     var startA = new DateTime(2026, 7, 26, 10, 0, 0, DateTimeKind.Utc);

@@ -10,16 +10,43 @@ namespace SwiftBindings.Build.Helpers;
 public sealed class SimctlClient
 {
     /// <summary>
-    /// Default device target. Mirrors <c>validate-sim.sh</c>'s default of
-    /// <c>"booted"</c> when no UDID is supplied.
+    /// simctl's own device alias. No longer this class's default: it is
+    /// family-blind, so it is kept only as the name of the thing we stopped
+    /// relying on (see the constructor).
     /// </summary>
     public const string DefaultDevice = "booted";
 
     private readonly string _device;
 
-    public SimctlClient(string? deviceUdid = null)
+    /// <summary>
+    /// Target a specific simulator, or — when <paramref name="deviceUdid"/> is
+    /// null/empty — resolve a booted simulator of <paramref name="family"/>.
+    ///
+    /// <para>Defaulting used to be simctl's <c>booted</c> alias, which picks a
+    /// booted device without regard to device family. On a host where an Apple
+    /// TV is booted alongside the iPhones, an iOS install through that alias
+    /// fails with "This app was not built to support this device family; app is
+    /// compatible with (1) but this device supports (…)" — a validator reporting
+    /// a red that has nothing to do with the code under test. Resolving a
+    /// concrete UDID of the right family removes the ambiguity, and a host with
+    /// nothing booted for that family now gets a message that says so instead of
+    /// simctl's.</para>
+    /// </summary>
+    public SimctlClient(string? deviceUdid = null, SimulatorFamily family = SimulatorFamily.Ios)
     {
-        _device = string.IsNullOrEmpty(deviceUdid) ? DefaultDevice : deviceUdid;
+        if (!string.IsNullOrEmpty(deviceUdid))
+        {
+            _device = deviceUdid;
+            return;
+        }
+
+        _device = new SimulatorFleet().FindBootedUdid(family)
+            ?? throw new InvalidOperationException(
+                $"No booted {SimulatorFleet.RuntimeKeyword(family)} simulator to install onto. " +
+                "Boot one (or let the caller lease one from SimulatorFleet), or pass an explicit " +
+                "--device-udid. Simulators of other families that happen to be booted are deliberately " +
+                "not used: installing onto the wrong device family fails at install time.");
+        Log.Debug("simctl: resolved booted {Family} simulator {Udid}", family, _device);
     }
 
     public string Device => _device;
@@ -73,9 +100,10 @@ public sealed class SimctlClient
             "Library", "Developer", "CoreSimulator", "Devices");
         if (!Directory.Exists(devicesRoot)) return;
 
-        // Limit cleanup to booted device(s) when a UDID isn't pinned —
-        // shutdown sims aren't going to launch console-FIFOs anyway and
-        // there's no value in scanning their tmp directories.
+        // The device is always a concrete UDID (the constructor resolves one),
+        // so sweep just that sim's tmp dir. The booted-device enumeration is
+        // kept as the fallback for the alias, which no longer reaches here but
+        // is still a legal value for a caller that passes it explicitly.
         var targetUdids = _device == DefaultDevice
             ? ListBootedUdids()
             : new[] { _device };

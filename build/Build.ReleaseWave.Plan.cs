@@ -26,21 +26,6 @@ partial class Build
     /// </summary>
     internal static readonly string[] DoNotShipLibraries = { "AppIntents" };
 
-    /// <summary>
-    /// Per-library simulator-validation timeout overrides, in seconds. The wave's
-    /// base timeout comes from <c>--timeout</c>; an override raises it (never
-    /// lowers it) for libraries whose test app is legitimately slower.
-    ///
-    /// <para>MapLibre's test app fetches map tiles from demotiles.maplibre.org
-    /// behind a fixed in-app delay, so it cannot print <c>TEST SUCCESS</c> inside
-    /// the 30s default.</para>
-    /// </summary>
-    internal static readonly IReadOnlyDictionary<string, int> WaveTimeoutOverrides =
-        new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            ["MapLibre"] = 60,
-        };
-
     /// <summary>A <c>&lt;PackageReference Include="SwiftBindings.…"&gt;</c> opening tag,
     /// any attribute order / quote style. Deliberately broader than
     /// <see cref="AppleRefTagPattern"/> (which is Apple-only) because a wave

@@ -396,7 +396,7 @@ partial class Build
                             "(the queue must hold one UDID per concurrency slot).");
 
                     results[lib.Name] = await RunOneWaveLibraryAsync(
-                        lib, waveDir, logFile, udid, router, plan.DryRun);
+                        lib, waveDir, logFile, udid, router, plan.DryRun, WaveVersionMap(plan));
                     verdict = results[lib.Name].Verdict;
                 }
                 catch (Exception ex)
@@ -433,13 +433,29 @@ partial class Build
     }
 
     /// <summary>
+    /// Every package id this wave ships, mapped to the version it ships at.
+    /// The consumption leg needs it because a test app can reference a SIBLING
+    /// library's package at a different wave version (BlinkIDUX → BlinkID), and
+    /// guessing one version for all of them would either fail the feed check or
+    /// — worse — consume a package the wave is not releasing.
+    /// </summary>
+    static IReadOnlyDictionary<string, string> WaveVersionMap(WavePlan plan)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lib in plan.Libraries)
+            foreach (var id in lib.PackageIds)
+                map[id] = lib.Version;
+        return map;
+    }
+
+    /// <summary>
     /// The per-library pipeline: clean → build+pack at Release → stage → validate
-    /// on the simulator. Everything it and its callees log lands in
-    /// <paramref name="logFile"/>; the console gets two lines.
+    /// on the simulator → consume the staged packages. Everything it and its
+    /// callees log lands in <paramref name="logFile"/>; the console gets two lines.
     /// </summary>
     async Task<WaveLibraryResult> RunOneWaveLibraryAsync(
         WaveLibraryPlan lib, AbsolutePath waveDir, AbsolutePath logFile, string udid,
-        WaveLogRouter router, bool dryRun)
+        WaveLogRouter router, bool dryRun, IReadOnlyDictionary<string, string> waveVersions)
     {
         await using var writer = new StreamWriter(logFile, append: false) { AutoFlush = true };
         var gate = new object();
@@ -572,13 +588,13 @@ partial class Build
         // 4. Sim-validate, same pair RegressionValidate's ios-sim cell uses.
         //    Not RunCiSimTest: that target hardcodes its own fleet handling and
         //    reads the global --timeout, and the wave needs a per-library
-        //    timeout with a fleet lease it already holds. The one thing worth
-        //    keeping from RunCiSimTest is retry-on-timeout, which is below.
+        //    timeout with a fleet lease it already holds. It applies the same
+        //    terminal-timeout rule RunCiSimTest does, below.
         var validateSw = Stopwatch.StartNew();
         string? validationNote = null;
         try
         {
-            var timeout = Math.Max(Timeout, WaveTimeoutOverrides.TryGetValue(lib.Name, out var o) ? o : 0);
+            var timeout = ResolveRunBudgetSeconds(lib.Name, Timeout);
             var (testDir, _, _) = ResolveTestNames(lib.Name);
 
             if (!Directory.Exists(testDir))
@@ -593,20 +609,34 @@ partial class Build
                 var rid = ResolveRid("iossimulator-arm64");
                 var result = ValidateSimFor(lib.Name, timeout, udid, rid, Sink);
 
-                // Retry once, and only on a timeout — the same rule
-                // RunInnerTestWithRetry applies (a real assertion failure is not
-                // flaky and must not be retried into a false pass).
-                if (result.Status == TestRunStatus.Timeout)
+                // No retry on a timeout, in either phase — the same rule RunInnerTest
+                // applies. Mid-run silence is a verdict about the code; silence before
+                // the app speaks names no cause at all, and a wave that re-runs it is a
+                // wave that can publish a library whose app hangs every other launch.
+                // The launcher aborting before the app was entered is handled inside
+                // ValidateSimFor, which re-launches it there and reports if it persists.
+                if (result.IsLaunchPhaseTimeout)
                 {
-                    Sink("Test timed out — retrying once");
-                    router.Console.Warning("[{Library}] test timed out, retrying once", lib.Name);
-                    result = ValidateSimFor(lib.Name, timeout, udid, rid, Sink);
+                    Sink($"Timed out before the app produced any output ({result.Reason}) — not retried");
+                    router.Console.Warning(
+                        "[{Library}] the app produced no output within the launch budget", lib.Name);
                 }
 
                 if (result.Status != TestRunStatus.Success)
                     throw new InvalidOperationException(
                         $"{lib.Name}: simulator validation {result.Status}" +
                         (result.Reason is null ? "" : $" ({result.Reason})"));
+
+                // 5. Consume what was just staged. Everything above this line
+                //    validated the SOURCE in the working tree through a
+                //    ProjectReference; this leg restores the exact .nupkg files
+                //    staged three steps ago into the same test app, from an
+                //    isolated cache, and runs it. Inside the same guarded
+                //    region, so a package that cannot be consumed is un-staged
+                //    rather than left in the feed for the next process to pick
+                //    up.
+                RunReleaseConsumptionLeg(
+                    lib.Name, lib.Version, LocalPackagesDir, timeout, udid, Sink, waveVersions);
             }
         }
         catch
