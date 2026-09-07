@@ -9,7 +9,33 @@ namespace SwiftBindings.ActivityKit.Tests;
 
 internal static class Tests
 {
-    public static int Run()
+    /// <summary>
+    /// ActivityKit refuses <c>Activity.request</c> unless the app is foreground-ACTIVE; the system
+    /// reports "Target is not foreground" through <see cref="LiveActivityException"/>. The test
+    /// runner starts from <c>ViewDidLoad</c>, which runs before the app becomes active, so the
+    /// lifecycle tests wait for that state first. Polls with a real await (the run loop must keep
+    /// pumping for the state to ever change — a blocking wait here would never observe it).
+    /// </summary>
+    private static async Task<bool> WaitForForegroundActiveAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (UIKit.UIApplication.SharedApplication?.ApplicationState == UIKit.UIApplicationState.Active)
+                return true;
+            await Task.Delay(50).ConfigureAwait(true);
+        }
+        return UIKit.UIApplication.SharedApplication?.ApplicationState == UIKit.UIApplicationState.Active;
+    }
+
+    /// <summary>
+    /// The exact ActivityKit precondition text for a request issued while the app is not
+    /// foreground-active. Matching it converts that one environment condition into a NAMED skip;
+    /// every other <see cref="LiveActivityException"/> is a real failure.
+    /// </summary>
+    private const string ForegroundPreconditionText = "Target is not foreground";
+
+    public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
 
@@ -264,14 +290,28 @@ internal static class Tests
         // are deterministic on a test runner — the enablement read and the input
         // validation that rejects payloads BEFORE any native ActivityKit call.
 
-        // Test 20: AreActivitiesEnabled — a plain bool read over the @_cdecl shim.
-        // Any value is valid (a sim with Live Activities off returns false); the
-        // point is that the P/Invoke binds and round-trips without throwing.
+        // Test 20: AreActivitiesEnabled — the @_cdecl Int->bool projection. The VALUE is asserted on
+        // the simulator: this app's Info.plist now carries NSSupportsLiveActivities and a fresh
+        // simulator defaults the per-app toggle on, so `false` there means the capability declaration
+        // or the projection is broken — not an environment quirk. On a physical device the toggle is
+        // user-controlled Settings state the harness cannot pin, so there only completing the call is
+        // the assertion.
         try
         {
             bool enabled = LiveActivity.AreActivitiesEnabled;
             Log($"LiveActivity.AreActivitiesEnabled = {enabled}");
-            Pass("LiveActivity.AreActivitiesEnabled");
+            if (ObjCRuntime.Runtime.Arch == ObjCRuntime.Arch.SIMULATOR)
+            {
+                if (!enabled)
+                    throw new InvalidOperationException(
+                        "AreActivitiesEnabled is false on the simulator despite NSSupportsLiveActivities being declared");
+                Pass("LiveActivity.AreActivitiesEnabled is true (NSSupportsLiveActivities declared)");
+            }
+            else
+            {
+                Log("device: the Live Activities toggle is user-controlled Settings state; value not asserted");
+                Pass("LiveActivity.AreActivitiesEnabled");
+            }
         }
         catch (Exception ex)
         {
@@ -338,6 +378,172 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail("LiveActivityException message round-trip", ex.Message);
+        }
+
+        // ── Live Activity FOREGROUND LIFECYCLE ──
+        // Everything above this line is validation that never reaches ActivityKit: no activity is
+        // ever requested, updated or ended, so the whole .NET -> @_cdecl -> ActivityKit chain (the
+        // thing the package exists to provide) was previously unexercised in this suite. Tests 25–27
+        // drive the real lifecycle. They are ported from the swift-bindings BindingTests fixture
+        // (RuntimeTestsApp/AppleSupplement/LiveActivityTests.cs) and every one of them ends the
+        // activity in a `finally` so a mid-test failure cannot strand a live activity on the host.
+        //
+        // On-screen rendering is deliberately NOT asserted: the simulator does not composite
+        // third-party Live Activities and there is no widget extension in this test app. request()
+        // still succeeds and the system tracks the activity — that is the contract pinned here.
+        //
+        // Preconditions, both handled as NAMED environment skips rather than passes:
+        //   * the app must be foreground-ACTIVE (ActivityKit answers "Target is not foreground"
+        //     otherwise) — the runner starts in ViewDidLoad, before the app is active, so we wait;
+        //   * Live Activities must be enabled for the app (NSSupportsLiveActivities in Info.plist +
+        //     the user-facing toggle).
+        bool activityKitOs = OperatingSystem.IsIOSVersionAtLeast(16, 2);
+        bool foregroundActive = false;
+        bool liveActivitiesReady = false;
+        string lifecycleSkipReason = "";
+
+        if (!activityKitOs)
+        {
+            lifecycleSkipReason = "the content-based ActivityKit API requires iOS 16.2+; this runtime is older";
+        }
+        else
+        {
+            foregroundActive = await WaitForForegroundActiveAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
+            if (!foregroundActive)
+            {
+                lifecycleSkipReason =
+                    $"app never reached UIApplicationState.Active within 15s — ActivityKit's request() precondition (\"{ForegroundPreconditionText}\") cannot be met in this host";
+            }
+            else if (!LiveActivity.AreActivitiesEnabled)
+            {
+                lifecycleSkipReason =
+                    "Live Activities are disabled for this app (ActivityAuthorizationInfo.areActivitiesEnabled == false); needs NSSupportsLiveActivities plus the user-facing toggle";
+            }
+            else
+            {
+                liveActivitiesReady = true;
+            }
+        }
+
+        // Local helper: classify a request-time failure. Only the documented foreground precondition
+        // becomes a named skip; anything else is a real failure.
+        void RequestFailure(string name, Exception ex)
+        {
+            if (ex is LiveActivityException && ex.Message.Contains(ForegroundPreconditionText, StringComparison.OrdinalIgnoreCase))
+                Skip(name, $"ActivityKit refused the request with its foreground precondition: \"{ex.Message}\"");
+            else
+                Fail(name, $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        // Test 25: request -> update (escaped + non-ASCII JSON) -> end, the happy path.
+        if (!liveActivitiesReady)
+        {
+            Skip("LiveActivity lifecycle request/update/end", lifecycleSkipReason);
+        }
+        else
+        {
+            LiveActivity? activity = null;
+            try
+            {
+                activity = LiveActivity.Request(
+                    name: "delivery",
+                    attributesJson: "{\"meta\":{\"id\":7,\"tags\":[\"a\",\"b\"]}}",
+                    contentStateJson: "{\"status\":\"preparing\"}");
+                if (!activity.IsActive)
+                    throw new InvalidOperationException("request returned a handle that is not active");
+
+                // Escaped quotes, a Latin-1 escape and an astral-plane surrogate pair must survive
+                // the null-terminated UTF-8 crossing the shim uses for the payload blobs.
+                if (!activity.Update("{\"note\":\"He said \\\"hi\\\" \\u00e9 \\ud83c\\udf0d\"}"))
+                    throw new InvalidOperationException("update on a live handle returned false");
+
+                if (!activity.End("{\"status\":\"delivered\"}", immediate: true))
+                    throw new InvalidOperationException("end on a live handle returned false");
+                if (activity.IsActive)
+                    throw new InvalidOperationException("handle is still active after end");
+                activity = null;
+                Pass("LiveActivity lifecycle request/update/end");
+            }
+            catch (Exception ex)
+            {
+                RequestFailure("LiveActivity lifecycle request/update/end", ex);
+            }
+            finally
+            {
+                // Never strand a live activity if an assertion threw between request and end.
+                try { activity?.End(immediate: true); } catch (Exception cleanup) { Log($"cleanup end failed: {cleanup.Message}"); }
+            }
+        }
+
+        // Test 26: end is idempotent and update-after-end is a safe no-op — the use-after-free
+        // hardening the Swift-side id->Activity registry buys. A second End() must return false
+        // rather than double-free, and Update() on a dead handle must return false rather than
+        // dereference a dangling Activity.
+        if (!liveActivitiesReady)
+        {
+            Skip("LiveActivity end idempotence + update-after-end", lifecycleSkipReason);
+        }
+        else
+        {
+            LiveActivity? activity = null;
+            try
+            {
+                activity = LiveActivity.Request("delivery");
+                if (!activity.IsActive)
+                    throw new InvalidOperationException("request returned a handle that is not active");
+                if (!activity.End(immediate: true))
+                    throw new InvalidOperationException("first end returned false");
+                if (activity.End(immediate: true))
+                    throw new InvalidOperationException("second end returned true — it must be a no-op");
+                if (activity.Update("{\"status\":\"late\"}"))
+                    throw new InvalidOperationException("update after end returned true — it must be a no-op");
+                activity = null;
+                Pass("LiveActivity end idempotence + update-after-end");
+            }
+            catch (Exception ex)
+            {
+                RequestFailure("LiveActivity end idempotence + update-after-end", ex);
+            }
+            finally
+            {
+                try { activity?.End(immediate: true); } catch (Exception cleanup) { Log($"cleanup end failed: {cleanup.Message}"); }
+            }
+        }
+
+        // Test 27: push-token observation registers on a live handle, a second registration REPLACES
+        // the first without crashing (the Swift side must cancel the prior observer task and release
+        // its managed context rather than leave the old GCHandle rooted for a still-running task),
+        // and observation on a dead handle returns false. No APNs capability is needed — no token
+        // ever arrives on the simulator; this pins the register/replace/release path.
+        if (!liveActivitiesReady)
+        {
+            Skip("LiveActivity push-token observer register/replace/release", lifecycleSkipReason);
+        }
+        else
+        {
+            LiveActivity? activity = null;
+            try
+            {
+                activity = LiveActivity.Request("delivery", usePushToken: true);
+                if (!activity.ObservePushToken(_ => { }))
+                    throw new InvalidOperationException("first observe returned false on a live handle");
+                if (!activity.ObservePushToken(_ => { }))
+                    throw new InvalidOperationException("second observe (replace) returned false on a live handle");
+                if (!activity.End(immediate: true))
+                    throw new InvalidOperationException("end after observer replace returned false");
+                if (activity.ObservePushToken(_ => { }))
+                    throw new InvalidOperationException("observe on a dead handle returned true");
+                activity = null;
+                Pass("LiveActivity push-token observer register/replace/release");
+            }
+            catch (Exception ex)
+            {
+                RequestFailure("LiveActivity push-token observer register/replace/release", ex);
+            }
+            finally
+            {
+                try { activity?.End(immediate: true); } catch (Exception cleanup) { Log($"cleanup end failed: {cleanup.Message}"); }
+            }
         }
 
         // Summary

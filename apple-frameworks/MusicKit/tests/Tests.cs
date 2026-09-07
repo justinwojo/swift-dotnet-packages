@@ -9,7 +9,22 @@ namespace SwiftBindings.MusicKit.Tests;
 
 internal static class Tests
 {
-    public static int Run()
+    /// <summary>
+    /// Bounded await that yields the result; throws <see cref="TimeoutException"/> on the bound so a
+    /// hung async bridge fails the test instead of being reported as a pass. A real await — never
+    /// Wait()/GetAwaiter().GetResult() — so a main-thread affine continuation can run rather than
+    /// deadlocking against a blocked runner on the UIKit thread.
+    /// </summary>
+    internal static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan budget, string what)
+    {
+        var timeout = Task.Delay(budget);
+        var winner = await Task.WhenAny(task, timeout).ConfigureAwait(true);
+        if (!ReferenceEquals(winner, task))
+            throw new TimeoutException($"{what} did not complete within {budget.TotalSeconds:0.#}s");
+        return await task.ConfigureAwait(true);
+    }
+
+    public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
 
@@ -578,30 +593,56 @@ internal static class Tests
             Fail("MusicItemCollection<Song> ergonomics shape", ex.Message);
         }
 
-        // Test 37: MusicSubscription.GetCurrentAsync — dispatch the call; framework error counts as pass.
-        // Binding-load failures are real bugs and must fail.
+        // Test 37: MusicSubscription.current — REAL bounded await asserting an exact outcome.
+        // The previous version blocked with GetAwaiter().GetResult() on the UI thread and ended in a
+        // bare `catch (Exception) -> Pass`, so a marshalling crash, a null dereference or a
+        // PlatformNotSupportedException all counted as "framework error accepted". Now exactly two
+        // outcomes are accepted:
+        //   (a) a MusicSubscription — the three Bool properties must all read without throwing
+        //       (they are read into locals and logged; a mis-marshalled Bool would surface as a
+        //       throw or a garbage value, and the read itself is the assertion);
+        //   (b) the framework's own documented authorization/subscription error, i.e. the TYPED
+        //       SwiftException<MusicSubscription.Error>, whose payload must carry one of the three
+        //       declared cases (unknown = 0, permissionDenied = 1, privacyAcknowledgementRequired = 2).
+        //       permissionDenied is what an unauthorized simulator reports.
+        // Everything else — untyped Swift errors, loader errors, a timeout — fails.
         try
         {
-            var sub = MusicSubscription.GetCurrentAsync().GetAwaiter().GetResult();
+            var sub = await WithTimeout(
+                MusicSubscription.GetCurrentAsync(),
+                TimeSpan.FromSeconds(30),
+                "MusicSubscription.current").ConfigureAwait(true);
+
+            if (sub is null)
+                throw new InvalidOperationException("MusicSubscription.current returned null");
             bool canPlay = sub.CanPlayCatalogContent;
             bool canBecome = sub.CanBecomeSubscriber;
             bool hasCloud = sub.HasCloudLibraryEnabled;
             Log($"CanPlayCatalogContent={canPlay}, CanBecomeSubscriber={canBecome}, HasCloudLibraryEnabled={hasCloud}");
-            Pass("MusicSubscription property reads");
+            Pass("MusicSubscription.current property reads");
         }
-        catch (DllNotFoundException ex)
+        catch (SwiftException<MusicSubscription.Error> typed)
         {
-            Fail("MusicSubscription property reads", ex.Message);
-        }
-        catch (EntryPointNotFoundException ex)
-        {
-            Fail("MusicSubscription property reads", ex.Message);
+            var err = typed.Error;
+            if (err is null)
+            {
+                Fail("MusicSubscription.current error category",
+                     $"SwiftException<MusicSubscription.Error> carried no typed payload (message: {typed.Message})");
+            }
+            else if (!Enum.IsDefined(typeof(MusicSubscription.Error.CaseTag), err.Tag))
+            {
+                Fail("MusicSubscription.current error category",
+                     $"typed MusicSubscription.Error carried an undeclared CaseTag ({(uint)err.Tag})");
+            }
+            else
+            {
+                Log($"MusicSubscription.current reported typed MusicSubscription.Error.{err.Tag} — {typed.Message}");
+                Pass($"MusicSubscription.current reports typed MusicSubscription.Error.{err.Tag}");
+            }
         }
         catch (Exception ex)
         {
-            // Framework error (no entitlement, no auth) counts as pass — marshalling worked.
-            Log($"MusicSubscription.GetCurrentAsync threw as expected: {ex.Message}");
-            Pass("MusicSubscription property reads (framework error accepted)");
+            Fail("MusicSubscription.current", $"{ex.GetType().Name}: {ex.Message}");
         }
 
         // Test 38: MusicCatalogSearchRequest.Create — array-shim factory for
@@ -680,6 +721,104 @@ internal static class Tests
             Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
         }
 
+        // Test 41a: ApplicationMusicPlayer queue-factory -> player-assignment shape (audit BQ-10).
+        //
+        // The only way a consumer can build a queue from items is the generated
+        // `ApplicationMusicPlayer.QueueInfo.From…(SwiftArray<T>)` factories. Every one of them is
+        // declared as returning the BASE type `MusicPlayer.Queue`, while the assignment target —
+        // `ApplicationMusicPlayer.Queue`'s setter — takes the DERIVED `ApplicationMusicPlayer.QueueInfo`.
+        // So `player.Queue = ApplicationMusicPlayer.QueueInfo.From…(songs);` does not compile, and the
+        // queue-building surface is unreachable from C#.
+        //
+        // This is asserted through reflection rather than by writing the assignment directly: a
+        // direct assignment would be a COMPILE error, which would take the whole test app down and
+        // make every other MusicKit result unobservable. Reflecting over the declared signatures
+        // checks exactly the same compile-time contract while still producing a runnable red.
+        // EXPECTED RED until the BQ-10 generator fix + regen; do not weaken it.
+        try
+        {
+            var queueInfoType = typeof(global::MusicKit.ApplicationMusicPlayer.QueueInfo);
+            var playerQueueProp = typeof(global::MusicKit.ApplicationMusicPlayer).GetProperty("Queue");
+            if (playerQueueProp is null)
+                throw new InvalidOperationException("ApplicationMusicPlayer.Queue property missing");
+            var setter = playerQueueProp.GetSetMethod();
+            if (setter is null)
+                throw new InvalidOperationException("ApplicationMusicPlayer.Queue has no setter");
+            var required = setter.GetParameters()[0].ParameterType;
+
+            var factories = queueInfoType
+                .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(m => m.Name.StartsWith("From", StringComparison.Ordinal))
+                .ToArray();
+            if (factories.Length == 0)
+                throw new InvalidOperationException("no ApplicationMusicPlayer.QueueInfo.From… factories were emitted");
+
+            var unassignable = factories
+                .Where(m => !required.IsAssignableFrom(m.ReturnType))
+                .Select(m => $"{m.Name} -> {m.ReturnType.FullName}")
+                .ToArray();
+
+            Log($"QueueInfo factories: {factories.Length}; assignment target: {required.FullName}");
+            if (unassignable.Length > 0)
+                throw new InvalidOperationException(
+                    $"{unassignable.Length}/{factories.Length} queue factories return a type that cannot be assigned to " +
+                    $"ApplicationMusicPlayer.Queue ({required.Name}): {string.Join("; ", unassignable)}");
+            Pass("ApplicationMusicPlayer queue-factory result is assignable to the player's queue");
+        }
+        catch (Exception ex)
+        {
+            Fail("ApplicationMusicPlayer queue-factory result is assignable to the player's queue",
+                 $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        // Test 41b: an EMPTY MusicItemCollection<Song>, projected through IReadOnlyList<Song>.
+        //
+        // MusicItemCollection<T> has no public constructor (all three Swift inits are recorded
+        // unsupported: variadic parameter, method-own generic init, pruned synthesized Codable), so
+        // the only credential-free way to obtain one is to decode a search response from JSON and
+        // read its collection property. If no fixture route works, this test FAILS — a mandatory
+        // fixture that cannot be built is a real gap, not something to skip past.
+        global::MusicKit.MusicItemCollection<global::MusicKit.Song>? emptySongs = null;
+        try
+        {
+            string[] fixtures = { "{}", "{\"songs\":[]}", "{\"songs\":{\"data\":[]}}", "{\"results\":{}}" };
+            var failures = new List<string>();
+            foreach (var fixture in fixtures)
+            {
+                try
+                {
+                    var response = global::MusicKit.MusicCatalogSearchResponse.DecodeFromJson(
+                        System.Text.Encoding.UTF8.GetBytes(fixture));
+                    emptySongs = response.Songs;
+                    Log($"empty-collection fixture accepted: {fixture}");
+                    break;
+                }
+                catch (Exception fx)
+                {
+                    failures.Add($"{fixture} -> {fx.GetType().Name}: {fx.Message}");
+                }
+            }
+
+            if (emptySongs is null)
+                throw new InvalidOperationException(
+                    "no credential-free fixture produced a MusicItemCollection<Song>; tried " + string.Join(" | ", failures));
+
+            System.Collections.Generic.IReadOnlyList<global::MusicKit.Song> asList = emptySongs;
+            if (asList.Count != 0)
+                throw new InvalidOperationException($"decoded collection should be empty, Count = {asList.Count}");
+            int enumerated = 0;
+            foreach (var _ in asList)
+                enumerated++;
+            if (enumerated != 0)
+                throw new InvalidOperationException($"enumerating the empty collection yielded {enumerated} element(s)");
+            Pass("empty MusicItemCollection<Song> projects as an empty IReadOnlyList<Song>");
+        }
+        catch (Exception ex)
+        {
+            Fail("empty MusicItemCollection<Song> projects as an empty IReadOnlyList<Song>",
+                 $"{ex.GetType().Name}: {ex.Message}");
+        }
+
         // Test 41 (Skip): MusicAuthorization.RequestAsync — the interactive authorization
         // REQUEST. The binding surface exists (Task<Status> RequestAsync(CancellationToken))
         // and the usage string is present (NSAppleMusicUsageDescription in Info.plist), but
@@ -696,6 +835,45 @@ internal static class Tests
         // follow-up with an interactive or pre-authorized TCC host, then assert the Status.
         Skip("MusicAuthorization.RequestAsync awaited status",
             "request() aborts via TCC (__TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__) in headless CLI sim even with NSAppleMusicUsageDescription; status-query path CurrentStatus covered above; revisit with an interactive/pre-authorized TCC host");
+
+        // Test 42 (LAST — deliberately): MusicItemCollection<T> index bounds through IReadOnlyList<T>.
+        //
+        // The generated indexer must range-check before forwarding to the Swift subscript: an
+        // unchecked `(nint)index` reaches Swift's Array subscript and TRAPS — a fatalError that
+        // kills the process outright rather than raising a catchable managed exception, which
+        // would take the run summary and every other result in this lane down with it.
+        //
+        // This ran behind an opt-in environment variable while the indexer had no bounds check.
+        // The check is in place now — `[0]` / `[-1]` / `[Count]` on an empty collection all raise
+        // ArgumentOutOfRangeException — so the guard is gone and the test runs on every lane,
+        // which is what keeps the trap from coming back unnoticed. It stays LAST so that if the
+        // check ever regresses, the resulting trap costs only the summary line.
+        if (emptySongs is null)
+        {
+            Fail("MusicItemCollection<Song> index bounds through IReadOnlyList<Song>",
+                 "no empty MusicItemCollection<Song> fixture was available (see the fixture test above)");
+        }
+        else
+        {
+            System.Collections.Generic.IReadOnlyList<global::MusicKit.Song> asList = emptySongs;
+            foreach (var index in new[] { 0, -1, asList.Count })
+            {
+                var name = $"MusicItemCollection<Song>[{index}] on an empty collection throws ArgumentOutOfRangeException";
+                try
+                {
+                    var item = asList[index];
+                    Fail(name, $"indexer returned {(item is null ? "null" : "a Song")} instead of throwing");
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    Pass(name);
+                }
+                catch (Exception ex)
+                {
+                    Fail(name, $"expected ArgumentOutOfRangeException, got {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");

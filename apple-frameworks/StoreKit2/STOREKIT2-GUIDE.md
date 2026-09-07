@@ -45,7 +45,7 @@ using StoreKit2;
 
 ## Testing: `.storekit`, Sandbox, and Production
 
-StoreKit purchases run against one of three backends. The active one is reported on `Transaction.Environment` / `AppStore.Environment` as `Xcode`, `Sandbox`, or `Production`:
+StoreKit purchases run against one of three backends. A returned transaction or app receipt reports its environment through the instance property `Transaction.Environment` or `AppTransaction.Environment`, whose type is `AppStore.Environment` (`Xcode`, `Sandbox`, or `Production`):
 
 | Environment | How it's activated | Use it for |
 |---|---|---|
@@ -60,6 +60,14 @@ Once an environment is active, the generated C# API (`Product.ProductsAsync`, `P
 A `.storekit` file is provisioned into the simulator's StoreKit daemon by **Xcode** when you launch from a scheme that has a StoreKit Configuration selected. The app never points itself at the file.
 
 > **You cannot load a `.storekit` file from a non-Xcode launch.** There is no public StoreKit API to activate a `.storekit` file at runtime, and passing `-StoreKitConfigurationFilePath` (or a similar launch argument) through `mlaunch` / `simctl` / `dotnet` / CI does **not** work — the daemon state Xcode normally sets up isn't present, and StoreKit can crash (SIGSEGV) when it reaches that uninitialized path. This is an Apple platform limitation, not a gap in the binding. The only programmatic loader, `SKTestSession`, belongs to the separate `StoreKitTest` framework and is engineered to run only inside an XCTest test host (it requires the app to be installed-for-development with the XCTest runtime loaded), so it does not translate into a usable standalone-app C# API. **To test outside Xcode — on a device, in CI, or from the command line — use a Sandbox account.**
+
+### Without a configured backend, calls can exceed your deadline
+
+On the recorded iPhone 17 Pro Max simulator (iOS 26.3, 2026-09-06), launched through `simctl` with no Sandbox account or `.storekit` configuration, `Product.ProductsAsync` returned an empty list. `AppTransaction.GetSharedAsync`, `Transaction.CurrentEntitlements`, and `Transaction.All` produced no result during the native control's **150-second observation window**. The pure-Swift control reproduced the managed suite's timeouts on that host (see [native control](tests/native-control/README.md)). This establishes an environment-specific native reproduction, not a guarantee that these APIs never complete in all unconfigured environments or proof that configured purchases work.
+
+- Pass a `CancellationToken` to `AppTransaction.GetSharedAsync(token)` and use `WithCancellation(token)` on sequences. A wait-only timeout such as `task.WaitAsync(timeout)` bounds your wait but does not cancel the underlying operation. On timeout, request cancellation, bound the subsequent managed unwind, and dispose any successful result that races the deadline.
+- Cancellation requests can complete the managed task before the native operation finishes. An `OperationCanceledException` and completed managed enumeration establish managed unwind, **not native task completion or native resource cleanup**. If managed unwind also exceeds its bound, stop that test run instead of leaving it pending beside later tests.
+- Do not interpret a timeout as an empty entitlement set. Verify the test launch configuration and Sandbox sign-in externally. `AppStore.Environment` is a type, not a query for the active backend; the instance environment properties are available only after obtaining a transaction or app receipt.
 
 ### Tips
 
@@ -76,7 +84,7 @@ The generator applies a few consistent transforms over the Swift names. Knowing 
 | `Product.products(for:)` | `Product.ProductsAsync(IEnumerable<string>)` | first label dropped; `async` suffix added |
 | `enum PurchaseResult { case success(...) }` | `PurchaseResult` class with `.Tag` + `TryGetSuccess(out …)` | Swift enums-with-payload project to a class with a `CaseTag` and `TryGet*` accessors |
 | `transaction.finish()` | `transaction.FinishAsync()` | — |
-| trailing default args (`options: [] `) | a parameterless overload is also emitted | you can call `PurchaseAsync()` with no options |
+| trailing default args (`options: []`) | a zero-argument overload is emitted under a **`Get`-prefixed** name — `GetPurchaseAsync()` | the all-defaults call projects as a separate zero-argument method carrying a `Get` prefix, so `product.PurchaseAsync()` with no options does **not** compile — use `product.GetPurchaseAsync()` |
 
 Every async method also accepts a trailing `CancellationToken` (defaulted), so you can cancel an in-flight call.
 
@@ -89,8 +97,8 @@ using StoreKit2;
 var products = await Product.ProductsAsync(new[] { "com.yourapp.premium" });
 var product = products[0];
 
-// 2. Buy it. PurchaseAsync() == Swift's product.purchase().
-var result = await product.PurchaseAsync();
+// 2. Buy it. GetPurchaseAsync() == Swift's product.purchase() with no options.
+var result = await product.GetPurchaseAsync();
 
 // 3. Inspect the outcome
 switch (result.Tag)
@@ -164,11 +172,11 @@ if (product.Type == Product.ProductType.AutoRenewable)
 
 ## 3. Initiate a purchase
 
-`product.purchase(options:)` → **`product.PurchaseAsync(...)`**, returning `Task<Product.PurchaseResult>`. Three overloads exist:
+`product.purchase(options:)` → **`product.PurchaseAsync(...)`**, returning `Task<Product.PurchaseResult>`. Three entry points exist — note that the no-options form is named **`GetPurchaseAsync`**, not `PurchaseAsync`:
 
 ```csharp
-// No options (Swift's default `options: []`)
-Task<Product.PurchaseResult> PurchaseAsync(CancellationToken ct = default);
+// No options (Swift's default `options: []`) — Get-prefixed, see "Naming conventions"
+Task<Product.PurchaseResult> GetPurchaseAsync(CancellationToken ct = default);
 
 // With purchase options
 Task<Product.PurchaseResult> PurchaseAsync(IReadOnlySet<Product.PurchaseOption> options, CancellationToken ct = default);
@@ -180,7 +188,7 @@ Task<Product.PurchaseResult> PurchaseAsync(UIKit.UIViewController vc, IReadOnlyS
 
 ```csharp
 // Simplest case
-var result = await product.PurchaseAsync();
+var result = await product.GetPurchaseAsync();
 
 // With options — see "Purchase options" below
 var options = new HashSet<Product.PurchaseOption>
@@ -448,7 +456,7 @@ using Swift.Runtime;
 
 try
 {
-    var result = await product.PurchaseAsync();
+    var result = await product.GetPurchaseAsync();
     // …
 }
 catch (SwiftException<StoreKitError> ex)
@@ -488,7 +496,7 @@ Consumer-facing types (namespace `StoreKit2`):
 
 | Type | Role |
 |---|---|
-| `Product` | a purchasable product; `ProductsAsync`, `PurchaseAsync`, metadata |
+| `Product` | a purchasable product; `ProductsAsync`, `GetPurchaseAsync` / `PurchaseAsync`, metadata |
 | `Product.ProductType` | `Consumable` / `NonConsumable` / `NonRenewable` / `AutoRenewable` |
 | `Product.PurchaseOption` | options passed to `PurchaseAsync` |
 | `Product.PurchaseResult` | `Success` / `UserCancelled` / `Pending` |

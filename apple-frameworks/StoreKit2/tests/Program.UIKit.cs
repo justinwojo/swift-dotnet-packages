@@ -32,7 +32,26 @@ public class TestMainViewController : UIViewController
     {
         base.ViewDidLoad();
         View!.BackgroundColor = UIColor.White;
-        Tests.Run();
+        // The runner is async and MUST NOT be blocked on here (no Wait()/GetAwaiter().GetResult()):
+        // this is the UIKit main thread, and every bounded await whose continuation is main-thread
+        // affine — which is what a Swift async completion hopping back to the main queue produces —
+        // would deadlock against a blocked runner. Start it and let the run loop pump continuations.
+        _ = RunTestsAsync();
+    }
+
+    private static async System.Threading.Tasks.Task RunTestsAsync()
+    {
+        try
+        {
+            await Tests.RunAsync();
+        }
+        catch (Exception ex)
+        {
+            // An exception escaping the runner is a harness failure, never a silent success:
+            // emit the failure marker the validators watch for.
+            Tests.Log($"harness exception escaped the test runner: {ex}");
+            Tests.Log("TEST FAILED: 1 failures", prefixed: false);
+        }
     }
 }
 #endif

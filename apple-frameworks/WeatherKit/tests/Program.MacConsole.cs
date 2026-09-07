@@ -6,6 +6,6 @@ namespace SwiftBindings.WeatherKit.Tests;
 
 internal static class MacEntry
 {
-    static int Main() => Tests.Run();
+    static System.Threading.Tasks.Task<int> Main() => Tests.RunAsync();
 }
 #endif

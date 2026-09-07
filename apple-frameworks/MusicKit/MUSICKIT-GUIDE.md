@@ -46,7 +46,8 @@ The generator applies a few consistent transforms over the Swift names. Knowing 
 
 | Swift | C# | Rule |
 |---|---|---|
-| `func response() async throws` | `ResponseAsync(CancellationToken = default)` | `async` methods gain an `Async` suffix, return `Task`/`Task<T>`, and accept a trailing defaulted `CancellationToken` |
+| `func response() async throws` | `GetResponseAsync(CancellationToken = default)` | `async` methods gain an `Async` suffix, return `Task`/`Task<T>`, and accept a trailing defaulted `CancellationToken`; an argument-less async member is emitted on the type with a **`Get` prefix**, so it is `GetResponseAsync()`, not `ResponseAsync()` |
+| `MusicLibraryRequest<Song>.response()` | `ResponseAsync()` (extension method) | the specializations the CSM engine emits for a generic parent arrive as extension methods in `MusicLibraryRequest{Item}CsmExtensions` and keep the plain name — call them as `request.ResponseAsync()` |
 | `MusicAuthorization.request()` | `MusicAuthorization.RequestAsync()` | static async factory, same rules |
 | `request.term` | `request.Term` | properties are PascalCase |
 | `var limit: Int?` | `int? Limit` | Swift `Int` projects to `int`; optionals to nullable `int?` |
@@ -65,11 +66,13 @@ A complete authorization → catalog search flow using `MusicCatalogSearchSugges
 using MusicKit;
 
 // 1. Make sure we're authorized to talk to Apple Music.
+//    A Status is a disposable wrapper around the Swift value: keep whichever instance you end up
+//    reading alive until you are done with it. Disposing the requested status inside the `if`
+//    block (`using var`) and reading its Tag afterwards would read an already-released value.
 var status = MusicAuthorization.CurrentStatus;
 if (status.Tag == MusicAuthorization.Status.CaseTag.NotDetermined)
 {
-    using var requested = await MusicAuthorization.RequestAsync();
-    status = requested;
+    status = await MusicAuthorization.RequestAsync();
 }
 
 if (status.Tag != MusicAuthorization.Status.CaseTag.Authorized)
@@ -87,8 +90,8 @@ if (!subscription.CanPlayCatalogContent)
 }
 
 // 3. Ask the catalog for search suggestions for a term.
-using var request = MusicCatalogSearchSuggestionsRequest.Create_C11D4260("daft punk");
-using var response = await request.ResponseAsync();
+using var request = MusicCatalogSearchSuggestionsRequest.Create("daft punk");
+using var response = await request.GetResponseAsync();
 
 foreach (var suggestion in response.Suggestions)
 {
@@ -158,7 +161,7 @@ await foreach (MusicSubscription latest in updates)
 
 ## Catalog search
 
-You search the Apple Music catalog through `MusicCatalogSearchRequest` → `MusicCatalogSearchResponse`. The request configures the query; calling `ResponseAsync()` performs it.
+You search the Apple Music catalog through `MusicCatalogSearchRequest` → `MusicCatalogSearchResponse`. The request configures the query; calling `GetResponseAsync()` performs it.
 
 ```csharp
 // request is a MusicCatalogSearchRequest you obtained (see "What you can and can't construct")
@@ -167,7 +170,7 @@ request.Offset = 0;          // int? — page offset
 request.IncludeTopResults = true;   // iOS 16+/macOS 13+
 string term = request.Term;  // read-only: the term the request was built with
 
-using MusicCatalogSearchResponse response = await request.ResponseAsync();
+using MusicCatalogSearchResponse response = await request.GetResponseAsync();
 ```
 
 `MusicCatalogSearchResponse` exposes one typed `MusicItemCollection<T>` per result kind:
@@ -198,8 +201,8 @@ foreach (Song song in response.Songs)
 Unlike the search request above, `MusicCatalogSearchSuggestionsRequest` **is** directly constructible — it's the most ergonomic catalog entry point from C#:
 
 ```csharp
-using var request = MusicCatalogSearchSuggestionsRequest.Create_C11D4260("radioh");
-using MusicCatalogSearchSuggestionsResponse response = await request.ResponseAsync();
+using var request = MusicCatalogSearchSuggestionsRequest.Create("radioh");
+using MusicCatalogSearchSuggestionsResponse response = await request.GetResponseAsync();
 
 foreach (MusicCatalogSearchSuggestionsResponse.Suggestion s in response.Suggestions)
     using (s)
@@ -218,19 +221,23 @@ using var request = new MusicPersonalRecommendationsRequest
     Limit = 10,   // int?
     Offset = 0,   // int?
 };
-using MusicPersonalRecommendationsResponse response = await request.ResponseAsync();
+using MusicPersonalRecommendationsResponse response = await request.GetResponseAsync();
 ```
 
 `MusicPersonalRecommendation` items carry a `MusicItemCollection<MusicPersonalRecommendation.Item>`, where `Item` is a projected enum over `Album`, `Playlist`, `Station`.
 
 ## Recently played
 
-`MusicRecentlyPlayedRequest<T>` is a generic request with a public parameterless constructor. `T` must be a recently-playable item type (`Song`, `MusicVideo`, `Track`, `Station`, `RecentlyPlayedMusicItem`, … — the types implementing `IMusicRecentlyPlayedRequestable`):
+`MusicRecentlyPlayedRequest<T>` is a generic request with a public parameterless constructor, and `T` must be a recently-playable item type (`Song`, `MusicVideo`, `Track`, `Station`, `RecentlyPlayedMusicItem`, … — the types implementing `IMusicRecentlyPlayedRequestable`). You can construct it and configure it:
 
 ```csharp
 using var request = new MusicRecentlyPlayedRequest<Song>();
-using MusicRecentlyPlayedResponse<Song> response = await request.ResponseAsync();
+request.Limit = 25;      // int?
+request.Offset = 0;      // int?
+// (a CSM factory exists too: MusicRecentlyPlayedRequestMusicKit_SongCsmExtensions.FromMusicKitSong())
 ```
+
+**There is currently no way to run it from C#.** Swift's `response()` on this type is `async` and returns a type mentioning the parent's own generic parameter, which the generator does not project — neither a `GetResponseAsync`/`ResponseAsync` member nor a CSM specialization of it is emitted, so the configured request has no execution path. `MusicCatalogResourceRequest<T>` is in the same position (and has no public constructor either). For library content, `MusicLibraryRequest<T>` does get an emitted `ResponseAsync()` extension method per item type.
 
 `RecentlyPlayedMusicItem` is a projected enum over `Album`, `Playlist`, `Station` (`CaseTag`: `Album = 0`, `Playlist = 1`, `Station = 2`).
 
@@ -243,7 +250,7 @@ using MusicRecentlyPlayedResponse<Song> response = await request.ResponseAsync()
 request.Limit = 25;          // int (note: non-nullable on this request)
 string term = request.Term;
 
-using MusicLibrarySearchResponse response = await request.ResponseAsync();
+using MusicLibrarySearchResponse response = await request.GetResponseAsync();
 
 foreach (Song song in response.Songs)
     using (song) { /* … */ }
@@ -428,7 +435,7 @@ string atmos = AudioVariant.DolbyAtmos.GetDescription();
 - **`ContentRating`**: `Clean = 0`, `Explicit = 1`.
 - **`MusicCatalogChartKind`**: `MostPlayed = 0`, `CityTop = 1`, `DailyGlobalTop = 2`. `MusicCatalogChartKindExtensions.AllCases` + `GetDescription()`.
 - **`MusicPropertySource`**: `Catalog = 0`, `Library = 1`. `MusicPropertySourceExtensions.AllCases`.
-- **`Curator.KindType`**, **`Playlist.KindType`**: nested plain enums.
+- **`Curator.Kind2`** (`Editorial = 0`, `External = 1`), **`Playlist.Kind2`** (`Editorial = 0`, `External = 1`, `PersonalMix = 2`, `Replay = 3`, `UserShared = 4`): nested plain enums. The `2` is the generator disambiguating the nested `Kind` type from the sibling `Kind` property on the same class — the property is `curator.Kind`, its type is `Curator.Kind2`.
 
 `MusicTokenRequestError` is a projected enum (singletons `Unknown`, `PermissionDenied`, `UserTokenRevoked`, `UserNotSignedIn`, `PrivacyAcknowledgementRequired`, `DeveloperTokenRequestFailed`, `UserTokenRequestFailed`; `CaseTag` `0`…`6`) used by the token-provider types (`MusicUserTokenProvider`, `DefaultMusicTokenProvider`, `MusicTokenRequestOptions`).
 
@@ -438,13 +445,13 @@ This is the most important practical caveat for MusicKit's request types. Swift 
 
 | Request type | Constructible from C#? | How |
 |---|---|---|
-| `MusicCatalogSearchSuggestionsRequest` | ✅ | `MusicCatalogSearchSuggestionsRequest.Create_C11D4260(term)` or `.Create(term, MusicCatalogSearchTypes)` |
+| `MusicCatalogSearchSuggestionsRequest` | ✅ | `MusicCatalogSearchSuggestionsRequest.Create(term)` (generated) or `.Create(term, MusicCatalogSearchTypes)` (shim) |
 | `MusicPersonalRecommendationsRequest` | ✅ | `new MusicPersonalRecommendationsRequest()` |
-| `MusicRecentlyPlayedRequest<T>` | ✅ | `new MusicRecentlyPlayedRequest<T>()` |
-| `MusicCatalogResourceRequest<T>` | ✅ | `new MusicCatalogResourceRequest<T>()` |
+| `MusicRecentlyPlayedRequest<T>` | ⚠️ | `new MusicRecentlyPlayedRequest<T>()` constructs, but **no `response` member is emitted** for it — see [Recently played](#recently-played) |
+| `MusicCatalogResourceRequest<T>` | ❌ | **no public constructor emitted.** The only construction path is the CSM factory `MusicCatalogResourceRequestMusicKit_GenreCsmExtensions.FromMusicKitGenre()`, and no `response` member is emitted for this type either |
 | `MusicCatalogSearchRequest` | ✅ | `MusicCatalogSearchRequest.Create(term, MusicCatalogSearchTypes)` (array-shim factory) |
 | `MusicLibrarySearchRequest` | ✅ | `MusicLibrarySearchRequest.Create(term, MusicLibrarySearchTypes)` (array-shim factory) |
-| `MusicCatalogChartsRequest` | ❌ | **no public constructor emitted, and no shim** — configure (`Limit`/`Offset`/`IncludeTopResults`) and call `ResponseAsync()` only on an instance you already hold |
+| `MusicCatalogChartsRequest` | ❌ | **no public constructor emitted, and no shim** — configure (`Limit`/`Offset`/`IncludeTopResults`) and call `GetResponseAsync()` only on an instance you already hold |
 
 ```csharp
 // Catalog term search — construct via the array-shim factory:
@@ -452,7 +459,7 @@ using var req = MusicCatalogSearchRequest.Create("daft punk",
     MusicCatalogSearchTypes.Album | MusicCatalogSearchTypes.Artist);
 ```
 
-The bitmask is validated: a value carrying bits outside the corresponding `MusicCatalogSearchTypes` / `MusicLibrarySearchTypes` enum throws `ArgumentException` with a diagnostic stray-bit hex string. The response surface (`Songs`, `Albums`, …) and `ResponseAsync()` are usable once you hold an instance. Only `MusicCatalogChartsRequest` still lacks any construction path.
+The bitmask is validated: a value carrying bits outside the corresponding `MusicCatalogSearchTypes` / `MusicLibrarySearchTypes` enum throws `ArgumentException` with a diagnostic stray-bit hex string. The response surface (`Songs`, `Albums`, …) and `GetResponseAsync()` are usable once you hold an instance of `MusicCatalogSearchRequest`, `MusicLibrarySearchRequest`, `MusicCatalogSearchSuggestionsRequest`, `MusicPersonalRecommendationsRequest`, `MusicCatalogChartsRequest` or `MusicDataRequest`. `MusicCatalogChartsRequest` lacks any construction path; `MusicRecentlyPlayedRequest<T>` and `MusicCatalogResourceRequest<T>` construct (the latter only for `Genre`) but have no emitted way to run the request.
 
 > **What's validated.** The test app exercises authorization status + singletons, `MusicSubscription.GetCurrentAsync()` and its property reads, the player singletons (`ApplicationMusicPlayer.Shared`, `SystemMusicPlayer.Shared` on iOS), `MusicLibrary.Shared`, all the plain/projected enum tags and `GetDescription()` round-trips, `MusicItemCollection<Song>`'s index ergonomics, and type-metadata loads for the core item and request types. Live catalog/library *content* (running an actual search, reading real `Song`/`Album` data, mutating the library, playing audio) requires the MusicKit entitlement + an authorized, subscribed device and is **not** exercised by the test app — those code paths are accurate to the generated signatures but unverified at runtime here.
 

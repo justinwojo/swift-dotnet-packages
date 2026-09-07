@@ -8,7 +8,36 @@ namespace SwiftBindings.WeatherKit.Tests;
 
 internal static class Tests
 {
-    public static int Run()
+    /// <summary>
+    /// Awaits <paramref name="task"/> with a hard upper bound. Returns false when the bound
+    /// elapsed first; the caller must treat that as a failure, never as a pass. The await is a
+    /// real await (never <c>Task.Wait</c>/<c>GetAwaiter().GetResult()</c>) so a continuation that
+    /// is affine to the UIKit main thread can run instead of deadlocking against a blocked runner.
+    /// </summary>
+    internal static async Task<bool> CompletesWithin(Task task, TimeSpan budget)
+    {
+        var timeout = Task.Delay(budget);
+        var winner = await Task.WhenAny(task, timeout).ConfigureAwait(true);
+        if (!ReferenceEquals(winner, task))
+            return false;
+        await task.ConfigureAwait(true); // rethrow the real exception, not an AggregateException
+        return true;
+    }
+
+    /// <summary>
+    /// Bounded await that yields the result. Throws <see cref="TimeoutException"/> when the budget
+    /// elapses, so a hung async bridge fails the test instead of being logged as a pass.
+    /// </summary>
+    internal static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan budget, string what)
+    {
+        var timeout = Task.Delay(budget);
+        var winner = await Task.WhenAny(task, timeout).ConfigureAwait(true);
+        if (!ReferenceEquals(winner, task))
+            throw new TimeoutException($"{what} did not complete within {budget.TotalSeconds:0.#}s");
+        return await task.ConfigureAwait(true);
+    }
+
+    public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
 
@@ -389,37 +418,81 @@ internal static class Tests
             Fail("Forecast<DayWeather> IReadOnlyList projection", ex.Message);
         }
 
-        // Test 26: WeatherService.GetAttributionAsync — dispatch fires without framework crash.
-        // WeatherKit requires an API key for real data; expect a SwiftException error, which still
-        // proves the Swift→C# async bridge is wired correctly.
+        // Test 26: WeatherService.attribution — real bounded await asserting a documented outcome.
+        //
+        // Exactly three outcomes are accepted, and each one carries an assertion that could fail:
+        //   (a) success  — the returned WeatherAttribution must expose readable fields:
+        //                  a non-empty serviceName, a non-empty legalAttributionText, and
+        //                  absolute legalPageURL / squareMarkURL values;
+        //   (b) a *typed* WeatherKit error — SwiftException<WeatherError>, i.e. the framework's own
+        //       documented error category (WeatherError.PermissionDenied is what a host without the
+        //       com.apple.developer.weatherkit entitlement reports; WeatherError.Unknown is the only
+        //       other declared case). The typed payload must actually be one of those two cases.
+        //   (c) a NAMED environment skip, and only for the one environment condition that is not a
+        //       binding defect: no network reachability in the simulator (NSURLErrorDomain
+        //       -1009/-1005/-1004). The message must match that signature.
+        // A timeout is a FAILURE (the previous version passed on it), and any other exception —
+        // including an untyped SwiftException that is not the offline signature — is a FAILURE.
         try
         {
             var svc = WeatherService.Shared;
-            var task = svc.GetAttributionAsync();
-            // Allow brief time for the async dispatch to invoke callback.
-            var completed = task.Wait(TimeSpan.FromSeconds(5));
-            if (completed)
+            var attribution = await WithTimeout(
+                svc.GetAttributionAsync(),
+                TimeSpan.FromSeconds(30),
+                "WeatherService.attribution").ConfigureAwait(true);
+
+            if (attribution is null)
+                throw new InvalidOperationException("GetAttributionAsync returned a null WeatherAttribution");
+
+            var serviceName = attribution.ServiceName;
+            var legalText = attribution.LegalAttributionText;
+            var legalPage = attribution.LegalPageURL;
+            var squareMark = attribution.SquareMarkURL;
+
+            if (string.IsNullOrWhiteSpace(serviceName))
+                throw new InvalidOperationException("WeatherAttribution.serviceName was empty");
+            if (string.IsNullOrWhiteSpace(legalText))
+                throw new InvalidOperationException("WeatherAttribution.legalAttributionText was empty");
+            if (legalPage is null || string.IsNullOrWhiteSpace(legalPage.AbsoluteString))
+                throw new InvalidOperationException("WeatherAttribution.legalPageURL was null/empty");
+            if (squareMark is null || string.IsNullOrWhiteSpace(squareMark.AbsoluteString))
+                throw new InvalidOperationException("WeatherAttribution.squareMarkURL was null/empty");
+
+            Log($"attribution.serviceName = '{serviceName}'");
+            Log($"attribution.legalPageURL = {legalPage.AbsoluteString}");
+            Log($"attribution.legalAttributionText = '{legalText}'");
+            Pass("WeatherService.attribution returns a readable WeatherAttribution");
+        }
+        catch (SwiftException<WeatherError> typed)
+        {
+            // (b) The documented WeatherKit error category. Assert the payload really is one of the
+            // two declared cases — a typed exception carrying an out-of-range tag is a marshalling bug.
+            var err = typed.Error;
+            if (err != WeatherError.PermissionDenied && err != WeatherError.Unknown)
             {
-                // Attribution returned unexpectedly — still valid; log it.
-                Log("GetAttributionAsync completed (attribution returned)");
-                Pass("WeatherService.GetAttributionAsync dispatch");
+                Fail("WeatherService.attribution error category",
+                     $"typed WeatherError out of the declared range (permissionDenied=0, unknown=1): {(int)err}");
+            }
+            else if (string.IsNullOrWhiteSpace(typed.Message))
+            {
+                Fail("WeatherService.attribution error category",
+                     "SwiftException<WeatherError> carried an empty message");
             }
             else
             {
-                // Timed out waiting — callback hasn't fired yet; acceptable for simulator.
-                Log("GetAttributionAsync timed out waiting for callback — async bridge dispatched");
-                Pass("WeatherService.GetAttributionAsync dispatch");
+                Log($"attribution reported typed WeatherError.{err} — {typed.Message}");
+                Pass($"WeatherService.attribution reports typed WeatherError.{err}");
             }
         }
-        catch (AggregateException aex) when (aex.InnerException is Exception inner)
+        catch (SwiftException sex) when (IsNoNetwork(sex.Message))
         {
-            // A Swift-thrown error (e.g. no API key) means the bridge completed the round-trip.
-            Log($"GetAttributionAsync raised expected error: {inner.Message}");
-            Pass("WeatherService.GetAttributionAsync dispatch (error expected)");
+            // (c) The one named environment condition. Narrow: URL-loading offline codes only.
+            Skip("WeatherService.attribution",
+                 $"simulator has no network reachability (NSURLErrorDomain offline signature): {sex.Message}");
         }
         catch (Exception ex)
         {
-            Fail("WeatherService.GetAttributionAsync dispatch", ex.Message);
+            Fail("WeatherService.attribution", $"{ex.GetType().Name}: {ex.Message}");
         }
 
         // Test 27 (Skip): WeatherService.WeatherAsync(CLLocation) — the real weather fetch.
@@ -441,6 +514,18 @@ internal static class Tests
             Log($"TEST FAILED: {failed} failures", prefixed: false);
         return failed;
     }
+
+    /// <summary>
+    /// True only for the URL-loading system's offline/unreachable error codes. Deliberately narrow:
+    /// this is the single environment condition allowed to convert a WeatherKit network call into a
+    /// named skip. Anything else (auth, entitlement, decode, bridge) must fail the test.
+    /// </summary>
+    private static bool IsNoNetwork(string message) =>
+        message.Contains("-1009", StringComparison.Ordinal)          // NSURLErrorNotConnectedToInternet
+        || message.Contains("-1005", StringComparison.Ordinal)       // NSURLErrorNetworkConnectionLost
+        || message.Contains("-1004", StringComparison.Ordinal)       // NSURLErrorCannotConnectToHost
+        || message.Contains("The Internet connection appears to be offline", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("A data connection is not currently allowed", StringComparison.OrdinalIgnoreCase);
 
     internal static void Log(string msg, bool prefixed = true) =>
         Console.WriteLine(prefixed ? $"[WEATHERKIT-TEST] {msg}" : msg);

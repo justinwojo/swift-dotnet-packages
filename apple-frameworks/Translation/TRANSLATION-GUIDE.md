@@ -2,7 +2,7 @@
 
 `SwiftBindings.Apple.Translation` exposes Apple's [Translation](https://developer.apple.com/documentation/translation) framework to C# through .NET 10's native Swift interop — direct Swift calls, not Objective-C proxy wrappers. The framework does on-device, privacy-preserving text translation and language-availability queries. This guide maps the Swift workflow to the generated C# surface.
 
-The API is small. The one wrinkle to understand up front: in Swift, a `TranslationSession` is normally vended *for you* by SwiftUI's `.translationTask` modifier — you don't construct it directly in typical app code. The binding still exposes the session type and its `Translate`/`Translations` methods, plus the request/response value types and the availability/error helpers, so this guide covers what you can drive from C#.
+The API is small. The one wrinkle to understand up front: in Swift, a `TranslationSession` is usually vended *for you* by SwiftUI's `.translationTask` modifier. That is not the only route — iOS 26 / macOS 26 added `TranslationSession(installedSource:target:)` for already-installed languages, and the binding emits it as a public constructor — but on this binding that constructor needs a `Swift.Foundation.Locale.Language` value, which the supplement cannot yet build from a language identifier (see [Constructing a session directly](#constructing-a-session-directly)). The binding exposes the session type and its `Translate`/`Translations` methods, plus the request/response value types and the availability/error helpers, so this guide covers what you can drive from C#.
 
 ## Contents
 
@@ -11,6 +11,7 @@ The API is small. The one wrinkle to understand up front: in Swift, a `Translati
 - [Quick start](#quick-start)
 - [Building requests and reading responses](#building-requests-and-reading-responses)
 - [Translating with a session](#translating-with-a-session)
+  - [Constructing a session directly](#constructing-a-session-directly)
 - [Batch translation](#batch-translation)
 - [Language availability](#language-availability)
 - [Configuration](#configuration)
@@ -67,7 +68,7 @@ var tagged = new TranslationSession.Request("Bonjour", clientIdentifier: "msg-42
 Console.WriteLine(tagged.ClientIdentifier);   // "msg-42"
 ```
 
-To actually run a translation you need a live `TranslationSession`, which Apple's design hands you via the SwiftUI `.translationTask` modifier — see [Translating with a session](#translating-with-a-session).
+To actually run a translation you need a live `TranslationSession` — either the one SwiftUI's `.translationTask` modifier hands you, or one built with the iOS 26 / macOS 26 installed-language constructor. See [Translating with a session](#translating-with-a-session).
 
 ## Building requests and reading responses
 
@@ -107,7 +108,7 @@ public Response(
 
 ## Translating with a session
 
-A `TranslationSession` performs the work. In Apple's intended design you obtain it from SwiftUI's `.translationTask` modifier rather than constructing it; the binding does emit a constructor, but a session is only functional once the system has wired it to a translation context.
+A `TranslationSession` performs the work. It reaches C# two ways: from SwiftUI's `.translationTask` modifier (Apple's original design, and the only route before iOS 26), or from the constructor described in [Constructing a session directly](#constructing-a-session-directly).
 
 The session exposes these members:
 
@@ -132,6 +133,23 @@ if (!await session.GetIsReadyAsync())
 ```
 
 `TranslateAsync` is `throws` in Swift — failures surface as a `Swift.Runtime.SwiftException` (see [Errors](#errors)).
+
+### Constructing a session directly
+
+iOS 26 / macOS 26 added a public initializer for a session over languages that are **already installed** on the device, and the generator emits it:
+
+```csharp
+[SupportedOSPlatform("ios26.0")]
+[SupportedOSPlatform("macos26.0")]
+public TranslationSession(Swift.Foundation.Locale.Language source,
+                          Swift.Foundation.Locale.Language? target);
+```
+
+It projects Swift's `init(installedSource:target:)` — a non-throwing initializer; `target: null` asks the system to pick the target. It does not require SwiftUI, and it does not drive the model-download flow: if the language pair is not installed, the session will not become ready, so check `GetIsReadyAsync()` / `LanguageAvailability` first.
+
+One practical constraint on this binding today: both parameters are `Swift.Foundation.Locale.Language`, and the Apple supplement does not currently emit an identifier-based constructor or identifier accessor for that type. The only `Locale.Language` values a C# consumer can obtain come back from `LanguageAvailability.GetSupportedLanguagesAsync()`, and they cannot be inspected to tell which language each one is — so selecting a specific pair such as en → es is not expressible yet. Until the supplement grows that surface, the SwiftUI `.translationTask` route remains the practical way to get a working session.
+
+This package's test app exercises the request/response value types, `LanguageAvailability`, the configuration type and the error surface; it does not run a live translation, so nothing here asserts that a directly-constructed session translates.
 
 ## Batch translation
 
@@ -287,7 +305,7 @@ using var request = new TranslationSession.Request("Hello");
 
 - **Cold async sequences.** `BatchResponse` (and its `AsyncIterator`) start the underlying Swift `AsyncSequence` when you begin enumerating. Don't enumerate the same `BatchResponse` twice.
 - **Cancellation.** Pass a `CancellationToken` to any `*Async` call, or call `session.Cancel()` to stop in-flight work.
-- **Session lifetime.** A `TranslationSession` is only useful while the system context that produced it (the SwiftUI `.translationTask`) is alive.
+- **Session lifetime.** A SwiftUI-vended `TranslationSession` is only useful while the `.translationTask` context that produced it is alive. A session you constructed yourself is owned by you — dispose it when you are done.
 
 ## Reference links
 

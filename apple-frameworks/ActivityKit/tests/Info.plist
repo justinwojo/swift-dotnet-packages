@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Required for ActivityKit: without NSSupportsLiveActivities the system reports
+         ActivityAuthorizationInfo.areActivitiesEnabled == false and Activity.request always fails,
+         so the Live Activity lifecycle tests could never run. -->
+    <key>NSSupportsLiveActivities</key>
+    <true/>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIStatusBarStyle</key>

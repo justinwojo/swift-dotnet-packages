@@ -8,9 +8,87 @@ namespace SwiftBindings.StoreKit2.Tests;
 
 internal static class Tests
 {
-    public static int Run()
+    /// <summary>
+    /// The bundle identifier this test app is built with (the csproj's <c>ApplicationId</c>). Used
+    /// only as the comparison identity when the host bundle reports none; the running app's own
+    /// <c>NSBundle.mainBundle</c> is preferred so the check follows the binary rather than a string.
+    /// </summary>
+    private const string ExpectedApplicationId = "com.swiftbindings.storekit2.tests";
+
+    /// <summary>
+    /// Awaits <paramref name="task"/> with a hard upper bound; false means the bound elapsed first
+    /// and the caller must fail. Real await (never Wait()/GetAwaiter().GetResult()) so a main-thread
+    /// affine continuation can run instead of deadlocking against a blocked runner.
+    /// </summary>
+    internal static async Task<bool> CompletesWithin(Task task, TimeSpan budget)
+    {
+        var timeout = Task.Delay(budget);
+        var winner = await Task.WhenAny(task, timeout).ConfigureAwait(true);
+        if (!ReferenceEquals(winner, task))
+            return false;
+        await task.ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    /// Bounded await that yields the result; throws <see cref="TimeoutException"/> on the bound so a
+    /// hung async bridge fails the test instead of being reported as a pass.
+    /// </summary>
+    internal static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan budget, string what)
+    {
+        var timeout = Task.Delay(budget);
+        var winner = await Task.WhenAny(task, timeout).ConfigureAwait(true);
+        if (!ReferenceEquals(winner, task))
+            throw new TimeoutException($"{what} did not complete within {budget.TotalSeconds:0.#}s");
+        return await task.ConfigureAwait(true);
+    }
+
+    internal sealed class ManagedUnwindTimeoutException(string message) : TimeoutException(message);
+
+    // A completed managed task is not evidence that StoreKit or the native Swift task exited.
+    internal static async Task<T> WithCancellationTimeout<T>(
+        Func<CancellationToken, Task<T>> start, TimeSpan budget, TimeSpan unwindBudget, string what)
+        where T : IDisposable
+    {
+        using var cts = new CancellationTokenSource();
+        var task = start(cts.Token);
+        if (ReferenceEquals(await Task.WhenAny(task, Task.Delay(budget)).ConfigureAwait(true), task))
+            return await task.ConfigureAwait(true);
+
+        // Observe faults and dispose a result that races the deadline, even if managed unwind
+        // exceeds its second bound. This observer owns any successful result after the timeout.
+        async Task<string> ObserveLateResult()
+        {
+            try
+            {
+                using var lateResult = await task.ConfigureAwait(false);
+                return "completed successfully; late result disposed";
+            }
+            catch (OperationCanceledException) { return "cancellation observed"; }
+            catch (Exception ex) { return $"fault observed: {ex.GetType().Name}: {ex.Message}"; }
+        }
+
+        var observation = ObserveLateResult();
+        cts.Cancel();
+        if (!await CompletesWithin(observation, unwindBudget).ConfigureAwait(true))
+            throw new ManagedUnwindTimeoutException(
+                $"{what} exceeded {budget.TotalSeconds:0.#}s and its managed task did not unwind " +
+                $"within {unwindBudget.TotalSeconds:0.#}s after cancellation; stopping later tests");
+        throw new TimeoutException(
+            $"{what} exceeded {budget.TotalSeconds:0.#}s; managed task {await observation.ConfigureAwait(true)}. " +
+            "Native completion/cleanup is not established by managed unwind.");
+    }
+
+    public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
+
+        int CompleteRun()
+        {
+            Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
+            Log(failed == 0 ? "TEST SUCCESS" : $"TEST FAILED: {failed} failures", prefixed: false);
+            return failed;
+        }
 
         void Pass(string name)
         {
@@ -42,6 +120,8 @@ internal static class Tests
             }
             catch (Exception ex) { Fail($"{name} metadata", ex.Message); }
         }
+
+        await TimeoutTests.RunAsync(Pass, Fail);
 
         // Test 1: AppStore.CanMakePayments
         try
@@ -419,32 +499,259 @@ internal static class Tests
         }
 #endif
 
-        // Test 26: Storefront.GetCurrentAsync dispatch (expect framework response = pass)
+        // Test 26: Storefront.current — REAL bounded await with a semantic assertion.
+        // The previous version constructed the Task and never awaited it, so it passed even when the
+        // async bridge never completed. `Storefront.current` is `async -> Storefront?` (non-throwing),
+        // so exactly two outcomes are documented:
+        //   (a) a Storefront — its countryCode must be an ISO-3166 alpha-3 code (three uppercase
+        //       letters, e.g. "USA") and its id must be non-empty;
+        //   (b) nil — a NAMED environment condition (no App Store storefront configured for this
+        //       simulator), recorded as a skip, never as a feature pass.
+        // Timing out is a failure.
         try
         {
-            var task = Storefront.GetCurrentAsync();
-            if (task is null)
-                throw new InvalidOperationException("GetCurrentAsync returned null Task");
-            Log($"Storefront.GetCurrentAsync returned Task status = {task.Status}");
-            Pass("Storefront.GetCurrentAsync dispatch");
+            var storefront = await WithTimeout(
+                Storefront.GetCurrentAsync(),
+                TimeSpan.FromSeconds(30),
+                "Storefront.current").ConfigureAwait(true);
+
+            if (storefront is null)
+            {
+                Skip("Storefront.current",
+                     "environment: Storefront.current == nil (no App Store storefront configured for this simulator)");
+            }
+            else
+            {
+                var country = storefront.CountryCode;
+                var id = storefront.Id;
+                Log($"Storefront.current: countryCode='{country}', id='{id}'");
+                if (country is null || country.Length != 3 || !country.All(c => c >= 'A' && c <= 'Z'))
+                    throw new InvalidOperationException(
+                        $"countryCode must be an ISO-3166 alpha-3 uppercase code; got '{country ?? "(null)"}'");
+                if (string.IsNullOrWhiteSpace(id))
+                    throw new InvalidOperationException("Storefront.id was empty");
+                Pass("Storefront.current returns a well-formed storefront");
+            }
         }
         catch (Exception ex)
         {
-            Fail("Storefront.GetCurrentAsync dispatch", ex.Message);
+            Fail("Storefront.current", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // Test 27: AppTransaction.GetSharedAsync dispatch (expect framework response = pass)
+        // Test 27: AppTransaction.shared — REAL bounded await with a semantic assertion.
+        // `AppTransaction.shared` is `async throws -> VerificationResult<AppTransaction>`. Documented
+        // outcomes:
+        //   (a) a VerificationResult that projects an AppTransaction — its bundleID must be non-empty
+        //       and match this test app, and its verification arm must be one of verified/unverified;
+        //   (b) a typed StoreKitError — the framework's own error category for an app with no App
+        //       Store receipt. The typed payload must carry a declared CaseTag.
+        // Anything else (including an untyped Swift error, or a timeout) fails: the point of this
+        // test is to detect an async bridge that never completes or completes with a phantom value.
         try
         {
-            var task = AppTransaction.GetSharedAsync();
-            if (task is null)
-                throw new InvalidOperationException("GetSharedAsync returned null Task");
-            Log($"AppTransaction.GetSharedAsync returned Task status = {task.Status}");
-            Pass("AppTransaction.GetSharedAsync dispatch");
+            // 120s: AppTransaction.shared can go out to the App Store for the app receipt, so the
+            // bound is wide enough for a real fetch while still failing an async bridge that never
+            // completes at all.
+            using var shared = await WithCancellationTimeout(
+                token => AppTransaction.GetSharedAsync(token),
+                TimeSpan.FromSeconds(120),
+                TimeSpan.FromSeconds(30),
+                "AppTransaction.shared").ConfigureAwait(true);
+
+            if (shared is null)
+                throw new InvalidOperationException("AppTransaction.shared returned a null VerificationResult");
+
+            AppTransaction? projected;
+            string arm;
+            if (shared.TryGetVerified(out var verified))
+            {
+                projected = verified;
+                arm = "verified";
+            }
+            else if (shared.TryGetUnverified(out var unverified, out var verificationError))
+            {
+                projected = unverified;
+                arm = $"unverified({verificationError?.ToString() ?? "(null error)"})";
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "VerificationResult<AppTransaction> projected neither the verified nor the unverified arm");
+            }
+
+            if (projected is null)
+                throw new InvalidOperationException($"VerificationResult arm '{arm}' projected a null AppTransaction");
+            var bundleId = projected.BundleID;
+            // The identity to compare against comes from the running host, not from a string the
+            // test happens to know: a projection that reads a wrong-but-plausible bundle ID (another
+            // app's, a stale one, a mis-sized string field) has to fail here, and "non-empty" cannot
+            // tell those apart from the right answer.
+            var expectedBundleId = Foundation.NSBundle.MainBundle.BundleIdentifier;
+            if (string.IsNullOrWhiteSpace(expectedBundleId))
+                expectedBundleId = ExpectedApplicationId;
+            Log($"AppTransaction.shared: arm={arm}, bundleID='{bundleId}', host bundle='{expectedBundleId}', environment={projected.Environment}");
+            if (string.IsNullOrWhiteSpace(bundleId))
+                throw new InvalidOperationException("AppTransaction.bundleID was empty");
+            if (!string.Equals(bundleId, expectedBundleId, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"AppTransaction.bundleID was '{bundleId}' but the running app is '{expectedBundleId}' — " +
+                    "the projected AppTransaction does not describe this app");
+            Pass($"AppTransaction.shared projects this app's AppTransaction ({arm}, bundleID matches host)");
+        }
+        catch (ManagedUnwindTimeoutException ex)
+        {
+            Fail("AppTransaction.shared", ex.Message);
+            return CompleteRun();
+        }
+        catch (SwiftException<StoreKitError> typed)
+        {
+            var err = typed.Error;
+            if (err is null)
+            {
+                Fail("AppTransaction.shared error category",
+                     $"SwiftException<StoreKitError> carried no typed payload (message: {typed.Message})");
+            }
+            else
+            {
+                var tag = err.Tag;
+                if (!Enum.IsDefined(typeof(StoreKitError.CaseTag), tag))
+                {
+                    Fail("AppTransaction.shared error category",
+                         $"typed StoreKitError carried an undeclared CaseTag ({(uint)tag})");
+                }
+                else
+                {
+                    Log($"AppTransaction.shared reported typed StoreKitError.{tag} — {typed.Message}");
+                    Pass($"AppTransaction.shared reports typed StoreKitError.{tag}");
+                }
+            }
         }
         catch (Exception ex)
         {
-            Fail("AppTransaction.GetSharedAsync dispatch", ex.Message);
+            Fail("AppTransaction.shared", $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        // Test 27b: Transaction.currentEntitlements / Transaction.all are FINITE async sequences that
+        // terminate on their own for an app with no purchases. This exercises the generated
+        // IAsyncEnumerable adapter end-to-end — MakeAsyncIterator() + NextAsync() until nil — and
+        // asserts the sequence actually completes (bounded) AND yields zero elements. A non-empty
+        // result here would mean the marshaller materialized transactions StoreKit never returned,
+        // so we fail closed on it; a sequence that never terminates fails on the time bound.
+        foreach (var (seqName, seq) in new (string, Transaction.Transactions)[]
+                 {
+                     ("Transaction.currentEntitlements", Transaction.CurrentEntitlements),
+                     ("Transaction.all", Transaction.All),
+                 })
+        {
+            try
+            {
+                int count = 0;
+                bool observedCancellation = false;
+                // The deadline below has to stop the ENUMERATION, not just this test's wait on it.
+                // The token flows through WithCancellation into the generated
+                // GetAsyncEnumerator(CancellationToken) → NextAsync(CancellationToken), which routes
+                // to SBW_CancelTask and immediately cancels the managed task. Awaiting the
+                // drain proves managed unwind only; native completion/cleanup remains unproven.
+                using var drainCts = new CancellationTokenSource();
+                var drain = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await foreach (var vr in seq.WithCancellation(drainCts.Token).ConfigureAwait(false))
+                        {
+                            count++;
+                            vr?.Dispose();
+                            if (count > 64) break; // guard: never spin forever on a mis-marshalled sequence
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        observedCancellation = true;
+                    }
+                });
+                // 120s, not 30s: these sequences are backed by the App Store daemon and their first
+                // element can wait on a receipt fetch. The bound still has to exist — a sequence that
+                // never terminates is the defect this test is here to catch — but it has to be wide
+                // enough that a slow-but-finite fetch is not reported as a hang.
+                var budget = TimeSpan.FromSeconds(120);
+                var started = DateTime.UtcNow;
+                if (!await CompletesWithin(drain, budget).ConfigureAwait(true))
+                {
+                    // Request native cancellation and bound managed enumeration unwind.
+                    // Stop the suite if the managed loop remains pending.
+                    drainCts.Cancel();
+                    var unwound = await CompletesWithin(drain, TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+                    if (!unwound)
+                        throw new ManagedUnwindTimeoutException(
+                            $"{seqName} exceeded its deadline and its managed enumeration did not unwind " +
+                            "within 30s after cancellation; stopping later tests");
+                    throw new TimeoutException(
+                        $"{seqName} did not terminate within {budget.TotalSeconds:0}s (finite sequence expected); "
+                        + $"{count} element(s) had been yielded when the bound expired; "
+                        + $"managed enumeration unwound (OperationCanceledException observed: {observedCancellation}); "
+                        + "native completion/cleanup is not established");
+                }
+
+                if (observedCancellation)
+                    throw new InvalidOperationException($"{seqName} canceled before the deadline instead of completing naturally");
+                Log($"{seqName} terminated after {count} element(s) in {(DateTime.UtcNow - started).TotalSeconds:0.0}s");
+                if (count != 0)
+                    throw new InvalidOperationException(
+                        $"{seqName} yielded {count} element(s) for an app with no purchases — " +
+                        "the marshaller materialized transactions StoreKit never returned");
+                Pass($"{seqName} enumerates to completion (empty)");
+            }
+            catch (ManagedUnwindTimeoutException ex)
+            {
+                Fail($"{seqName} managed unwind", ex.Message);
+                return CompleteRun();
+            }
+            catch (Exception ex)
+            {
+                Fail($"{seqName} enumerates to completion (empty)", $"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        // Test 27c: Transaction.updates is an UNBOUNDED listener — it never terminates on its own.
+        // Cancellation must unwind the managed await foreach promptly. Generated NextAsync routes
+        // the request to SBW_CancelTask then immediately cancels its managed task; this check
+        // does not establish that the native Swift task completed or released its resources.
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            bool observedCancellation = false;
+            var listen = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var vr in Transaction.Updates.WithCancellation(cts.Token).ConfigureAwait(false))
+                        vr?.Dispose();
+                }
+                catch (OperationCanceledException)
+                {
+                    observedCancellation = true;
+                }
+            });
+
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
+            if (!await CompletesWithin(listen, TimeSpan.FromSeconds(30)).ConfigureAwait(true))
+                throw new ManagedUnwindTimeoutException(
+                    "Transaction.updates managed enumeration did not unwind within the 30s observation window; stopping later tests");
+
+            if (!observedCancellation)
+                throw new InvalidOperationException(
+                    "cancelling Transaction.updates ended the loop without surfacing OperationCanceledException");
+            Log("Transaction.updates managed enumeration unwound on cancellation (OperationCanceledException observed); native completion/cleanup unproven");
+            Pass("Transaction.updates honours cancellation");
+        }
+        catch (ManagedUnwindTimeoutException ex)
+        {
+            Fail("Transaction.updates managed unwind", ex.Message);
+            return CompleteRun();
+        }
+        catch (Exception ex)
+        {
+            Fail("Transaction.updates honours cancellation", $"{ex.GetType().Name}: {ex.Message}");
         }
 
         // Test 28: Transaction.RevocationReasonInfo singletons (raw-value type, not CaseTag)
@@ -527,8 +834,10 @@ internal static class Tests
         // never returned, so we fail closed on it.
         try
         {
-            var products = Product.ProductsAsync(new[] { "com.swiftbindings.storekit2.tests.nonexistent" })
-                .GetAwaiter().GetResult();
+            var products = await WithTimeout(
+                Product.ProductsAsync(new[] { "com.swiftbindings.storekit2.tests.nonexistent" }),
+                TimeSpan.FromSeconds(30),
+                "Product.products(for:)").ConfigureAwait(true);
             if (products is null)
                 throw new InvalidOperationException("ProductsAsync returned a null list");
             Log($"Product.ProductsAsync returned {products.Count} product(s) for unknown IDs (0 expected without a .storekit config)");
@@ -543,13 +852,7 @@ internal static class Tests
             Fail("Product.ProductsAsync awaited (empty-list result)", ex.Message);
         }
 
-        // Summary
-        Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
-        if (failed == 0)
-            Log("TEST SUCCESS", prefixed: false);
-        else
-            Log($"TEST FAILED: {failed} failures", prefixed: false);
-        return failed;
+        return CompleteRun();
     }
 
     internal static void Log(string msg, bool prefixed = true) =>
