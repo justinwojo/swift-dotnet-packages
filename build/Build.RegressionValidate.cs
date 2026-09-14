@@ -1256,7 +1256,7 @@ partial class Build
                 // the built bundle's shape before install and the app's own
                 // runtime banner after the run, so this cell cannot report a
                 // green for a bundle the Mono lane produced.
-                var result = RunDeviceLane(cell.Library, testDir, mono: false, deviceUdid, sink);
+                var result = RunDeviceLane(cell.Library, mono: false, deviceUdid, sink);
                 return ToOutcome(cell, result, sw.Elapsed);
             }
             case CellPlatform.IosDeviceMonoAot:
@@ -1264,7 +1264,7 @@ partial class Build
                 // Mono full-AOT — the .NET-for-iOS DEFAULT for a device, and
                 // the runtime most consumers actually ship. Same suite, same
                 // device slice, different managed build.
-                var result = RunDeviceLane(cell.Library, testDir, mono: true, deviceUdid, sink);
+                var result = RunDeviceLane(cell.Library, mono: true, deviceUdid, sink);
                 return ToOutcome(cell, result, sw.Elapsed);
             }
             case CellPlatform.MacOs:

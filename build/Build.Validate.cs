@@ -233,12 +233,13 @@ partial class Build
     /// Auto-detects the device UDID if <paramref name="deviceUdid"/> is null/empty.
     /// </summary>
     TestRunResult ValidateDeviceFor(string library, int timeoutSeconds, string? deviceUdid, bool aot, string rid,
-        Action<string>? onLine = null)
+        Action<string>? onLine = null, TestAppDescriptor? resolvedApp = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
-        var (testDir, appName, bundleId) = ResolveTestNames(library);
+        var app = resolvedApp ?? ResolveTestApp(library, forDevice: true);
+        var (testDir, appName, bundleId) = (app.TestDir, app.AppName, app.BundleId);
 
         var config = aot ? "Release" : "Debug";
         var appPath = ResolveAppPath(testDir, config, "ios", rid, appName);
@@ -260,6 +261,8 @@ partial class Build
                     "Available devices: xcrun devicectl list devices");
             Info($"Auto-detected device: {udid}");
         }
+
+        VerifyActivityKitPushCapability(app, appPath, udid, onLine);
 
         var dev = new DevicectlClient(udid);
         dev.InstallApp(appPath);
@@ -311,21 +314,8 @@ partial class Build
     /// </summary>
     (AbsolutePath TestDir, string AppName, string BundleId) ResolveTestNames(string library)
     {
-        var (kind, libDir) = ResolveLibrary(library);
-        var testDir = libDir / "tests";
-        if (!Directory.Exists(testDir))
-            throw new InvalidOperationException(
-                $"Test directory not found for '{library}'. Expected: {testDir}");
-
-        // apple-frameworks/<Lib> ships as `SwiftBindings.Apple.<Lib>` so the
-        // test csproj is `SwiftBindings.Apple.<Lib>.Tests.csproj` and its
-        // produced `.app` bundle carries the same name. Third-party libs
-        // under libraries/<Lib> stay on the unprefixed convention.
-        var appName = kind == LibraryKind.AppleFramework
-            ? $"SwiftBindings.Apple.{library}.Tests"
-            : $"SwiftBindings.{library}.Tests";
-        var bundleId = $"com.swiftbindings.{library.ToLowerInvariant()}.tests";
-        return (testDir, appName, bundleId);
+        var app = ResolveTestApp(library, forDevice: false);
+        return (app.TestDir, app.AppName, app.BundleId);
     }
 
     static int CountCrashLogs(string crashDir, string appName)

@@ -52,6 +52,7 @@
         "Restore",
         "RunCiSimTest",
         "ShutdownSim",
+        "TestActivityKitCapability",
         "TestAppleVersionSplit",
         "TestCsprojRewriter",
         "TestHarness",
@@ -142,6 +143,10 @@
   "allOf": [
     {
       "properties": {
+        "ActivityKitProvisioningProfile": {
+          "type": "string",
+          "description": "Explicit APNs-capable provisioning profile for the ActivityKit physical-device push-token app"
+        },
         "All": {
           "type": "boolean",
           "description": "ListChangedLibraries: every library. ReleaseWave: every already-published library"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- A live-activity push token is an APNs credential. The harness also
+         verifies this key in the FINAL signed app and embedded profile before
+         install; this source declaration alone is not accepted as evidence. -->
+    <key>aps-environment</key>
+    <string>development</string>
+</dict>
+</plist>

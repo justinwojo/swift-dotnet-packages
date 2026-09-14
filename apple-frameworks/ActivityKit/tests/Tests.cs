@@ -488,7 +488,7 @@ internal static class Tests
             LiveActivity? activity = null;
             try
             {
-                activity = LiveActivity.Request("delivery");
+                activity = LiveActivity.Request("delivery", usePushToken: false);
                 if (!activity.IsActive)
                     throw new InvalidOperationException("request returned a handle that is not active");
                 if (!activity.End(immediate: true))
@@ -510,21 +510,22 @@ internal static class Tests
             }
         }
 
-        // Test 27: push-token observation registers on a live handle, a second registration REPLACES
+        // Test 27: observation registers on a live handle, a second registration REPLACES
         // the first without crashing (the Swift side must cancel the prior observer task and release
         // its managed context rather than leave the old GCHandle rooted for a still-running task),
-        // and observation on a dead handle returns false. No APNs capability is needed — no token
-        // ever arrives on the simulator; this pins the register/replace/release path.
+        // and observation on a dead handle returns false. This simulator arm deliberately uses a
+        // NON-PUSH request: APNs push-token requests are capability-qualified physical-device work,
+        // covered by the separate tests-device app. Simulator proves ownership only.
         if (!liveActivitiesReady)
         {
-            Skip("LiveActivity push-token observer register/replace/release", lifecycleSkipReason);
+            Skip("LiveActivity non-push observer register/replace/release", lifecycleSkipReason);
         }
         else
         {
             LiveActivity? activity = null;
             try
             {
-                activity = LiveActivity.Request("delivery", usePushToken: true);
+                activity = LiveActivity.Request("delivery", usePushToken: false);
                 if (!activity.ObservePushToken(_ => { }))
                     throw new InvalidOperationException("first observe returned false on a live handle");
                 if (!activity.ObservePushToken(_ => { }))
@@ -534,11 +535,11 @@ internal static class Tests
                 if (activity.ObservePushToken(_ => { }))
                     throw new InvalidOperationException("observe on a dead handle returned true");
                 activity = null;
-                Pass("LiveActivity push-token observer register/replace/release");
+                Pass("LiveActivity non-push observer register/replace/release");
             }
             catch (Exception ex)
             {
-                RequestFailure("LiveActivity push-token observer register/replace/release", ex);
+                RequestFailure("LiveActivity non-push observer register/replace/release", ex);
             }
             finally
             {

@@ -49,8 +49,7 @@ partial class Build
         .Requires(() => Library)
         .Executes(() =>
         {
-            var (testDir, _, _) = ResolveTestNames(Library!);
-            var result = RunDeviceLane(Library!, testDir, MonoAot, DeviceUdid, line => Log.Information("{Line}", line));
+            var result = RunDeviceLane(Library!, MonoAot, DeviceUdid, line => Log.Information("{Line}", line));
             ReportTerminalStatus(result, Library!);
         });
 
@@ -116,11 +115,15 @@ partial class Build
     /// the app's own runtime banner after the run.
     /// </summary>
     TestRunResult RunDeviceLane(
-        string library, AbsolutePath testDir, bool mono, string? deviceUdid, Action<string> sink)
+        string library, bool mono, string? deviceUdid, Action<string> sink)
     {
         var laneLabel = $"{library}/{(mono ? "ios-device-monoaot" : "ios-device")}";
+        var app = ResolveTestApp(library, forDevice: true);
+        var testDir = app.TestDir;
         var laneProps = EnsureDeviceLaneProps();
-        var extraArgs = new[] { $"-p:SwiftBindingsLaneProps={laneProps}" };
+        var extraArgs = new[] { $"-p:SwiftBindingsLaneProps={laneProps}" }
+            .Concat(ActivityKitCodesignArguments(app))
+            .ToArray();
 
         // Both device paths do their own restore: a multi-RID assets.json can't
         // be produced cleanly in .NET 10 (NETSDK1083), so the device build's
@@ -132,12 +135,12 @@ partial class Build
         else
             BuildTestAppNativeAot(library, testDir, onLine: sink, noRestore: false, extraArgs: extraArgs);
 
-        var (_, appName, _) = ResolveTestNames(library);
+        var appName = app.AppName;
         var rid = ResolveRid("ios-arm64");
         var appPath = ResolveAppPath(testDir, mono ? "Debug" : "Release", "ios", rid, appName);
         AssertDeviceAppFlavor(appPath, expectMono: mono, laneLabel);
 
-        var result = ValidateDeviceFor(library, Timeout, deviceUdid, aot: !mono, rid, onLine: sink);
+        var result = ValidateDeviceFor(library, Timeout, deviceUdid, aot: !mono, rid, onLine: sink, resolvedApp: app);
 
         // Only a run that got far enough to be judged is worth judging: a crash
         // or timeout is reported as itself, not as missing evidence.

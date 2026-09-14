@@ -28,12 +28,13 @@ partial class Build
         .Executes(() =>
         {
             var library = Library!;
-            var (testDir, _, _) = ResolveTestNames(library);
-
             var platform = EffectivePlatform;
             var device = !string.IsNullOrEmpty(RuntimeIdentifier) && RuntimeIdentifier == "ios-arm64"
                 || Device;
             var aot = Aot;
+            var app = ResolveTestApp(library, forDevice: device);
+            var testDir = app.TestDir;
+            var codesignArgs = ActivityKitCodesignArguments(app);
 
             if (platform != "ios" && device)
                 throw new InvalidOperationException("--device is only supported for --platform ios");
@@ -43,11 +44,11 @@ partial class Build
 
             if (device && aot)
             {
-                BuildTestAppNativeAot(library, testDir);
+                BuildTestAppNativeAot(library, testDir, extraArgs: codesignArgs);
             }
             else if (device)
             {
-                BuildTestAppDevice(library, testDir);
+                BuildTestAppDevice(library, testDir, extraArgs: codesignArgs);
             }
             else
             {

@@ -63,6 +63,9 @@ partial class Build : NukeBuild
     [Parameter("Use NativeAOT publish for the test app (requires --device + codesign env vars)")]
     readonly bool Aot;
 
+    [Parameter("Explicit APNs-capable provisioning profile for the ActivityKit physical-device push-token app")]
+    readonly string? ActivityKitProvisioningProfile;
+
     [Parameter("Reuse already-booted simulator (CI)")]
     readonly bool ReuseSim;
 
