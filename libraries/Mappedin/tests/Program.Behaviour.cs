@@ -5,6 +5,9 @@ using CoreGraphics;
 using Foundation;
 using UIKit;
 using Mappedin;
+using Swift.Runtime;
+using SwiftBuilderSlot = Swift.SwiftInOut<Swift.SwiftDictionary<Swift.SwiftString, Swift.Runtime.ExistentialContainer0>>;
+using SwiftString = Swift.SwiftString;
 
 namespace MappedinSimTests;
 
@@ -187,27 +190,35 @@ public partial class MainViewController
         }
     }
 
-    // The builder hands a dictionary to managed code, expects it to be mutated in
-    // place, and returns the result. Today the trampoline retrieves a different
-    // delegate type and there is no inout writeback, so this both aborts and — if the
-    // cast were fixed — would drop the mutation.
+    // The builder hands a Swift dictionary slot to managed code, expects the slot's
+    // final value to be written back, and returns that value. Mutating a projected
+    // Dictionary<string, object> would lose Swift's inout semantics, so this uses the
+    // generated SwiftInOut carrier and its raw Swift dictionary element types.
     private void BuilderMutationSurvives(TestLogger logger, TestResults results)
     {
         try
         {
             int blockCalls = 0;
-            // The builder parameter is emitted as `object?` (an SB0005 "closure shape not
-            // bridgeable" tombstone), so a bare lambda has no inferable delegate type.
-            // Declaring the delegate explicitly keeps the call site compiling and lets the
-            // test observe what the binding actually does when the builder is invoked.
-            Action<Dictionary<string, object>> builder = dict =>
+            int seededCount = -1;
+            int expectedCount = -1;
+            Action<SwiftBuilderSlot> builder = slot =>
             {
                 Interlocked.Increment(ref blockCalls);
-                dict["initialFloorId"] = "floor-under-test";
-                dict["nested"] = new Dictionary<string, object>
-                {
-                    ["camera"] = new Dictionary<string, object> { ["zoomLevel"] = 18.5 },
-                };
+                var dict = slot.Value;
+                seededCount = dict.Count;
+
+                using var floorKey = new SwiftString("initialFloorId");
+                using var zoomKey = new SwiftString("zoomLevel");
+                expectedCount = seededCount
+                    + (dict.ContainsKey(floorKey) ? 0 : 1)
+                    + (dict.ContainsKey(zoomKey) ? 0 : 1);
+                dict[floorKey] = ExistentialContainer0.Box("floor-under-test");
+                dict[zoomKey] = ExistentialContainer0.Box(18.5);
+
+                // Publishing the final carrier through Value is the semantic part of an
+                // inout callback: the generated trampoline closes the slot and writes this
+                // Swift value back into Show3dMapOptions' storage.
+                slot.Value = dict;
             };
             var options = MapView.Builders.Show3dMapOptions(builder);
 
@@ -225,22 +236,18 @@ public partial class MainViewController
                 return;
             }
 
-            bool nestedOk = options.TryGetValue("nested", out var nested)
-                && nested is IReadOnlyDictionary<string, object> nestedDict
-                && nestedDict.TryGetValue("camera", out var camera)
-                && camera is IReadOnlyDictionary<string, object> cameraDict
-                && cameraDict.TryGetValue("zoomLevel", out var zoom)
-                && Convert.ToDouble(zoom) == 18.5;
+            bool zoomOk = options.TryGetValue("zoomLevel", out var zoom)
+                && Math.Abs(Convert.ToDouble(zoom) - 18.5) < 1e-9;
 
-            if (nestedOk)
+            if (zoomOk && options.Count == expectedCount)
             {
-                logger.Pass("Show3dMapOptions carried the builder's mutation, including nested JSON, into the returned dictionary");
+                logger.Pass($"Show3dMapOptions wrote the slot's two inserted values back to Swift (seeded={seededCount}, returned={options.Count})");
                 results.Pass("Builder_MutationSurvives");
             }
             else
             {
-                logger.Fail("Show3dMapOptions kept the top-level mutation but lost the nested JSON");
-                results.Fail("Builder_MutationSurvives", "nested mutation lost");
+                logger.Fail($"Show3dMapOptions did not preserve the complete slot writeback (seeded={seededCount}, expected={expectedCount}, returned={options.Count}, zoomOk={zoomOk})");
+                results.Fail("Builder_MutationSurvives", "slot writeback was incomplete");
             }
         }
         catch (Exception ex)

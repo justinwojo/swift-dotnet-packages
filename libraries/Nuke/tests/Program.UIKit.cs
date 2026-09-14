@@ -228,6 +228,24 @@ public class MainViewController : UIViewController
         var logger = new TestLogger();
         var results = new TestResults();
 
+        var identityFilter = Environment.GetEnvironmentVariable("SWIFT_BINDINGS_TEST_IDENTITY");
+        if (!string.IsNullOrWhiteSpace(identityFilter))
+        {
+            logger.Info($"=== Focused identity: {identityFilter} ===");
+            if (identityFilter == "ImageCache_CostCountLimits")
+            {
+                RunImageCacheCostCountLimits(logger, results);
+            }
+            else
+            {
+                logger.Fail($"Unknown focused test identity: {identityFilter}");
+                results.Fail("FocusedIdentity", $"unknown identity '{identityFilter}'");
+            }
+
+            ReportResults(logger, results);
+            return;
+        }
+
         // Phase 1: Smoke tests
         logger.Info("=== Phase 1: Smoke Tests ===");
         RunSmokeTests(logger, results);
@@ -268,7 +286,11 @@ public class MainViewController : UIViewController
         logger.Info("=== Phase 10: Loopback Behaviour Tests ===");
         await RunLoopbackBehaviourTests(logger, results);
 
-        // Summary
+        ReportResults(logger, results);
+    }
+
+    private void ReportResults(TestLogger logger, TestResults results)
+    {
         logger.Info($"=== Results: {results.Passed} passed, {results.Failed} failed, {results.Skipped} skipped ===");
 
         if (results.AllPassed)
@@ -711,35 +733,7 @@ public class MainViewController : UIViewController
 
         // ImageCache property get/set (CostLimit, CountLimit)
         logger.Info("--- ImageCache Properties ---");
-        try
-        {
-            var cache = new ImageCache();
-            var originalCostLimit = cache.CostLimit;
-            var originalCountLimit = cache.CountLimit;
-            logger.Info($"ImageCache defaults: CostLimit={originalCostLimit}, CountLimit={originalCountLimit}");
-
-            cache.CostLimit = 50_000_000; // 50MB
-            cache.CountLimit = 200;
-            var newCostLimit = cache.CostLimit;
-            var newCountLimit = cache.CountLimit;
-            logger.Info($"ImageCache after set: CostLimit={newCostLimit}, CountLimit={newCountLimit}");
-
-            if (newCostLimit == 50_000_000 && newCountLimit == 200)
-            {
-                logger.Pass("ImageCache CostLimit/CountLimit set/get");
-                results.Pass("ImageCache_CostCountLimits");
-            }
-            else
-            {
-                logger.Fail($"ImageCache limits mismatch: CostLimit={newCostLimit} (expected 50000000), CountLimit={newCountLimit} (expected 200)");
-                results.Fail("ImageCache_CostCountLimits", "Set/get mismatch");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.Fail($"ImageCache properties: {ex.Message}");
-            results.Fail("ImageCache_CostCountLimits", ex.Message);
-        }
+        RunImageCacheCostCountLimits(logger, results);
 
         // ImageCache TotalCount and TotalCost
         try
@@ -967,6 +961,48 @@ public class MainViewController : UIViewController
         {
             logger.Fail($"DataCache.SizeLimit: {ex.Message}");
             results.Fail("DataCache_SizeLimit", ex.Message);
+        }
+    }
+
+    private void RunImageCacheCostCountLimits(TestLogger logger, TestResults results)
+    {
+        try
+        {
+            using var cache = new ImageCache();
+            var originalCostLimit = cache.CostLimit;
+            var originalCountLimit = cache.CountLimitNative;
+            logger.Info($"ImageCache defaults: CostLimit={originalCostLimit}, CountLimitNative={originalCountLimit}");
+
+            cache.CostLimit = 50_000_000; // 50MB
+            cache.CountLimitNative = (nint)200;
+            var newCostLimit = cache.CostLimit;
+            var newCountLimit = cache.CountLimitNative;
+            logger.Info($"ImageCache after native-width set: CostLimit={newCostLimit}, CountLimitNative={newCountLimit}");
+
+            // The compatibility alias is intentionally checked too, but only after a
+            // bounded write. Reading the process-wide default through its int projection
+            // may throw by design when the Swift Int value exceeds Int32.MaxValue.
+            cache.CountLimit = 201;
+            var compatibilityCountLimit = cache.CountLimit;
+            var nativeAfterCompatibilityWrite = cache.CountLimitNative;
+            logger.Info($"ImageCache after bounded compatibility set: CountLimit={compatibilityCountLimit}, CountLimitNative={nativeAfterCompatibilityWrite}");
+
+            if (newCostLimit == 50_000_000 && newCountLimit == (nint)200
+                && compatibilityCountLimit == 201 && nativeAfterCompatibilityWrite == (nint)201)
+            {
+                logger.Pass("ImageCache CostLimit and CountLimitNative set/get; bounded CountLimit alias agrees");
+                results.Pass("ImageCache_CostCountLimits");
+            }
+            else
+            {
+                logger.Fail($"ImageCache limits mismatch: CostLimit={newCostLimit} (expected 50000000), CountLimitNative={newCountLimit} (expected 200), bounded alias={compatibilityCountLimit}/{nativeAfterCompatibilityWrite} (expected 201/201)");
+                results.Fail("ImageCache_CostCountLimits", "Set/get mismatch");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Fail($"ImageCache properties: {ex.Message}");
+            results.Fail("ImageCache_CostCountLimits", ex.Message);
         }
     }
 
