@@ -46,7 +46,8 @@ partial class Build
                 $"Error: App not found at {appPath}\nRun BuildTestApp --library {library} first.");
 
         return ValidateSimAt(appPath, appName, bundleId,
-            ResolveRunBudgetSeconds(library, timeoutSeconds), deviceUdid, onLine);
+            ResolveRunBudgetSeconds(library, timeoutSeconds), deviceUdid, onLine,
+            storeKitConfiguration: RequireStoreKitSandboxConfiguration(library, "ios", bundleId));
     }
 
     /// <summary>
@@ -59,7 +60,8 @@ partial class Build
     /// install/launch/crash-log path rather than a parallel copy of it.</para>
     /// </summary>
     TestRunResult ValidateSimAt(AbsolutePath appPath, string appName, string bundleId,
-        int timeoutSeconds, string? deviceUdid, Action<string>? onLine = null)
+        int timeoutSeconds, string? deviceUdid, Action<string>? onLine = null,
+        StoreKitSandboxReadiness.Configuration? storeKitConfiguration = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
         void Err(string line) { if (onLine is null) Log.Error("{Line}", line); else onLine(line); }
@@ -79,14 +81,25 @@ partial class Build
             Info($"Resolved iOS simulator {deviceUdid} (no --device-udid given)");
         }
 
-        var sim = new SimctlClient(deviceUdid);
+        var sim = new SimctlClient(deviceUdid,
+            storeKitConfiguration?.Platform == "tvos" ? SimulatorFamily.TvOs : SimulatorFamily.Ios);
         var crashDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Library", "Logs", "DiagnosticReports");
         var beforeCrashCount = CountCrashLogs(crashDir, appName);
 
+        if (storeKitConfiguration is not null)
+            RunStoreKitSandboxNativeControl(storeKitConfiguration, sim.Device, onLine);
+
         sim.InstallApp(appPath);
         sim.CleanStaleConsoleFifos();
+
+        var managedLaunchArguments = storeKitConfiguration is null
+            ? Array.Empty<string>()
+            : new[]
+            {
+                StoreKitSandboxReadiness.ProductIdArgument, storeKitConfiguration.ProductId,
+            };
 
         var launchBudget = LaunchBudgetSeconds;
         TestRunResult result;
@@ -95,7 +108,7 @@ partial class Build
         {
             Info($"Launching {appName} on {sim.Device} " +
                  $"(launch budget: {launchBudget}s, run budget: {timeoutSeconds}s, attempt {attempt})");
-            var psi = sim.BuildLaunchPsi(bundleId);
+            var psi = sim.BuildLaunchPsi(bundleId, managedLaunchArguments);
             result = StdoutWatcher
                 .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(launchBudget), onLine: Info)
                 .GetAwaiter().GetResult();
@@ -193,7 +206,8 @@ partial class Build
 
         Info($"tvOS simulator: {tv.Name} [{tv.Runtime}] {tv.Udid} (booted={tv.WasBooted})");
         if (tv.WasBooted)
-            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine), null);
+            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
+                RequireStoreKitSandboxConfiguration(library, "tvos", bundleId)), null);
 
         // A tvOS sim we booted ourselves must not outlive this leg. Other lanes
         // install with `simctl install booted`, which becomes ambiguous once a
@@ -204,7 +218,8 @@ partial class Build
         fleet.BootAndWaitForReady(tv.Udid);
         try
         {
-            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine), null);
+            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
+                RequireStoreKitSandboxConfiguration(library, "tvos", bundleId)), null);
         }
         finally
         {
@@ -240,6 +255,7 @@ partial class Build
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var app = resolvedApp ?? ResolveTestApp(library, forDevice: true);
         var (testDir, appName, bundleId) = (app.TestDir, app.AppName, app.BundleId);
+        var storeKitConfiguration = RequireStoreKitSandboxConfiguration(library, "ios", bundleId);
 
         var config = aot ? "Release" : "Debug";
         var appPath = ResolveAppPath(testDir, config, "ios", rid, appName);
@@ -268,13 +284,19 @@ partial class Build
         dev.InstallApp(appPath);
 
         var launchBudget = LaunchBudgetSeconds;
+        var managedLaunchArguments = storeKitConfiguration is null
+            ? Array.Empty<string>()
+            : new[]
+            {
+                StoreKitSandboxReadiness.ProductIdArgument, storeKitConfiguration.ProductId,
+            };
         TestRunResult result;
         var priorAttempts = new List<string>();
         for (var attempt = 1; ; attempt++)
         {
             Info($"Launching {appName} on {udid} " +
                  $"(launch budget: {launchBudget}s, run budget: {timeoutSeconds}s, attempt {attempt})");
-            var psi = dev.BuildLaunchPsi(bundleId);
+            var psi = dev.BuildLaunchPsi(bundleId, managedLaunchArguments);
             result = StdoutWatcher
                 .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(launchBudget), onLine: Info)
                 .GetAwaiter().GetResult();

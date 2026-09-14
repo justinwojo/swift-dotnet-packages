@@ -669,6 +669,17 @@ partial class Build
         var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim);
         var needsDevice = cells.Any(c => IsDeviceCell(c.Platform));
 
+        // StoreKit's iOS/tvOS command-line cells are meaningful only with a configured Sandbox
+        // product. Reject the run before the first csproj bump/build; live account/backend state
+        // is then proved by the same-device pure-Swift control immediately before managed launch.
+        foreach (var cell in cells.Where(c => string.Equals(c.Library, StoreKit2Library, StringComparison.Ordinal)
+            && c.Platform is CellPlatform.IosSim or CellPlatform.IosDevice
+                or CellPlatform.IosDeviceMonoAot or CellPlatform.TvOs))
+        {
+            var platform = cell.Platform == CellPlatform.TvOs ? "tvos" : "ios";
+            _ = RequireStoreKitSandboxConfiguration(cell.Library, platform, StoreKit2BundleId);
+        }
+
         // 2. Booted simulator if any sim cells
         if (needsSim)
         {

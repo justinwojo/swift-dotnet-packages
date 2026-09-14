@@ -4,17 +4,17 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleExecutable</key><string>SKControl</string>
-    <key>CFBundleIdentifier</key><string>com.swiftbindings.storekit2.control</string>
+    <key>CFBundleIdentifier</key><string>__BUNDLE_ID__</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>SKControl</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>
-    <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
-    <key>DTPlatformName</key><string>iphonesimulator</string>
+    <key>CFBundleSupportedPlatforms</key><array><string>__SUPPORTED_PLATFORM__</string></array>
+    <key>DTPlatformName</key><string>__PLATFORM_NAME__</string>
     <key>LSRequiresIPhoneOS</key><true/>
-    <key>MinimumOSVersion</key><string>16.0</string>
-    <key>UIDeviceFamily</key><array><integer>1</integer></array>
+    <key>MinimumOSVersion</key><string>__MINIMUM_OS__</string>
+    <key>UIDeviceFamily</key><array><integer>__DEVICE_FAMILY__</integer></array>
     <key>UILaunchScreen</key><dict/>
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
 </dict>

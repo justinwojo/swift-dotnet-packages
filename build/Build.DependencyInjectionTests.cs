@@ -301,6 +301,7 @@ partial class Build
             "(rewriter + dependency injection + regression artifacts + release-wave planning + Apple version split " +
             "+ release consumption + run budgets + stdout watcher)")
         .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts,
-            TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, ValidateWatcherSelfTest)
+            TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, TestStoreKitSandbox,
+            ValidateWatcherSelfTest)
         .Executes(() => Log.Information("Harness self-tests complete."));
 }

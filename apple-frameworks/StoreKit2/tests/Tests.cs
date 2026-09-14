@@ -14,6 +14,7 @@ internal static class Tests
     /// <c>NSBundle.mainBundle</c> is preferred so the check follows the binary rather than a string.
     /// </summary>
     private const string ExpectedApplicationId = "com.swiftbindings.storekit2.tests";
+    private const string SandboxProductIdArgument = "--storekit-sandbox-product-id";
 
     /// <summary>
     /// Awaits <paramref name="task"/> with a hard upper bound; false means the bound elapsed first
@@ -44,6 +45,26 @@ internal static class Tests
     }
 
     internal sealed class ManagedUnwindTimeoutException(string message) : TimeoutException(message);
+
+    private static string RequireSandboxProductId()
+    {
+        var arguments = Foundation.NSProcessInfo.ProcessInfo.Arguments;
+        for (var index = 0; index < arguments.Length - 1; index++)
+        {
+            if (!string.Equals(arguments[index], SandboxProductIdArgument, StringComparison.Ordinal))
+                continue;
+            var value = arguments[index + 1]?.Trim();
+            if (!string.IsNullOrWhiteSpace(value)
+                && !value.Contains("placeholder", StringComparison.OrdinalIgnoreCase)
+                && !value.Contains("nonexistent", StringComparison.OrdinalIgnoreCase))
+                return value;
+        }
+
+        throw new InvalidOperationException(
+            $"StoreKit Sandbox readiness argument {SandboxProductIdArgument} is missing or invalid. " +
+            "The command-line iOS/tvOS lane must pass an exact App Store Connect product only after " +
+            "the same-simulator pure-Swift control has emitted a fresh Sandbox receipt; a .storekit path is not supported here.");
+    }
 
     // A completed managed task is not evidence that StoreKit or the native Swift task exited.
     internal static async Task<T> WithCancellationTimeout<T>(
@@ -82,6 +103,7 @@ internal static class Tests
     public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
+        string? sandboxProductId = null;
 
         int CompleteRun()
         {
@@ -120,6 +142,19 @@ internal static class Tests
             }
             catch (Exception ex) { Fail($"{name} metadata", ex.Message); }
         }
+
+#if IOS || TVOS
+        try
+        {
+            sandboxProductId = RequireSandboxProductId();
+            Pass("StoreKit Sandbox managed readiness argument");
+        }
+        catch (Exception ex)
+        {
+            Fail("StoreKit Sandbox managed readiness argument", ex.Message);
+            return CompleteRun();
+        }
+#endif
 
         await TimeoutTests.RunAsync(Pass, Fail);
 
@@ -538,105 +573,52 @@ internal static class Tests
             Fail("Storefront.current", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // Test 27: AppTransaction.shared — REAL bounded await with a semantic assertion.
-        // `AppTransaction.shared` is `async throws -> VerificationResult<AppTransaction>`. Documented
-        // outcomes:
-        //   (a) a VerificationResult that projects an AppTransaction — its bundleID must be non-empty
-        //       and match this test app, and its verification arm must be one of verified/unverified;
-        //   (b) a typed StoreKitError — the framework's own error category for an app with no App
-        //       Store receipt. The typed payload must carry a declared CaseTag.
-        // Anything else (including an untyped Swift error, or a timeout) fails: the point of this
-        // test is to detect an async bridge that never completes or completes with a phantom value.
+        // Test 27: the first of the four command-line Sandbox qualification operations. The native
+        // control has already proved this exact simulator/bundle/product can reach Sandbox, so the
+        // managed binding must now return the verified payload for this app from that same backend.
         try
         {
-            // 120s: AppTransaction.shared can go out to the App Store for the app receipt, so the
-            // bound is wide enough for a real fetch while still failing an async bridge that never
-            // completes at all.
             using var shared = await WithCancellationTimeout(
                 token => AppTransaction.GetSharedAsync(token),
-                TimeSpan.FromSeconds(120),
-                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(60),
+                TimeSpan.FromSeconds(10),
                 "AppTransaction.shared").ConfigureAwait(true);
 
             if (shared is null)
                 throw new InvalidOperationException("AppTransaction.shared returned a null VerificationResult");
-
-            AppTransaction? projected;
-            string arm;
-            if (shared.TryGetVerified(out var verified))
-            {
-                projected = verified;
-                arm = "verified";
-            }
-            else if (shared.TryGetUnverified(out var unverified, out var verificationError))
-            {
-                projected = unverified;
-                arm = $"unverified({verificationError?.ToString() ?? "(null error)"})";
-            }
-            else
-            {
+            if (!shared.TryGetVerified(out var projected) || projected is null)
                 throw new InvalidOperationException(
-                    "VerificationResult<AppTransaction> projected neither the verified nor the unverified arm");
-            }
-
-            if (projected is null)
-                throw new InvalidOperationException($"VerificationResult arm '{arm}' projected a null AppTransaction");
+                    "AppTransaction.shared did not return a verified AppTransaction after native Sandbox readiness passed");
+            using var projectedLease = projected;
             var bundleId = projected.BundleID;
-            // The identity to compare against comes from the running host, not from a string the
-            // test happens to know: a projection that reads a wrong-but-plausible bundle ID (another
-            // app's, a stale one, a mis-sized string field) has to fail here, and "non-empty" cannot
-            // tell those apart from the right answer.
             var expectedBundleId = Foundation.NSBundle.MainBundle.BundleIdentifier;
             if (string.IsNullOrWhiteSpace(expectedBundleId))
                 expectedBundleId = ExpectedApplicationId;
-            Log($"AppTransaction.shared: arm={arm}, bundleID='{bundleId}', host bundle='{expectedBundleId}', environment={projected.Environment}");
+            var environment = projected.Environment.RawValue;
+            Log($"AppTransaction.shared: verified, bundleID='{bundleId}', host bundle='{expectedBundleId}', environment='{environment}'");
             if (string.IsNullOrWhiteSpace(bundleId))
                 throw new InvalidOperationException("AppTransaction.bundleID was empty");
             if (!string.Equals(bundleId, expectedBundleId, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"AppTransaction.bundleID was '{bundleId}' but the running app is '{expectedBundleId}' — " +
                     "the projected AppTransaction does not describe this app");
-            Pass($"AppTransaction.shared projects this app's AppTransaction ({arm}, bundleID matches host)");
+            if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"AppTransaction.shared used environment '{environment}', expected Sandbox");
+            Pass("AppTransaction.shared verified this app on Sandbox");
         }
         catch (ManagedUnwindTimeoutException ex)
         {
             Fail("AppTransaction.shared", ex.Message);
             return CompleteRun();
         }
-        catch (SwiftException<StoreKitError> typed)
-        {
-            var err = typed.Error;
-            if (err is null)
-            {
-                Fail("AppTransaction.shared error category",
-                     $"SwiftException<StoreKitError> carried no typed payload (message: {typed.Message})");
-            }
-            else
-            {
-                var tag = err.Tag;
-                if (!Enum.IsDefined(typeof(StoreKitError.CaseTag), tag))
-                {
-                    Fail("AppTransaction.shared error category",
-                         $"typed StoreKitError carried an undeclared CaseTag ({(uint)tag})");
-                }
-                else
-                {
-                    Log($"AppTransaction.shared reported typed StoreKitError.{tag} — {typed.Message}");
-                    Pass($"AppTransaction.shared reports typed StoreKitError.{tag}");
-                }
-            }
-        }
         catch (Exception ex)
         {
             Fail("AppTransaction.shared", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // Test 27b: Transaction.currentEntitlements / Transaction.all are FINITE async sequences that
-        // terminate on their own for an app with no purchases. This exercises the generated
-        // IAsyncEnumerable adapter end-to-end — MakeAsyncIterator() + NextAsync() until nil — and
-        // asserts the sequence actually completes (bounded) AND yields zero elements. A non-empty
-        // result here would mean the marshaller materialized transactions StoreKit never returned,
-        // so we fail closed on it; a sequence that never terminates fails on the time bound.
+        // Test 27b: both finite transaction snapshots must terminate, and every element must be a
+        // verified Sandbox transaction. Empty snapshots are semantically valid for a fresh tester.
         foreach (var (seqName, seq) in new (string, Transaction.Transactions)[]
                  {
                      ("Transaction.currentEntitlements", Transaction.CurrentEntitlements),
@@ -660,8 +642,20 @@ internal static class Tests
                         await foreach (var vr in seq.WithCancellation(drainCts.Token).ConfigureAwait(false))
                         {
                             count++;
-                            vr?.Dispose();
-                            if (count > 64) break; // guard: never spin forever on a mis-marshalled sequence
+                            using (vr)
+                            {
+                                if (vr is null || !vr.TryGetVerified(out var transaction) || transaction is null)
+                                    throw new InvalidOperationException(
+                                        $"{seqName} yielded an unverified or null transaction");
+                                using var transactionLease = transaction;
+                                var environment = transaction.Environment.RawValue;
+                                if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
+                                    throw new InvalidOperationException(
+                                        $"{seqName} yielded environment '{environment}', expected Sandbox");
+                            }
+                            if (count > 64)
+                                throw new InvalidOperationException(
+                                    $"{seqName} exceeded the 64-element safety bound");
                         }
                     }
                     catch (OperationCanceledException)
@@ -669,22 +663,18 @@ internal static class Tests
                         observedCancellation = true;
                     }
                 });
-                // 120s, not 30s: these sequences are backed by the App Store daemon and their first
-                // element can wait on a receipt fetch. The bound still has to exist — a sequence that
-                // never terminates is the defect this test is here to catch — but it has to be wide
-                // enough that a slow-but-finite fetch is not reported as a hang.
-                var budget = TimeSpan.FromSeconds(120);
+                var budget = TimeSpan.FromSeconds(60);
                 var started = DateTime.UtcNow;
                 if (!await CompletesWithin(drain, budget).ConfigureAwait(true))
                 {
                     // Request native cancellation and bound managed enumeration unwind.
                     // Stop the suite if the managed loop remains pending.
                     drainCts.Cancel();
-                    var unwound = await CompletesWithin(drain, TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+                    var unwound = await CompletesWithin(drain, TimeSpan.FromSeconds(10)).ConfigureAwait(true);
                     if (!unwound)
                         throw new ManagedUnwindTimeoutException(
                             $"{seqName} exceeded its deadline and its managed enumeration did not unwind " +
-                            "within 30s after cancellation; stopping later tests");
+                            "within 10s after cancellation; stopping later tests");
                     throw new TimeoutException(
                         $"{seqName} did not terminate within {budget.TotalSeconds:0}s (finite sequence expected); "
                         + $"{count} element(s) had been yielded when the bound expired; "
@@ -695,11 +685,7 @@ internal static class Tests
                 if (observedCancellation)
                     throw new InvalidOperationException($"{seqName} canceled before the deadline instead of completing naturally");
                 Log($"{seqName} terminated after {count} element(s) in {(DateTime.UtcNow - started).TotalSeconds:0.0}s");
-                if (count != 0)
-                    throw new InvalidOperationException(
-                        $"{seqName} yielded {count} element(s) for an app with no purchases — " +
-                        "the marshaller materialized transactions StoreKit never returned");
-                Pass($"{seqName} enumerates to completion (empty)");
+                Pass($"{seqName} terminates with verified Sandbox transactions (count={count})");
             }
             catch (ManagedUnwindTimeoutException ex)
             {
@@ -708,11 +694,75 @@ internal static class Tests
             }
             catch (Exception ex)
             {
-                Fail($"{seqName} enumerates to completion (empty)", $"{ex.GetType().Name}: {ex.Message}");
+                Fail($"{seqName} Sandbox snapshot", $"{ex.GetType().Name}: {ex.Message}");
             }
         }
 
-        // Test 27c: Transaction.updates is an UNBOUNDED listener — it never terminates on its own.
+        // Test 27c: cancellation starts already requested, removing network timing as a variable.
+        // The generated managed task and async enumerator must both reach a terminal state and the
+        // enumerator must dispose inside independent bounds. TimeoutTests above supplies the
+        // controlled late-result ownership oracle; these probes exercise the real generated APIs.
+        try
+        {
+            using var canceled = new CancellationTokenSource();
+            canceled.Cancel();
+            VerificationResult<AppTransaction>? racedResult = null;
+            try
+            {
+                racedResult = await WithTimeout(
+                    AppTransaction.GetSharedAsync(canceled.Token),
+                    TimeSpan.FromSeconds(5),
+                    "pre-canceled AppTransaction.shared").ConfigureAwait(true);
+                throw new InvalidOperationException(
+                    "pre-canceled AppTransaction.shared completed successfully instead of observing cancellation");
+            }
+            catch (OperationCanceledException)
+            {
+                Pass("AppTransaction.shared pre-canceled task unwinds");
+            }
+            finally
+            {
+                racedResult?.Dispose();
+            }
+
+            var enumerator = Transaction.All.GetAsyncEnumerator(canceled.Token);
+            try
+            {
+                try
+                {
+                    var moved = await WithTimeout(
+                        enumerator.MoveNextAsync().AsTask(),
+                        TimeSpan.FromSeconds(5),
+                        "pre-canceled Transaction.all iterator").ConfigureAwait(true);
+                    if (moved)
+                        enumerator.Current?.Dispose();
+                    throw new InvalidOperationException(
+                        $"pre-canceled Transaction.all returned MoveNext={moved} instead of observing cancellation");
+                }
+                catch (OperationCanceledException)
+                {
+                    Pass("Transaction.all pre-canceled iterator unwinds");
+                }
+            }
+            finally
+            {
+                if (!await CompletesWithin(enumerator.DisposeAsync().AsTask(), TimeSpan.FromSeconds(5)).ConfigureAwait(true))
+                    throw new ManagedUnwindTimeoutException(
+                        "pre-canceled Transaction.all iterator disposal did not complete within 5s");
+            }
+            Pass("Transaction.all canceled iterator disposes within bound");
+        }
+        catch (ManagedUnwindTimeoutException ex)
+        {
+            Fail("StoreKit generated cancellation cleanup", ex.Message);
+            return CompleteRun();
+        }
+        catch (Exception ex)
+        {
+            Fail("StoreKit generated cancellation cleanup", $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        // Test 27d: Transaction.updates is an UNBOUNDED listener — it never terminates on its own.
         // Cancellation must unwind the managed await foreach promptly. Generated NextAsync routes
         // the request to SBW_CancelTask then immediately cancels its managed task; this check
         // does not establish that the native Swift task completed or released its resources.
@@ -824,32 +874,48 @@ internal static class Tests
             Fail("VerificationResult<T>.TryGetVerified/TryGetUnverified shape", ex.Message);
         }
 
-        // Test 31: Product.ProductsAsync — a REAL awaited StoreKit query. Unknown product IDs
-        // with no .storekit configuration (unavailable outside Xcode — the App Store returns
-        // no products; documented not-our-bug) resolve to an EMPTY list. We assert the full
-        // semantic outcome: a non-null IReadOnlyList<Product> that is empty (Count == 0). This
-        // proves the async Swift->C# bridge marshalled the real [Product] payload back — an
-        // empty array, not a phantom/garbage list — rather than merely firing dispatch. A
-        // non-empty result here would mean the marshaller materialized products that StoreKit
-        // never returned, so we fail closed on it.
+        // Test 31: the fourth qualification operation requests the exact configured App Store
+        // Connect product. iOS/tvOS command-line runs require exactly that one Sandbox-backed
+        // product; desktop compatibility runs retain the unknown-id/empty-list assertion.
         try
         {
+            var requestedProductId = sandboxProductId
+                ?? "com.swiftbindings.storekit2.tests.nonexistent";
             var products = await WithTimeout(
-                Product.ProductsAsync(new[] { "com.swiftbindings.storekit2.tests.nonexistent" }),
-                TimeSpan.FromSeconds(30),
+                Product.ProductsAsync(new[] { requestedProductId }),
+                TimeSpan.FromSeconds(60),
                 "Product.products(for:)").ConfigureAwait(true);
             if (products is null)
                 throw new InvalidOperationException("ProductsAsync returned a null list");
-            Log($"Product.ProductsAsync returned {products.Count} product(s) for unknown IDs (0 expected without a .storekit config)");
-            if (products.Count != 0)
-                throw new InvalidOperationException(
-                    $"Unknown product IDs must resolve to an empty list; got {products.Count} product(s) — " +
-                    "the marshaller materialized entries StoreKit never returned.");
-            Pass("Product.ProductsAsync awaited (empty-list result)");
+            try
+            {
+                if (sandboxProductId is not null)
+                {
+                    if (products.Count != 1)
+                        throw new InvalidOperationException(
+                            $"exact Sandbox product '{sandboxProductId}' returned {products.Count} products; expected exactly one");
+                    if (!string.Equals(products[0].Id, sandboxProductId, StringComparison.Ordinal))
+                        throw new InvalidOperationException(
+                            $"Product.products(for:) returned id '{products[0].Id}', expected '{sandboxProductId}'");
+                    Pass($"Product.products(for:) returns exact Sandbox product '{sandboxProductId}'");
+                }
+                else
+                {
+                    if (products.Count != 0)
+                        throw new InvalidOperationException(
+                            $"Unknown product IDs must resolve to an empty list; got {products.Count} product(s)");
+                    Pass("Product.ProductsAsync awaited (desktop empty-list result)");
+                }
+            }
+            finally
+            {
+                foreach (var product in products)
+                    product.Dispose();
+            }
         }
         catch (Exception ex)
         {
-            Fail("Product.ProductsAsync awaited (empty-list result)", ex.Message);
+            Fail("Product.ProductsAsync semantic result", ex.Message);
         }
 
         return CompleteRun();

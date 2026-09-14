@@ -153,7 +153,7 @@ jobs:
       # rebuilds. Optimizing this is tracked as a follow-up; for now,
       # the Release artifacts and the simulator validation are independent.
       - name: Build and validate on iOS Simulator
-        # 40 min total gives Nuke's --step-timeout 1620 (27 min) headroom for
+        # 40 min total gives Nuke's --step-timeout 1800 (30 min) headroom for
         # cleanup, diagnostics collection, and binlog upload. The step budget
         # has to cover install + launch + the library's run budget in one attempt.
         timeout-minutes: 40
@@ -169,7 +169,7 @@ jobs:
             --library "${{ steps.parse.outputs.library }}" \
             --timeout 60 \
             --launch-timeout 120 \
-            --step-timeout 1620 \
+            --step-timeout 1800 \
             --reuse-sim
 
       # The step above validates the code through <ProjectReference>; it never
@@ -199,7 +199,7 @@ jobs:
             --consume-feed "${{ runner.temp }}/packages" \
             --timeout 60 \
             --launch-timeout 120 \
-            --step-timeout 1620
+            --step-timeout 1800
 
       - name: Upload simulator diagnostics
         if: failure()

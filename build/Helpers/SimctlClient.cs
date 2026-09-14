@@ -199,7 +199,7 @@ public sealed class SimctlClient
     /// --terminate-running-process &lt;device&gt; &lt;bundle&gt;</c>. The watcher
     /// owns the process so we return the PSI rather than the launched process.
     /// </summary>
-    public ProcessStartInfo BuildLaunchPsi(string bundleId)
+    public ProcessStartInfo BuildLaunchPsi(string bundleId, IEnumerable<string>? launchArguments = null)
     {
         var psi = new ProcessStartInfo { FileName = "xcrun", UseShellExecute = false };
         psi.ArgumentList.Add("simctl");
@@ -208,6 +208,9 @@ public sealed class SimctlClient
         psi.ArgumentList.Add("--terminate-running-process");
         psi.ArgumentList.Add(_device);
         psi.ArgumentList.Add(bundleId);
+        if (launchArguments is not null)
+            foreach (var argument in launchArguments)
+                psi.ArgumentList.Add(argument);
         return psi;
     }
 

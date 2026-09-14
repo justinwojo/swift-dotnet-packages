@@ -62,6 +62,7 @@
         "TestReleaseConsumption",
         "TestReleaseWave",
         "TestRunBudgets",
+        "TestStoreKitSandbox",
         "ValidateDevice",
         "ValidateDeviceLane",
         "ValidateMac",
@@ -321,8 +322,12 @@
         },
         "StepTimeout": {
           "type": "integer",
-          "description": "Outer wall-clock budget for RunCiSimTest in seconds (default: 1620)",
+          "description": "Outer wall-clock budget for RunCiSimTest in seconds (default: 1800)",
           "format": "int32"
+        },
+        "StoreKitSandboxProductId": {
+          "type": "string",
+          "description": "Exact App Store Connect product id for StoreKit2 command-line Sandbox qualification (or STOREKIT_SANDBOX_PRODUCT_ID)"
         },
         "Timeout": {
           "type": "integer",

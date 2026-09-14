@@ -49,11 +49,10 @@ partial class Build
     ///   (offline-style snapshot) + 20s + 15s + 10s + 45s (a second map's style/load) before it
     ///   reports: ~195s of sequential waiting in the all-suppressed worst case, before the
     ///   unbounded-but-fast probes and the final report.</item>
-    ///   <item><b>StoreKit2</b> — worst-case sequential waits are 120s (AppTransaction.shared)
-    ///   + 120s + 120s (the two finite transaction sequences) + 30s (Storefront) + 30s
-    ///   (Transaction.updates cancellation) + 30s (Product.products) ≈ 450s of bounded awaits
-    ///   before any of the unbounded-but-fast probes. Anything below that kills the process
-    ///   mid-suite, so the assertions those bounds exist to make never report either way.</item>
+    ///   <item><b>StoreKit2</b> — four Sandbox qualification operations are independently
+    ///   bounded at 60s, followed by the existing 30s Storefront/update probes and short
+    ///   pre-canceled unwind checks. The 600s floor preserves reporting headroom if every
+    ///   operation reaches its own bound.</item>
     /// </list>
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, int> LibraryRunBudgetSeconds =
@@ -78,6 +77,15 @@ partial class Build
     int LaunchBudgetSeconds => ResolveLaunchBudgetSeconds(LaunchTimeout);
 
     /// <summary>
+    /// Extra host-tool, install, launch, and run reservation required before the managed StoreKit2
+    /// app can be installed. Other libraries have no native readiness phase.
+    /// </summary>
+    internal static int ResolveNativeControlBudgetSeconds(string library) =>
+        string.Equals(library, StoreKit2Library, StringComparison.Ordinal)
+            ? StoreKitNativePhaseBudgetSeconds
+            : 0;
+
+    /// <summary>
     /// How long an <c>simctl install</c> may take before the attempt gives up on it, given the
     /// time left in the step budget and the launch+run budgets the watcher still needs.
     ///
@@ -88,7 +96,7 @@ partial class Build
     /// <see cref="MinInstallCapSeconds"/> so a tight deadline cannot cap it at zero and turn a
     /// healthy install into an infrastructure failure.</para>
     /// </summary>
-    internal static int ResolveInstallCapSeconds(double remainingSeconds, int watchBudgetSeconds) =>
+    internal static int ResolveInstallCapSeconds(double remainingSeconds, int reservedBudgetSeconds) =>
         (int)Math.Max(MinInstallCapSeconds,
-            Math.Min(InstallOverheadSeconds, remainingSeconds - watchBudgetSeconds));
+            Math.Min(InstallOverheadSeconds, remainingSeconds - reservedBudgetSeconds));
 }

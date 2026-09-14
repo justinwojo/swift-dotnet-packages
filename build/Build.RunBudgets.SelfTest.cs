@@ -25,12 +25,12 @@ partial class Build
             }
 
             // ── 1. A floor raises a too-small request ────────────────────────
-            // The StoreKit2 app awaits, in sequence: AppTransaction.shared (120s) + two finite
-            // transaction sequences (120s each) + three 30s probes. The budget it runs under has
+            // The StoreKit2 app awaits four independent 60s Sandbox qualification operations,
+            // two existing 30s probes, and two short 5s pre-canceled unwind probes. The budget it runs under has
             // to clear that sum, or the process is killed mid-suite and the assertions those
             // bounds exist to make never report either way. Asserted against the sum rather than
             // against the table, so a floor edited down is caught here and not in a CI log.
-            const int storeKitSequentialBoundsSeconds = 120 + 120 + 120 + 30 + 30 + 30;
+            const int storeKitSequentialBoundsSeconds = 60 + 60 + 60 + 60 + 30 + 30 + 5 + 5;
             Check("[run-budget] StoreKit2 raises the CI default of 60s past the app's own bounds",
                 ResolveRunBudgetSeconds("StoreKit2", 60) > storeKitSequentialBoundsSeconds,
                 $"actual={ResolveRunBudgetSeconds("StoreKit2", 60)} bounds={storeKitSequentialBoundsSeconds}");
@@ -87,16 +87,26 @@ partial class Build
             // runner is squeezed and may fail the attempt as an infrastructure error).
             foreach (var (library, floor) in LibraryRunBudgetSeconds)
             {
-                var minimumAttempt = MinInstallCapSeconds + DefaultLaunchBudgetSeconds + floor + 60;
+                var nativeControl = ResolveNativeControlBudgetSeconds(library);
+                var minimumAttempt = MinInstallCapSeconds + nativeControl
+                    + DefaultLaunchBudgetSeconds + floor + 60;
                 Check($"[envelope] a {library} attempt with the smallest install fits the step deadline",
                     minimumAttempt <= StepTimeout,
                     $"attempt={minimumAttempt}s step-timeout={StepTimeout}s");
 
-                var fullAttempt = InstallOverheadSeconds + DefaultLaunchBudgetSeconds + floor + 60;
+                var fullAttempt = InstallOverheadSeconds + nativeControl
+                    + DefaultLaunchBudgetSeconds + floor + 60;
                 Check($"[envelope] a {library} attempt with a full-overhead install fits the step deadline",
                     fullAttempt <= StepTimeout,
                     $"attempt={fullAttempt}s step-timeout={StepTimeout}s");
             }
+
+            Check("[native-budget] StoreKit2 reserves its host tools, install, launch, and run phase",
+                ResolveNativeControlBudgetSeconds("StoreKit2") == StoreKitNativePhaseBudgetSeconds,
+                $"actual={ResolveNativeControlBudgetSeconds("StoreKit2")} expected={StoreKitNativePhaseBudgetSeconds}");
+            Check("[native-budget] other libraries have no native readiness reservation",
+                ResolveNativeControlBudgetSeconds("MapLibre") == 0,
+                $"actual={ResolveNativeControlBudgetSeconds("MapLibre")}");
 
             // ── 6. The install cap the CI attempt runs under ────────────────
             // The install and the watch are sequential, so the cap is what the step budget
@@ -104,25 +114,26 @@ partial class Build
             // empirical install overhead and below by the floor. These assert the live
             // resolver rather than a formula written out a second time here, so the checks
             // move with the arithmetic instead of freezing a retired version of it.
-            const int watchBudget = DefaultLaunchBudgetSeconds + 600;   // launch + StoreKit2's floor
+            const int managedWatchBudget = DefaultLaunchBudgetSeconds + 600;
+            const int reservedBudget = managedWatchBudget + StoreKitNativePhaseBudgetSeconds;
             Check("[install-cap] a long deadline caps the install at the empirical overhead",
-                ResolveInstallCapSeconds(5000, watchBudget) == InstallOverheadSeconds,
-                $"actual={ResolveInstallCapSeconds(5000, watchBudget)}");
+                ResolveInstallCapSeconds(5000, reservedBudget) == InstallOverheadSeconds,
+                $"actual={ResolveInstallCapSeconds(5000, reservedBudget)}");
             Check("[install-cap] a moderate deadline gives the install what the budgets leave",
-                ResolveInstallCapSeconds(watchBudget + 200, watchBudget) == 200,
-                $"actual={ResolveInstallCapSeconds(watchBudget + 200, watchBudget)}");
+                ResolveInstallCapSeconds(reservedBudget + 200, reservedBudget) == 200,
+                $"actual={ResolveInstallCapSeconds(reservedBudget + 200, reservedBudget)}");
             Check("[install-cap] a spent deadline still leaves the install its floor",
-                ResolveInstallCapSeconds(watchBudget - 500, watchBudget) == MinInstallCapSeconds,
-                $"actual={ResolveInstallCapSeconds(watchBudget - 500, watchBudget)}");
+                ResolveInstallCapSeconds(reservedBudget - 500, reservedBudget) == MinInstallCapSeconds,
+                $"actual={ResolveInstallCapSeconds(reservedBudget - 500, reservedBudget)}");
             Check("[install-cap] the cap never reaches zero",
-                ResolveInstallCapSeconds(0, watchBudget) > 0,
-                $"actual={ResolveInstallCapSeconds(0, watchBudget)}");
+                ResolveInstallCapSeconds(0, reservedBudget) > 0,
+                $"actual={ResolveInstallCapSeconds(0, reservedBudget)}");
             // The watcher's budgets are reserved first: whatever the install is capped at, the
             // launch and run budgets are handed over whole. That is the property that stopped a
             // slow install from shortening a library's declared run budget.
             Check("[install-cap] reserving the watch budget leaves the full run budget intact",
-                ResolveInstallCapSeconds(watchBudget + InstallOverheadSeconds, watchBudget) == InstallOverheadSeconds,
-                $"actual={ResolveInstallCapSeconds(watchBudget + InstallOverheadSeconds, watchBudget)}");
+                ResolveInstallCapSeconds(reservedBudget + InstallOverheadSeconds, reservedBudget) == InstallOverheadSeconds,
+                $"actual={ResolveInstallCapSeconds(reservedBudget + InstallOverheadSeconds, reservedBudget)}");
 
             if (failures > 0)
                 throw new Exception($"{failures} run-budget self-test check(s) failed");

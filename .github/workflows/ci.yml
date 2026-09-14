@@ -145,7 +145,7 @@ jobs:
 
       - name: Build and validate on iOS Simulator
         if: matrix.kind == 'third-party'
-        # 40 min total gives Nuke's --step-timeout 1620 (27 min) headroom for
+        # 40 min total gives Nuke's --step-timeout 1800 (30 min) headroom for
         # cleanup, diagnostics collection, and binlog upload. The step budget
         # has to cover install + launch + the library's run budget in one attempt.
         timeout-minutes: 40
@@ -161,7 +161,7 @@ jobs:
             --library "${{ matrix.library }}" \
             --timeout 60 \
             --launch-timeout 120 \
-            --step-timeout 1620 \
+            --step-timeout 1800 \
             --reuse-sim
 
       - name: Upload simulator diagnostics
@@ -248,7 +248,7 @@ jobs:
 
       - name: Build and validate on iOS Simulator
         if: matrix.kind == 'apple-framework' && steps.has_tests.outputs.exists == 'true'
-        # 40 min total gives Nuke's --step-timeout 1620 (27 min) headroom for
+        # 40 min total gives Nuke's --step-timeout 1800 (30 min) headroom for
         # cleanup, diagnostics collection, and binlog upload. The step budget
         # has to cover install + launch + the library's run budget in one attempt.
         timeout-minutes: 40
@@ -264,7 +264,7 @@ jobs:
             --library "${{ matrix.library }}" \
             --timeout 60 \
             --launch-timeout 120 \
-            --step-timeout 1620 \
+            --step-timeout 1800 \
             --reuse-sim
 
       - name: Upload simulator diagnostics

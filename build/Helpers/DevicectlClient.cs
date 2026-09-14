@@ -103,7 +103,7 @@ public sealed class DevicectlClient
     /// <c>devicectl device process launch --device &lt;udid&gt; --terminate-existing
     /// --console &lt;bundle&gt;</c>.
     /// </summary>
-    public ProcessStartInfo BuildLaunchPsi(string bundleId)
+    public ProcessStartInfo BuildLaunchPsi(string bundleId, IEnumerable<string>? launchArguments = null)
     {
         var psi = new ProcessStartInfo { FileName = "xcrun", UseShellExecute = false };
         psi.ArgumentList.Add("devicectl");
@@ -115,6 +115,9 @@ public sealed class DevicectlClient
         psi.ArgumentList.Add("--terminate-existing");
         psi.ArgumentList.Add("--console");
         psi.ArgumentList.Add(bundleId);
+        if (launchArguments is not null)
+            foreach (var argument in launchArguments)
+                psi.ArgumentList.Add(argument);
         return psi;
     }
 

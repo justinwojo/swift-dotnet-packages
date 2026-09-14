@@ -89,6 +89,9 @@ partial class Build
 
         var sw = Stopwatch.StartNew();
         var (testDir, appName, bundleId) = ResolveTestNames(library);
+        // Package restore/build is expensive and mutating; reject missing StoreKit Sandbox intent
+        // before resolving or evicting anything in the isolated consumption lane.
+        var storeKitConfiguration = RequireStoreKitSandboxConfiguration(library, "ios", bundleId);
         var laneLabel = $"release-consume/{library}";
 
         Info($"=== {laneLabel}: consuming staged packages from {feed} ===");
@@ -223,7 +226,8 @@ partial class Build
         //    bounded awaits exceed the lane's --timeout reports a verdict rather than being
         //    killed mid-run.
         var result = ValidateSimAt(appPath, appName, bundleId,
-            ResolveRunBudgetSeconds(library, timeoutSeconds), simUdid, Info);
+            ResolveRunBudgetSeconds(library, timeoutSeconds), simUdid, Info,
+            storeKitConfiguration);
         if (result.Status != TestRunStatus.Success)
             throw new InvalidOperationException(
                 $"{laneLabel}: the packaged consumer failed on the simulator — {result.Status}" +

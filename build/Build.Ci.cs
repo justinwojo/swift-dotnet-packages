@@ -365,6 +365,8 @@ partial class Build
         {
             var library = Library!;
             var (testDir, appName, bundleId) = ResolveTestNames(library);
+            // Reject a missing StoreKit product before simulator preparation or the test-app build.
+            var storeKitConfiguration = RequireStoreKitSandboxConfiguration(library, "ios", bundleId);
 
             var pipelineStart = DateTime.UtcNow;
             var deadline = pipelineStart.AddSeconds(StepTimeout);
@@ -428,7 +430,8 @@ partial class Build
                     // ── Phase 3: Run the tests (one attempt) ──────────────
                     GhaGroup("Run iOS Simulator Tests");
                     var outcome = RunInnerTest(
-                        appName, bundleId, testDir, deviceUdid!, deadline, runBudget, launchBudget);
+                        library, appName, bundleId, testDir, deviceUdid!, deadline, runBudget, launchBudget,
+                        storeKitConfiguration);
                     GhaEndGroup();
 
                     if (outcome == TestPhaseOutcome.Success)
@@ -507,13 +510,15 @@ partial class Build
     /// re-preparing a simulator rather than by re-running the same one.</para>
     /// </summary>
     TestPhaseOutcome RunInnerTest(
+        string library,
         string appName,
         string bundleId,
         AbsolutePath testDir,
         string udid,
         DateTime deadline,
         int runBudgetSeconds,
-        int launchBudgetSeconds)
+        int launchBudgetSeconds,
+        StoreKitSandboxReadiness.Configuration? storeKitConfiguration)
     {
         // The watcher spends at most launch + run: the first budget bounds the wait for
         // the app's first line, the second bounds the suite from there. Every envelope
@@ -543,26 +548,35 @@ partial class Build
         // delays the run instead of shortening it; sharing one countdown let it eat the
         // run budget, which is the mid-suite kill the budgets exist to prevent.
         var rem = (deadline - DateTime.UtcNow).TotalSeconds;
-        var installCapSeconds = ResolveInstallCapSeconds(rem, watchBudgetSeconds);
-        var attemptEnvelopeSeconds = installCapSeconds + watchBudgetSeconds;
+        var nativeControlBudgetSeconds = storeKitConfiguration is null
+            ? 0
+            : ResolveNativeControlBudgetSeconds(library);
+        var reservedBudgetSeconds = watchBudgetSeconds + nativeControlBudgetSeconds;
+        var installCapSeconds = ResolveInstallCapSeconds(rem, reservedBudgetSeconds);
+        var attemptEnvelopeSeconds = installCapSeconds + reservedBudgetSeconds;
 
         // Preparation and the build come out of the same step budget, so they can leave less
         // than one attempt needs. The attempt still runs at full budget and says so: shortening
         // it would trade a late verdict for no verdict, which is the failure mode this whole
         // arrangement exists to remove. The overrun is visible here rather than arriving later
         // as an unexplained job kill.
-        if (rem < MinInstallCapSeconds + watchBudgetSeconds)
+        if (rem < MinInstallCapSeconds + reservedBudgetSeconds)
             Log.Warning(
                 "Only {Rem:F0}s of the {Step}s step budget remain, less than the {Need}s an attempt needs "
-                + "(install floor + launch + run) — this run will overrun the step deadline rather than be cut short",
-                rem, StepTimeout, MinInstallCapSeconds + watchBudgetSeconds);
+                + "(managed install floor + native readiness + managed launch + run) — this run will "
+                + "overrun the step deadline rather than be cut short",
+                rem, StepTimeout, MinInstallCapSeconds + reservedBudgetSeconds);
 
         Log.Information(
-            "=== TESTS: Running inner sim test (launch budget={Launch}s, run budget={Run}s, install cap={Install:F0}s, envelope={Env:F0}s) ===",
-            launchBudgetSeconds, runBudgetSeconds, installCapSeconds, attemptEnvelopeSeconds);
+            "=== TESTS: Running inner sim test (launch budget={Launch}s, run budget={Run}s, native readiness budget={Native}s, managed install cap={Install:F0}s, envelope={Env:F0}s) ===",
+            launchBudgetSeconds, runBudgetSeconds, nativeControlBudgetSeconds,
+            installCapSeconds, attemptEnvelopeSeconds);
 
         // Mirror validate-sim.sh: install + launch + parse stdout.
         var beforeCrashCount = CountCrashLogs(crashDir, appName);
+        if (storeKitConfiguration is not null)
+            RunStoreKitSandboxNativeControl(storeKitConfiguration, sim.Device,
+                line => Log.Information("{Line}", line));
         try
         {
             // Protects against a hung install on slow GHA macOS-26 runners without
@@ -576,7 +590,13 @@ partial class Build
             throw new InvalidOperationException($"simctl install failed: {installEx.Message}", installEx);
         }
 
-        var psi = sim.BuildLaunchPsi(bundleId);
+        var managedLaunchArguments = storeKitConfiguration is null
+            ? Array.Empty<string>()
+            : new[]
+            {
+                StoreKitSandboxReadiness.ProductIdArgument, storeKitConfiguration.ProductId,
+            };
+        var psi = sim.BuildLaunchPsi(bundleId, managedLaunchArguments);
         // The watcher gets its budgets whole: it bounds itself at launch budget until
         // the app speaks and run budget after, so the watch phase is already capped at
         // their sum. Trimming them by whatever the install left over is what made a

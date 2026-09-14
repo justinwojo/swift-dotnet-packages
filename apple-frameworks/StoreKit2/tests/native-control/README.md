@@ -1,41 +1,40 @@
-# StoreKit native control
+# StoreKit Sandbox native control
 
-A pure-Swift iOS app (no .NET, no binding) that issues the same StoreKit calls the C# test suite
-times out on — `AppTransaction.shared`, `Transaction.currentEntitlements`, `Transaction.all`, plus
-`Product.products(for:)` — through the same `simctl install` / `simctl launch --console` path the
-validators use. It exists to answer one question whenever the StoreKit2 suite hangs on those calls:
-*is the hang ours, or is it StoreKit's behaviour in this environment?*
+This pure-Swift control is the fail-closed readiness prerequisite for the command-line iOS and
+tvOS StoreKit2 lanes. The harness builds it with the managed app's exact bundle id, installs it on
+the exact simulator the managed app will use, and requires one fresh run-token receipt before the
+managed app is installed over it.
 
-```
-./run.sh                 # first booted simulator
-./run.sh <UDID>          # a specific one
-```
+The receipt is emitted only after all four operations complete inside 60 seconds:
 
-## Reference result (2026-09-06, iPhone 17 Pro Max simulator, iOS 26.3 runtime, no Sandbox account, no `.storekit` config)
+- verified `AppTransaction.shared`, matching the app bundle and reporting Sandbox;
+- `Product.products(for:)`, returning the exact configured product;
+- finite `Transaction.currentEntitlements`, with every yielded transaction verified as Sandbox;
+- finite `Transaction.all`, with every yielded transaction verified as Sandbox.
 
-```
-[SK-CONTROL]    0.5s Product.products(for:) resolved: 0 product(s)
-[SK-CONTROL]  150.0s verdict: AppTransaction.shared -> NO RESULT after 150s (native call never completed)
-[SK-CONTROL]  150.0s verdict: Transaction.currentEntitlements -> NO RESULT after 150s (native call never completed)
-[SK-CONTROL]  150.0s verdict: Transaction.all -> NO RESULT after 150s (native call never completed)
-[SK-CONTROL]  150.0s verdict: Product.products(for:) -> 0 product(s)
-```
+Empty transaction sequences are valid and are recorded as zero. They prove bounded StoreKit
+readiness, not transaction-payload coverage. A timeout, production/Xcode environment, unverified
+transaction, missing product, wrong bundle, stale token, or missing receipt is a non-pass and stops
+the managed launch.
 
-The native calls produced no result within this 150-second observation window; the log phrase
-"never completed" refers only to that window. This matches the C# suite's three 120-second
-timeouts and empty product list on the recorded host. It does not establish indefinite hangs on
-all unconfigured hosts, native cleanup after managed cancellation, or successful product lookup
-and purchase flows with a configured store backend. The
-daemon side agrees: `storekitd`'s log shows it accepting `appTransactionForClient:ignoreCache:reply:`,
-`enumerateCurrentReceiptsForClient:…` and `enumerateReceiptsForClient:…` from both the .NET app and
-this control, with no reply observed during the recorded window.
+Manual use:
 
-```
-xcrun simctl spawn <UDID> log show --last 10m --predicate 'process == "storekitd"' --style compact \
-  | grep -E 'Accepting new connection|StoreKitServiceConnection|Initialized with server'
+```text
+STOREKIT_SANDBOX_PRODUCT_ID=com.example.app.product ./run.sh ios [iOS-simulator-UDID]
+STOREKIT_SANDBOX_PRODUCT_ID=com.example.app.product ./run.sh tvos [tvOS-simulator-UDID]
 ```
 
-Look for `Initialized with server Sandbox bundle ID …` — the daemon has fallen back to Sandbox with
-no account to serve, which is the environment these hangs belong to. A different result from this
-control (calls completing, or the daemon replying) while the C# suite still hangs would point back
-at the binding.
+The manual runner applies a 75-second outer launch deadline, terminates the control on every exit,
+validates the fresh receipt, and retains its log and SHA-256 summary under
+`artifacts/storekit-sandbox-readiness/`. Product identifiers are validated with the same syntax and
+placeholder exclusions as the Nuke preflight, so a `.storekit` path is rejected as configuration.
+
+Prerequisites are external: configure that exact product in App Store Connect for
+`com.swiftbindings.storekit2.tests`, and sign the target simulator into a Sandbox tester account.
+There is no public API to inspect or inject that login. The live four-operation receipt therefore
+establishes observed Sandbox readiness for this run; the product id alone does not.
+
+A `.storekit` file is intentionally unsupported here. Xcode activates StoreKit configuration state
+when it launches a scheme; passing a path through `simctl`, `mlaunch`, `dotnet`, or this script does
+not reproduce that state. An Xcode-driven control may be maintained separately, but it cannot
+substitute for this shipping command-line lane.

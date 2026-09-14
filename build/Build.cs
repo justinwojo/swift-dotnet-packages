@@ -66,14 +66,17 @@ partial class Build : NukeBuild
     [Parameter("Explicit APNs-capable provisioning profile for the ActivityKit physical-device push-token app")]
     readonly string? ActivityKitProvisioningProfile;
 
+    [Parameter("Exact App Store Connect product id for StoreKit2 command-line Sandbox qualification (or STOREKIT_SANDBOX_PRODUCT_ID)")]
+    readonly string? StoreKitSandboxProductId;
+
     [Parameter("Reuse already-booted simulator (CI)")]
     readonly bool ReuseSim;
 
-    // One attempt is install + launch + run + reporting. The largest per-library run budget
-    // (see Build.RunBudgets.cs) plus the launch budget plus the empirical install overhead has
-    // to fit here, or the install is squeezed on a slow runner; TestRunBudgets asserts that.
-    [Parameter("Outer wall-clock budget for RunCiSimTest in seconds (default: 1620)")]
-    readonly int StepTimeout = 1620;
+    // One attempt is managed install + optional native readiness + managed launch/run + reporting.
+    // The largest per-library envelope (see Build.RunBudgets.cs) has to fit here, or an install is
+    // squeezed on a slow runner; TestRunBudgets asserts the complete sequential reservation.
+    [Parameter("Outer wall-clock budget for RunCiSimTest in seconds (default: 1800)")]
+    readonly int StepTimeout = 1800;
 
     [Parameter("Max retries for infrastructure failures (RunCiSimTest)")]
     readonly int MaxInfraRetries = 1;
