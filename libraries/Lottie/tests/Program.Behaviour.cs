@@ -15,6 +15,17 @@ namespace LottieSimTests;
 // the valid and the malformed case are known-good inputs.
 public partial class MainViewController
 {
+    private const string DifferentialFixtureName = "B11GradientDifferential";
+    private const string DifferentialGradientKeypath =
+        "B11 Gradient Layer.B11 Shape Group.B11 Unique Gradient.Colors";
+    private const double DifferentialFrame = 30;
+
+    [global::System.Runtime.InteropServices.UnmanagedCallConv(
+        CallConvs = new[] { typeof(global::System.Runtime.CompilerServices.CallConvCdecl) })]
+    [global::System.Runtime.InteropServices.LibraryImport(
+        "LottieSwiftBindings", EntryPoint = "SBLottieB11InstallPureSwiftDynamicGradient")]
+    private static partial int InstallPureSwiftDynamicGradient(IntPtr viewHandle);
+
     // Two probes below abort the process on today's binding. They run on every lane
     // anyway: an abort is the honest report of a broken route, and hiding it behind
     // an environment variable that no release path sets turns an open defect into a
@@ -89,7 +100,7 @@ public partial class MainViewController
         await DotLottieAsyncRoutes(logger, results);
         await DotLottieFilepathCallbackRoute(logger, results);
         DotLottieDataCallbackRoute(logger, results);
-        DynamicGradientProvider(logger, results);
+        GradientProviderDifferential(logger, results);
     }
 
     // A view that plays but renders nothing is indistinguishable from a working one
@@ -410,67 +421,135 @@ public partial class MainViewController
         }
     }
 
-    // A dynamic (block-based) GradientValueProvider: Lottie calls back into managed
-    // code per frame with a collection return type. Same FailFast exposure as the
-    // callback route above, so it runs last.
-    private void DynamicGradientProvider(TestLogger logger, TestResults results)
+    private static LottieColor[] DifferentialPalette() =>
+    [
+        new LottieColor(0.0, 1.0, 0.0, 1.0),
+        new LottieColor(1.0, 1.0, 0.0, 1.0),
+    ];
+
+    private LottieAnimationView CreateDifferentialView(string path)
+    {
+        using var engine = RenderingEngineOption.Specific(RenderingEngine.MainThread);
+        using var configuration = new LottieConfiguration(engine);
+        var view = new LottieAnimationView(path, null, null, configuration)
+        {
+            BackgroundColor = UIColor.Clear,
+        };
+        AttachToWindow(view);
+        view.CurrentFrame = DifferentialFrame;
+        view.ForceDisplayUpdate();
+        view.LayoutIfNeeded();
+        if (view.CurrentRenderingEngine != RenderingEngine.MainThread)
+            throw new InvalidOperationException(
+                $"renderer drifted from MainThread to {view.CurrentRenderingEngine?.ToString() ?? "null"}");
+        if (Math.Abs(view.CurrentFrame - DifferentialFrame) > 1e-6)
+            throw new InvalidOperationException(
+                $"frame drifted from {DifferentialFrame} to {view.CurrentFrame}");
+        return view;
+    }
+
+    private byte[] RenderDifferentialArm(
+        string path,
+        Action<LottieAnimationView>? installProvider,
+        out IReadOnlyList<string> hierarchy)
+    {
+        var view = CreateDifferentialView(path);
+        try
+        {
+            hierarchy = view.GetAllHierarchyKeypaths();
+            installProvider?.Invoke(view);
+            view.CurrentFrame = DifferentialFrame;
+            view.ForceDisplayUpdate();
+            view.LayoutIfNeeded();
+            return RenderPixels(view, 120, 120);
+        }
+        finally
+        {
+            DetachFromWindow(view);
+            view.Dispose();
+        }
+    }
+
+    // Four arms share one minimal fixture, exact keypath, MainThread renderer and
+    // frame 30. Callback counts are diagnostics only; every provider arm must alter
+    // the bitmap, and both dynamic arms must reproduce the static-provider image.
+    private void GradientProviderDifferential(TestLogger logger, TestResults results)
     {
         try
         {
-            var path = NSBundle.MainBundle.PathForResource("PlaneAnimation", "json");
+            var path = NSBundle.MainBundle.PathForResource(DifferentialFixtureName, "json");
             if (path is null)
             {
-                logger.Fail("Dynamic gradient: bundled fixture PlaneAnimation.json is missing from the app bundle");
-                results.Fail("Provider_DynamicGradient", "bundled fixture missing");
+                logger.Fail($"B11 Lottie differential: bundled fixture {DifferentialFixtureName}.json is missing");
+                results.Fail("Provider_GradientDifferential", "bundled fixture missing");
                 return;
             }
 
-            var view = new LottieAnimationView();
-            view.Animation = LottieAnimation.Filepath(path);
-            AttachToWindow(view);
-            view.CurrentProgress = 0.5;
-            view.ForceDisplayUpdate();
-            view.LayoutIfNeeded();
-            var before = RenderPixels(view, 120, 120);
+            var noProvider = RenderDifferentialArm(path, null, out var hierarchy);
+            var recordedHierarchy = hierarchy.OrderBy(keypath => keypath, StringComparer.Ordinal).ToArray();
+            logger.Info($"[B11-CONTRACT] fixture={DifferentialFixtureName}.json renderer=MainThread frame={DifferentialFrame:0} keypath={DifferentialGradientKeypath}");
+            foreach (var keypath in recordedHierarchy)
+                logger.Info($"[B11-HIERARCHY] {keypath}");
+            if (!recordedHierarchy.Contains(DifferentialGradientKeypath, StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    $"recorded hierarchy does not contain exact gradient keypath '{DifferentialGradientKeypath}'");
 
-            int blockCalls = 0;
-            var provider = new GradientValueProvider(progress =>
+            GradientValueProvider? staticProvider = null;
+            var staticPixels = RenderDifferentialArm(path, view =>
             {
-                Interlocked.Increment(ref blockCalls);
-                return new[]
+                staticProvider = new GradientValueProvider(DifferentialPalette());
+                view.SetValueProvider(staticProvider, new AnimationKeypath(DifferentialGradientKeypath));
+            }, out _);
+
+            var pureSwiftCalls = 0;
+            var pureSwiftPixels = RenderDifferentialArm(path, view =>
+            {
+                pureSwiftCalls = InstallPureSwiftDynamicGradient((IntPtr)view.Handle);
+            }, out _);
+
+            var managedCalls = 0;
+            GradientValueProvider? managedProvider = null;
+            var managedPixels = RenderDifferentialArm(path, view =>
+            {
+                managedProvider = new GradientValueProvider(_ =>
                 {
-                    new LottieColor(1.0, 0.0, 0.0, 1.0),
-                    new LottieColor(0.0, 0.0, 1.0, 1.0),
-                };
-            });
+                    Interlocked.Increment(ref managedCalls);
+                    return DifferentialPalette();
+                });
+                view.SetValueProvider(managedProvider, new AnimationKeypath(DifferentialGradientKeypath));
+            }, out _);
 
-            view.SetValueProvider(provider, new AnimationKeypath("**.Gradient Fill.Colors"));
-            view.ForceDisplayUpdate();
-            view.LayoutIfNeeded();
-            var after = RenderPixels(view, 120, 120);
-            int changed = DifferingPixels(before, after);
-            DetachFromWindow(view);
+            GC.KeepAlive(staticProvider);
+            GC.KeepAlive(managedProvider);
+            var staticEffect = DifferingPixels(noProvider, staticPixels);
+            var pureSwiftEffect = DifferingPixels(noProvider, pureSwiftPixels);
+            var managedEffect = DifferingPixels(noProvider, managedPixels);
+            var pureSwiftVsStatic = DifferingPixels(staticPixels, pureSwiftPixels);
+            var managedVsStatic = DifferingPixels(staticPixels, managedPixels);
+            logger.Info(
+                $"[B11-DIFFERENTIAL] no->static={staticEffect} no->swift-dynamic={pureSwiftEffect} " +
+                $"no->managed-dynamic={managedEffect} swift-dynamic->static={pureSwiftVsStatic} " +
+                $"managed-dynamic->static={managedVsStatic} swift-calls={pureSwiftCalls} managed-calls={managedCalls}");
 
-            if (Volatile.Read(ref blockCalls) == 0)
-            {
-                logger.Fail("Dynamic GradientValueProvider block was never invoked by Lottie");
-                results.Fail("Provider_DynamicGradient", "block never invoked");
-            }
-            else if (changed < 20)
-            {
-                logger.Fail($"Dynamic GradientValueProvider ran ({blockCalls} call(s)) but the render changed in only {changed} pixels");
-                results.Fail("Provider_DynamicGradient", $"only {changed} pixels changed");
-            }
-            else
-            {
-                logger.Pass($"Dynamic GradientValueProvider ran {blockCalls} time(s) and changed {changed} rendered pixels");
-                results.Pass("Provider_DynamicGradient");
-            }
+            const int minimumEffectPixels = 1_000;
+            const int maximumParityPixels = 4;
+            if (staticEffect < minimumEffectPixels)
+                throw new InvalidOperationException(
+                    $"static provider changed only {staticEffect} pixels; fixture/keypath/render oracle is invalid");
+            if (pureSwiftCalls <= 0 || pureSwiftEffect < minimumEffectPixels || pureSwiftVsStatic > maximumParityPixels)
+                throw new InvalidOperationException(
+                    $"pure-Swift dynamic arm failed: calls={pureSwiftCalls}, effect={pureSwiftEffect}, parityDelta={pureSwiftVsStatic}");
+            if (managedCalls <= 0 || managedEffect < minimumEffectPixels || managedVsStatic > maximumParityPixels)
+                throw new InvalidOperationException(
+                    $"managed dynamic arm failed: calls={managedCalls}, effect={managedEffect}, parityDelta={managedVsStatic}");
+
+            logger.Pass("B11 Lottie gradient differential: static, pure-Swift dynamic, and managed dynamic providers produced the same observable render effect");
+            results.Pass("Provider_GradientDifferential");
         }
         catch (Exception ex)
         {
-            logger.Fail($"Dynamic GradientValueProvider: {ex.GetType().Name}: {ex.Message}");
-            results.Fail("Provider_DynamicGradient", $"{ex.GetType().Name}: {ex.Message}");
+            logger.Fail($"B11 Lottie gradient differential: {ex.GetType().Name}: {ex.Message}");
+            results.Fail("Provider_GradientDifferential", $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 }

@@ -15,6 +15,74 @@
   <!-- Package the README -->
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="tests/NativeControl/LottieDifferential.swift" Pack="false" />
   </ItemGroup>
+
+  <!-- The B11 pure-Swift arm must execute in the same process, against the same
+       Lottie binary, renderer and view shape as the managed arm. When the test
+       ProjectReference opts in, it uses a dedicated *-B11Differential configuration
+       and stages its @_cdecl installer beside that configuration's generated wrapper
+       sources. Production build and no-build pack outputs are therefore disjoint
+       from diagnostic outputs; packing an opted-in configuration is rejected. -->
+  <Target Name="_ValidateLottieDifferentialIsolation"
+          BeforeTargets="_StageLottieDifferentialShim"
+          Condition="'$(EnableLottieDifferentialShim)' == 'true'">
+    <Error Condition="'$(LottieDifferentialOutputIsolated)' != 'true'"
+           Text="EnableLottieDifferentialShim requires a dedicated *-B11Differential Configuration so test-only native symbols cannot contaminate production build outputs." />
+  </Target>
+
+  <Target Name="_RejectLottieDifferentialPack"
+          BeforeTargets="Pack"
+          Condition="'$(EnableLottieDifferentialShim)' == 'true'">
+    <Error Text="Test-only Lottie differential configurations cannot be packed." />
+  </Target>
+
+  <Target Name="_StageLottieDifferentialShim"
+          BeforeTargets="_ComputeSwiftFingerprint">
+    <PropertyGroup>
+      <_LottieDifferentialShimSource>$(MSBuildThisFileDirectory)tests/NativeControl/LottieDifferential.swift</_LottieDifferentialShimSource>
+      <_LottieDifferentialShimStaged>$(_SwiftBindingIntermediateDir)LottieDifferential.Wrapper.swift</_LottieDifferentialShimStaged>
+      <_LottieDifferentialShimHashFile>$(_SwiftBindingIntermediateDir)LottieDifferential.Wrapper.swift.sha256</_LottieDifferentialShimHashFile>
+      <_LottieDifferentialShimStamp>$(_SwiftBindingIntermediateDir)swift-binding.stamp</_LottieDifferentialShimStamp>
+    </PropertyGroup>
+    <GetFileHash Files="$(_LottieDifferentialShimSource)"
+                 Algorithm="SHA256"
+                 HashEncoding="hex"
+                 Condition="'$(EnableLottieDifferentialShim)' == 'true' AND Exists('$(_LottieDifferentialShimSource)')">
+      <Output TaskParameter="Items" ItemName="_LottieDifferentialShimHashedSource" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_LottieDifferentialShimNewHash>@(_LottieDifferentialShimHashedSource->'%(FileHash)')</_LottieDifferentialShimNewHash>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(_LottieDifferentialShimHashFile)"
+                       Condition="Exists('$(_LottieDifferentialShimHashFile)')">
+      <Output TaskParameter="Lines" PropertyName="_LottieDifferentialShimOldHash" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_LottieDifferentialShimNeedsStage
+          Condition="'$(EnableLottieDifferentialShim)' == 'true'
+                     AND ('$(_LottieDifferentialShimNewHash)' != '$(_LottieDifferentialShimOldHash)'
+                          OR !Exists('$(_LottieDifferentialShimStaged)'))">true</_LottieDifferentialShimNeedsStage>
+      <_LottieDifferentialShimNeedsRemoval
+          Condition="'$(EnableLottieDifferentialShim)' != 'true'
+                     AND (Exists('$(_LottieDifferentialShimStaged)')
+                          OR Exists('$(_LottieDifferentialShimHashFile)'))">true</_LottieDifferentialShimNeedsRemoval>
+    </PropertyGroup>
+    <MakeDir Directories="$(_SwiftBindingIntermediateDir)"
+             Condition="'$(_LottieDifferentialShimNeedsStage)' == 'true'" />
+    <Delete Files="$(_LottieDifferentialShimStamp)"
+            Condition="('$(_LottieDifferentialShimNeedsStage)' == 'true'
+                        OR '$(_LottieDifferentialShimNeedsRemoval)' == 'true')
+                       AND Exists('$(_LottieDifferentialShimStamp)')" />
+    <Copy SourceFiles="$(_LottieDifferentialShimSource)"
+          DestinationFiles="$(_LottieDifferentialShimStaged)"
+          Condition="'$(_LottieDifferentialShimNeedsStage)' == 'true'" />
+    <WriteLinesToFile File="$(_LottieDifferentialShimHashFile)"
+                      Lines="$(_LottieDifferentialShimNewHash)"
+                      Overwrite="true"
+                      Condition="'$(_LottieDifferentialShimNeedsStage)' == 'true'" />
+    <Delete Files="$(_LottieDifferentialShimStaged);$(_LottieDifferentialShimHashFile)"
+            Condition="'$(_LottieDifferentialShimNeedsRemoval)' == 'true'" />
+  </Target>
 
 </Project>

@@ -21,12 +21,14 @@
   <ItemGroup>
     <BundleResource Include="Resources/test-animation.json" />
     <BundleResource Include="Resources/PlaneAnimation.json" />
+    <BundleResource Include="Resources/B11GradientDifferential.json" />
   </ItemGroup>
 
   <!-- Reference the library project — NativeReference items (source + wrapper xcframeworks)
        propagate automatically via the SDK's GetNativeManifest target. -->
   <ItemGroup>
-    <ProjectReference Include="../SwiftBindings.Lottie.csproj" />
+    <ProjectReference Include="../SwiftBindings.Lottie.csproj"
+                      AdditionalProperties="EnableLottieDifferentialShim=true;LottieDifferentialOutputIsolated=true;Configuration=$(Configuration)-B11Differential" />
   </ItemGroup>
 
 </Project>
