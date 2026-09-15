@@ -27,8 +27,8 @@ partial class Build
     /// <c>--regression-jobs</c>-sized semaphore; the physical-iPhone lane is
     /// additionally serialized via a dedicated single-slot. iOS sim runs
     /// MonoJIT against an N-sized booted simulator fleet, iOS device runs
-    /// NativeAOT publish. macOS and MacCatalyst validate via direct binary
-    /// run. tvOS validates on the tvOS Simulator, and records
+    /// NativeAOT publish. macOS validates via direct binary run; Mac Catalyst
+    /// uses LaunchServices with per-launch evidence. tvOS validates on the tvOS Simulator, and records
     /// <c>UNAVAIL</c> when the host has no tvOS runtime installed.
     /// </summary>
     Target RegressionValidate => _ => _

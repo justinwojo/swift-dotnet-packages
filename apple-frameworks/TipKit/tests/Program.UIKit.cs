@@ -9,7 +9,23 @@ namespace SwiftBindings.TipKit.Tests;
 
 public class Application
 {
-    static void Main(string[] args) => UIApplication.Main(args, null, typeof(TestAppDelegate));
+    internal const string CatalystRunTokenArgument = "--swift-bindings-catalyst-run-token";
+    internal static string? CatalystRunToken { get; private set; }
+
+    static void Main(string[] args)
+    {
+#if MACCATALYST
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == CatalystRunTokenArgument)
+            {
+                CatalystRunToken = args[i + 1];
+                break;
+            }
+        }
+#endif
+        UIApplication.Main(args, null, typeof(TestAppDelegate));
+    }
 }
 
 [Register("TestAppDelegate")]
@@ -19,6 +35,10 @@ public class TestAppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
+#if MACCATALYST
+        if (Application.CatalystRunToken is { } runToken)
+            Console.WriteLine($"[TIPKIT-CATALYST] MANAGED ENTRY run_token={runToken}");
+#endif
         Window = new UIWindow(UIScreen.MainScreen.Bounds);
         Window.RootViewController = new TestMainViewController();
         Window.MakeKeyAndVisible();

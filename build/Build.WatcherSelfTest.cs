@@ -479,6 +479,111 @@ partial class Build
                 IsInfraFailure(new InvalidOperationException(
                     "launcher aborted before the app started: launcher exited with code 3 before the app produced output")));
 
+            // ── 7d. Mac Catalyst LaunchServices retry + correlation contract ──
+            const string catalystToken = "e45ace89fa59472495f59c9eab2bf609";
+            var catalystCrashOutput =
+                "*** Terminating app due to uncaught exception 'NSInternalInconsistencyException', " +
+                "reason: '_mainSceneIdentifier should have been set by now!'\n" +
+                "3 UIKitMacHelper -[UINSApplicationDelegate _sendActionsForGroupToAppropriateScenes:]\n" +
+                "Got a SIGABRT while executing native code.\n";
+            var catalystCrash = new TestRunResult(
+                TestRunStatus.Crashed, "crash signal in stdout: SIGABRT",
+                catalystCrashOutput, Array.Empty<string>());
+            Check("[catalyst] exact UIKitMacHelper scene crash before managed entry permits LaunchServices retry",
+                LaunchDiagnostics.IsUIKitMacHelperPreManagedEntryFailure(
+                    catalystCrash, CatalystLaunchContract.ManagedEntryMarker(catalystToken)));
+            Check("[catalyst] the retryable transport signature remains typed Crashed",
+                catalystCrash.Status == TestRunStatus.Crashed);
+
+            foreach (var nonMatch in new[]
+            {
+                "UIKitMacHelper\nGot a SIGABRT while executing native code.",
+                "_mainSceneIdentifier should have been set by now!\nGot a SIGABRT while executing native code.",
+                "_mainSceneIdentifier should have been set by now!\nUIKitMacHelper",
+            })
+            {
+                Check("[catalyst] partial scene signature cannot authorize a retry: " + nonMatch.Split('\n')[0],
+                    !LaunchDiagnostics.IsUIKitMacHelperPreManagedEntryFailure(
+                        catalystCrash with { Output = nonMatch },
+                        CatalystLaunchContract.ManagedEntryMarker(catalystToken)));
+            }
+            Check("[catalyst] exact scene signature after managed entry cannot authorize a retry",
+                !LaunchDiagnostics.IsUIKitMacHelperPreManagedEntryFailure(
+                    catalystCrash with
+                    {
+                        Output = CatalystLaunchContract.ManagedEntryMarker(catalystToken) + "\n" + catalystCrashOutput,
+                    },
+                    CatalystLaunchContract.ManagedEntryMarker(catalystToken)));
+
+            var correlatedOutput = CatalystLaunchContract.ManagedEntryMarker(catalystToken) + "\n" +
+                CatalystLaunchContract.ResultMarker(catalystToken, success: true) + "\nTEST SUCCESS\n";
+            var correlatedPass = new TestRunResult(
+                TestRunStatus.Success, "TEST SUCCESS", correlatedOutput, Array.Empty<string>());
+            Check("[catalyst] exact token correlates managed entry, TipKit result, and terminal success",
+                CatalystLaunchContract.IsCorrelatedTipKitSuccess(correlatedPass, catalystToken));
+            var correlatedDirectPlan = PlanTipKitDirectControl(correlatedPass, catalystToken);
+            Check("[catalyst-orchestrator] correlated direct pass schedules exactly three LaunchServices launches",
+                correlatedDirectPlan.Disposition == TipKitDirectControlDisposition.CorrelatedPass &&
+                correlatedDirectPlan.LaunchServicesRuns == 3 &&
+                correlatedDirectPlan.Result.Status == TestRunStatus.Success,
+                $"disposition={correlatedDirectPlan.Disposition} launches={correlatedDirectPlan.LaunchServicesRuns} " +
+                $"status={correlatedDirectPlan.Result.Status}");
+            var exactCrashDirectPlan = PlanTipKitDirectControl(catalystCrash, catalystToken);
+            Check("[catalyst-orchestrator] exact pre-entry scene crash schedules exactly three LaunchServices launches",
+                exactCrashDirectPlan.Disposition == TipKitDirectControlDisposition.ExactPreManagedEntrySceneCrash &&
+                exactCrashDirectPlan.LaunchServicesRuns == 3 &&
+                exactCrashDirectPlan.Result.Status == TestRunStatus.Crashed,
+                $"disposition={exactCrashDirectPlan.Disposition} launches={exactCrashDirectPlan.LaunchServicesRuns} " +
+                $"status={exactCrashDirectPlan.Result.Status}");
+            Check("[catalyst] stale result token cannot satisfy the current launch",
+                !CatalystLaunchContract.IsCorrelatedTipKitSuccess(
+                    correlatedPass, "8be5dc271a1d4fdd870db26fd8f0d41f"));
+            Check("[catalyst] TEST SUCCESS alone cannot satisfy the correlated TipKit gate",
+                !CatalystLaunchContract.IsCorrelatedTipKitSuccess(
+                    correlatedPass with { Output = "TEST SUCCESS\n" }, catalystToken));
+            var uncorrelatedDirectPlan = PlanTipKitDirectControl(
+                correlatedPass with { Output = "TEST SUCCESS\n" }, catalystToken);
+            Check("[catalyst-orchestrator] uncorrelated direct success is terminal failure with no LaunchServices launch",
+                uncorrelatedDirectPlan.Disposition == TipKitDirectControlDisposition.TerminalFailure &&
+                uncorrelatedDirectPlan.LaunchServicesRuns == 0 &&
+                uncorrelatedDirectPlan.Result.Status == TestRunStatus.Failed &&
+                (uncorrelatedDirectPlan.Result.Reason ?? "").Contains(
+                    "not correlated", StringComparison.Ordinal),
+                $"disposition={uncorrelatedDirectPlan.Disposition} launches={uncorrelatedDirectPlan.LaunchServicesRuns} " +
+                $"status={uncorrelatedDirectPlan.Result.Status} reason={uncorrelatedDirectPlan.Result.Reason}");
+            Check("[catalyst] tokenized failure cannot satisfy the correlated TipKit gate",
+                !CatalystLaunchContract.IsCorrelatedTipKitSuccess(
+                    correlatedPass with
+                    {
+                        Output = CatalystLaunchContract.ManagedEntryMarker(catalystToken) + "\n" +
+                            CatalystLaunchContract.ResultMarker(catalystToken, success: false) + "\nTEST SUCCESS\n",
+                    }, catalystToken));
+            var partialCrashDirectPlan = PlanTipKitDirectControl(
+                catalystCrash with { Output = "UIKitMacHelper\nGot a SIGABRT while executing native code." },
+                catalystToken);
+            Check("[catalyst-orchestrator] partial direct crash is terminal and cannot schedule LaunchServices",
+                partialCrashDirectPlan.Disposition == TipKitDirectControlDisposition.TerminalFailure &&
+                partialCrashDirectPlan.LaunchServicesRuns == 0 &&
+                partialCrashDirectPlan.Result.Status == TestRunStatus.Crashed,
+                $"disposition={partialCrashDirectPlan.Disposition} launches={partialCrashDirectPlan.LaunchServicesRuns} " +
+                $"status={partialCrashDirectPlan.Result.Status}");
+            var foldedCatalyst = MacCatalystLaunchRunner.FoldAttempts(
+                new[]
+                {
+                    new MacCatalystLaunchRunner.Attempt(
+                        0, "direct", catalystToken, "/tmp/direct-attempt", catalystCrash),
+                    new MacCatalystLaunchRunner.Attempt(
+                        1, "launchservices", "8be5dc271a1d4fdd870db26fd8f0d41f",
+                        "/tmp/launchservices-attempt", correlatedPass),
+                }, correlatedPass, "fresh LaunchServices confirmation passed");
+            Check("[catalyst] a later LaunchServices pass preserves the direct crash as a typed attempt",
+                foldedCatalyst.Status == TestRunStatus.Success &&
+                foldedCatalyst.Output.Contains("transport=direct", StringComparison.Ordinal) &&
+                foldedCatalyst.Output.Contains("status=Crashed", StringComparison.Ordinal) &&
+                foldedCatalyst.Output.Contains(
+                    LaunchDiagnostics.UIKitMacHelperSceneBootstrapAssertion, StringComparison.Ordinal),
+                foldedCatalyst.Output);
+
             // ── 8. IsInfraFailure classifier ─────────────────────────────
             Check("[is-infra] SimulatorBootTimeout → true",
                 IsInfraFailure(new SimulatorBootTimeout("did not boot")));

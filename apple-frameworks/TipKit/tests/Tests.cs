@@ -347,6 +347,11 @@ internal static class Tests
 
         // Summary
         Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
+#if MACCATALYST
+        if (Application.CatalystRunToken is { } runToken)
+            Log($"[TIPKIT-CATALYST] RESULT run_token={runToken} status={(failed == 0 ? "success" : "failure")}",
+                prefixed: false);
+#endif
         if (failed == 0)
             Log("TEST SUCCESS", prefixed: false);
         else

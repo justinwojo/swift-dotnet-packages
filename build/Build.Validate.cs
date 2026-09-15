@@ -6,6 +6,56 @@ using SwiftBindings.Build.Models;
 
 partial class Build
 {
+    internal enum TipKitDirectControlDisposition
+    {
+        CorrelatedPass,
+        ExactPreManagedEntrySceneCrash,
+        TerminalFailure,
+    }
+
+    internal sealed record TipKitDirectControlPlan(
+        TestRunResult Result,
+        TipKitDirectControlDisposition Disposition)
+    {
+        public int LaunchServicesRuns => Disposition is
+            TipKitDirectControlDisposition.CorrelatedPass or
+            TipKitDirectControlDisposition.ExactPreManagedEntrySceneCrash
+                ? 3
+                : 0;
+    }
+
+    /// <summary>
+    /// Decides whether TipKit's historical direct-launch control may proceed to the three
+    /// required LaunchServices confirmations. These two dispositions are intentionally
+    /// exhaustive: a token-correlated pass, or the exact UIKitMacHelper scene-bootstrap crash
+    /// before managed entry. In particular, a bare <c>TEST SUCCESS</c> is remapped to failure
+    /// before its immutable attempt receipt is written.
+    /// </summary>
+    internal static TipKitDirectControlPlan PlanTipKitDirectControl(
+        TestRunResult result, string runToken)
+    {
+        if (CatalystLaunchContract.IsCorrelatedTipKitSuccess(result, runToken))
+            return new(result, TipKitDirectControlDisposition.CorrelatedPass);
+
+        if (LaunchDiagnostics.IsUIKitMacHelperPreManagedEntryFailure(
+                result, CatalystLaunchContract.ManagedEntryMarker(runToken)))
+        {
+            return new(result, TipKitDirectControlDisposition.ExactPreManagedEntrySceneCrash);
+        }
+
+        if (result.Status == TestRunStatus.Success)
+        {
+            result = result with
+            {
+                Status = TestRunStatus.Failed,
+                Reason = "Direct TEST SUCCESS was not correlated with this launch's " +
+                    "managed-entry and TipKit result markers",
+            };
+        }
+
+        return new(result, TipKitDirectControlDisposition.TerminalFailure);
+    }
+
     /// <summary>
     /// Install + launch a sim test app on an iOS Simulator and parse its
     /// stdout via <see cref="StdoutWatcher"/>. Direct port of
@@ -450,13 +500,8 @@ partial class Build
     }
 
     /// <summary>
-    /// Validate a MacCatalyst test app by running the bundled binary and
-    /// watching stdout for <c>TEST SUCCESS</c> / <c>TEST FAILED</c>. Catalyst
-    /// produces a UIKit-on-Mac <c>.app</c> bundle; the executable inside
-    /// <c>Contents/MacOS/&lt;AppName&gt;</c> writes Console output via the
-    /// unified logging system, which still pipes to the parent shell when the
-    /// binary is launched directly. (Launching via <c>open</c> would detach
-    /// the process and lose stdout.)
+    /// Validate a MacCatalyst test app through LaunchServices while retaining
+    /// token-correlated stdout, stderr, result, and attempt evidence.
     /// </summary>
     Target ValidateMacCatalyst => _ => _
         .Description("Validate a MacCatalyst test app (--library X [--timeout N])")
@@ -468,11 +513,11 @@ partial class Build
         });
 
     /// <summary>
-    /// Pure-function validate-maccatalyst core. Mirrors
-    /// <see cref="ValidateMacFor"/> but resolves the bundled binary inside
-    /// <c>&lt;App&gt;.app/Contents/MacOS/&lt;App&gt;</c>. Returns the
-    /// <see cref="TestRunResult"/> instead of throwing — callers wrap with
-    /// <see cref="ReportTerminalStatus"/>.
+    /// Mac Catalyst validation core. The shipping path uses <c>open -n -W</c>, which lets
+    /// LaunchServices create UIKit scenes correctly. TipKit retains one historical direct-launch
+    /// control: only the exact pre-managed-entry UIKitMacHelper scene assertion permits the three
+    /// required fresh LaunchServices confirmations. Every attempt remains in the output and in an
+    /// immutable evidence directory.
     /// </summary>
     TestRunResult ValidateMacCatalystFor(string library, int timeoutSeconds, string rid,
         Action<string>? onLine = null)
@@ -489,20 +534,76 @@ partial class Build
                 $"MacCatalyst binary not found at {binaryPath}\n" +
                 $"Run BuildTestApp --library {library} --platform maccatalyst first.");
 
-        Info($"Launching MacCatalyst test: {binaryPath} " +
-             $"(launch budget: {LaunchBudgetSeconds}s, run budget: {timeoutSeconds}s)");
+        var evidenceDirectory = MacCatalystLaunchRunner.CreateEvidenceDirectory(appName);
+        Info($"Retaining MacCatalyst launch evidence in {evidenceDirectory}");
+        var attempts = new List<MacCatalystLaunchRunner.Attempt>();
+        var requireTipKitCorrelation = library.Equals("TipKit", StringComparison.OrdinalIgnoreCase);
+        var launchServicesRuns = 1;
 
-        var psi = new System.Diagnostics.ProcessStartInfo
+        if (requireTipKitCorrelation)
         {
-            FileName = binaryPath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        var result = StdoutWatcher
-            .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(LaunchBudgetSeconds), onLine: Info)
-            .GetAwaiter().GetResult();
+            var directToken = Guid.NewGuid().ToString("N");
+            Info($"Launching retained TipKit direct-launch control: {binaryPath} " +
+                 $"(token: {directToken}, launch budget: {LaunchBudgetSeconds}s, run budget: {timeoutSeconds}s)");
+            var directPsi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = binaryPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            directPsi.ArgumentList.Add(CatalystLaunchContract.RunTokenArgument);
+            directPsi.ArgumentList.Add(directToken);
+            var directResult = StdoutWatcher
+                .RunAsync(directPsi, TimeSpan.FromSeconds(timeoutSeconds),
+                    TimeSpan.FromSeconds(LaunchBudgetSeconds), onLine: Info)
+                .GetAwaiter().GetResult();
+            var directPlan = PlanTipKitDirectControl(directResult, directToken);
+            directResult = directPlan.Result;
+            var directAttempt = MacCatalystLaunchRunner.RetainDirectAttempt(
+                evidenceDirectory, attempts.Count, directToken, directResult);
+            attempts.Add(directAttempt);
 
+            if (directPlan.LaunchServicesRuns == 0)
+            {
+                Info("TipKit direct-launch control did not match the sole LaunchServices retry signature; stopping.");
+                var terminal = MacCatalystLaunchRunner.FoldAttempts(attempts, directResult);
+                Info("=== APP OUTPUT ===\n" + terminal.Output);
+                return terminal;
+            }
+
+            launchServicesRuns = directPlan.LaunchServicesRuns;
+            if (directPlan.Disposition == TipKitDirectControlDisposition.ExactPreManagedEntrySceneCrash)
+                Info("Retained the exact UIKitMacHelper pre-managed-entry crash; proceeding to three LaunchServices launches.");
+            else
+                Info("Direct control passed with correlated markers; LaunchServices still requires three fresh confirmations.");
+        }
+
+        TestRunResult? lastResult = null;
+        for (var launch = 0; launch < launchServicesRuns; launch++)
+        {
+            var runToken = Guid.NewGuid().ToString("N");
+            Info($"Launching MacCatalyst test through LaunchServices ({launch + 1}/{launchServicesRuns}, token: {runToken}, " +
+                 $"launch budget: {LaunchBudgetSeconds}s, run budget: {timeoutSeconds}s)");
+            var attempt = MacCatalystLaunchRunner.RunLaunchServicesAsync(
+                    appPath, binaryPath, attempts.Count, runToken,
+                    TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(LaunchBudgetSeconds),
+                    evidenceDirectory, requireTipKitCorrelation, Info)
+                .GetAwaiter().GetResult();
+            attempts.Add(attempt);
+            lastResult = attempt.Result;
+            if (lastResult.Status != TestRunStatus.Success)
+            {
+                var terminal = MacCatalystLaunchRunner.FoldAttempts(attempts, lastResult);
+                Info("=== APP OUTPUT ===\n" + terminal.Output);
+                return terminal;
+            }
+        }
+
+        var result = MacCatalystLaunchRunner.FoldAttempts(
+            attempts, lastResult!, requireTipKitCorrelation
+                ? "three fresh LaunchServices launches produced correlated managed-entry and TipKit success markers"
+                : lastResult!.Reason);
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }

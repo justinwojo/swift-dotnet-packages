@@ -26,6 +26,10 @@ namespace SwiftBindings.Build.Models;
 /// </summary>
 public static class LaunchDiagnostics
 {
+    /// <summary>The exact UIKitMacHelper assertion caused by bypassing LaunchServices.</summary>
+    public const string UIKitMacHelperSceneBootstrapAssertion =
+        "_mainSceneIdentifier should have been set by now!";
+
     /// <summary>
     /// The launcher's own confirmation that it handed the process to the OS. Past this point a
     /// failure belongs to the app.
@@ -142,6 +146,25 @@ public static class LaunchDiagnostics
         var lines = output!.Split('\n');
         if (lines.Any(line => !IsLauncherOwnedLine(line))) return false;
         return lines.Any(IsRetryableInfrastructureLine);
+    }
+
+    /// <summary>
+    /// True only for the retained Mac Catalyst direct-launch scene-bootstrap crash before the
+    /// tokenized managed lifecycle marker. This is the sole product-crash-shaped transcript that
+    /// the Catalyst runner may follow with a LaunchServices attempt; the original attempt remains
+    /// recorded as <see cref="TestRunStatus.Crashed"/>.
+    /// </summary>
+    public static bool IsUIKitMacHelperPreManagedEntryFailure(
+        TestRunResult result, string managedEntryMarker)
+    {
+        if (result.Status != TestRunStatus.Crashed || string.IsNullOrEmpty(result.Output) ||
+            result.Output.Contains(managedEntryMarker, StringComparison.Ordinal))
+            return false;
+
+        return result.Output.Contains(UIKitMacHelperSceneBootstrapAssertion, StringComparison.Ordinal) &&
+            result.Output.Contains("UIKitMacHelper", StringComparison.Ordinal) &&
+            (result.Output.Contains("SIGABRT", StringComparison.Ordinal) ||
+             result.Output.Contains("Abort trap: 6", StringComparison.Ordinal));
     }
 
     /// <summary>
