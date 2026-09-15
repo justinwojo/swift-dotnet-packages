@@ -114,6 +114,21 @@ internal static class Tests
             + "(the synchronous errorOut path does not reach the generated typed-error dispatcher)");
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ExpectAuthenticationFailure(Func<byte[]> operation, string what)
+    {
+        try
+        {
+            var result = operation();
+            throw new InvalidOperationException(
+                $"{what} returned {result?.Length ?? -1} byte(s) instead of throwing");
+        }
+        catch (SwiftException sex)
+        {
+            AssertAuthenticationFailure(sex, what);
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         await Task.Yield(); // run the body off ViewDidLoad's synchronous prologue
@@ -491,20 +506,7 @@ internal static class Tests
             var plaintext = Encoding.UTF8.GetBytes("auth-test plaintext");
             var sealedBox = AES.GCM.Seal(plaintext, key1);
 
-            Exception? observed = null;
-            try
-            {
-                var wrong = AES.GCM.Open(sealedBox, key2);
-                throw new InvalidOperationException(
-                    $"Open with the wrong key returned {wrong?.Length ?? -1} byte(s) instead of throwing");
-            }
-            catch (SwiftException sex)
-            {
-                observed = sex;
-                AssertAuthenticationFailure(sex, "wrong-key Open");
-            }
-            if (observed is null)
-                throw new InvalidOperationException("no exception was observed from Open with the wrong key");
+            ExpectAuthenticationFailure(() => AES.GCM.Open(sealedBox, key2), "wrong-key Open");
             Pass("AES.GCM wrong-key Open reports CryptoKitError.authenticationFailure");
         }
         catch (Exception ex)
@@ -533,6 +535,13 @@ internal static class Tests
             var aad = Encoding.UTF8.GetBytes("authenticated-header");
             var wrongAad = Encoding.UTF8.GetBytes("authenticated-headeR"); // one bit different
             var sealedBox = AES.GCM.Seal(plaintext, key, aad);
+
+            // First matching open proves the call itself works; the second call below
+            // proves the first did not consume or corrupt the resilient SealedBox payload.
+            var recoveredBeforeProperties = AES.GCM.Open(sealedBox, key, aad);
+            if (recoveredBeforeProperties is null || !recoveredBeforeProperties.AsSpan().SequenceEqual(plaintext))
+                throw new InvalidOperationException("first Open with matching AAD failed");
+
             var ciphertext = sealedBox.Ciphertext;
             var tag = sealedBox.Tag;
             if (ciphertext is null || ciphertext.Length != plaintext.Length)
@@ -549,16 +558,9 @@ internal static class Tests
                     $"Open with matching AAD returned '{Encoding.UTF8.GetString(recovered)}', expected '{Encoding.UTF8.GetString(plaintext)}'");
 
             // (2) Wrong AAD must be rejected with the authentication-failure category.
-            try
-            {
-                var bogus = AES.GCM.Open(sealedBox, key, wrongAad);
-                throw new InvalidOperationException(
-                    $"Open with mismatched AAD returned {bogus?.Length ?? -1} byte(s) instead of throwing — the AAD is not authenticated");
-            }
-            catch (SwiftException sex)
-            {
-                AssertAuthenticationFailure(sex, "mismatched-AAD Open");
-            }
+            ExpectAuthenticationFailure(
+                () => AES.GCM.Open(sealedBox, key, wrongAad),
+                "mismatched-AAD Open");
 
             Pass("AES.GCM Seal/Open with AD round-trips and rejects a mismatched AAD");
         }
