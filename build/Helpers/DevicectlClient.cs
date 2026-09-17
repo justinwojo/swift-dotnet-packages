@@ -105,7 +105,17 @@ public sealed class DevicectlClient
     /// </summary>
     public ProcessStartInfo BuildLaunchPsi(string bundleId, IEnumerable<string>? launchArguments = null)
     {
-        var psi = new ProcessStartInfo { FileName = "xcrun", UseShellExecute = false };
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xcrun",
+            UseShellExecute = false,
+            // `--console` forwards our stdin to the app. An inherited stdin devicectl cannot
+            // forward (a peerless unix socket, which is what a detached or agent-spawned nuke
+            // inherits) fails every launch with CoreDeviceError 10002 / EINVAL before the app
+            // starts. Hand it a pipe we own instead; the pipe stays open until the watcher
+            // disposes the process, so the forwarded console is not cut short by an early EOF.
+            RedirectStandardInput = true,
+        };
         psi.ArgumentList.Add("devicectl");
         psi.ArgumentList.Add("device");
         psi.ArgumentList.Add("process");
