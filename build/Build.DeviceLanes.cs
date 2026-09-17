@@ -143,8 +143,9 @@ partial class Build
         var result = ValidateDeviceFor(library, Timeout, deviceUdid, aot: !mono, rid, onLine: sink, resolvedApp: app);
 
         // Only a run that got far enough to be judged is worth judging: a crash
-        // or timeout is reported as itself, not as missing evidence.
-        if (result.Status == TestRunStatus.Success)
+        // or timeout is reported as itself, not as missing evidence. An unqualified
+        // run completed its offline suite, so its runtime claim is judged too.
+        if (result.Status is TestRunStatus.Success or TestRunStatus.Unqualified)
             AssertRuntimeFlavor(result.Output, expectMono: mono, laneLabel);
 
         return result;

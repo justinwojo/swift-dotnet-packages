@@ -83,6 +83,8 @@ partial class Build
                 StoreKitSandboxReadiness.RequireFreshNativeReceipt(
                     Receipt(token, product, "ios", bundle, "sandbox", 1, 0, 0), config, token));
 
+            AssertStoreKitLanePolicy(bundle, product);
+
             var deviceLaunch = new DevicectlClient("00000000-0000-0000-0000-000000000000")
                 .BuildLaunchPsi(bundle,
                     [StoreKitSandboxReadiness.ProductIdArgument, product]);
@@ -93,6 +95,127 @@ partial class Build
                     new[] { StoreKitSandboxReadiness.ProductIdArgument, product }),
                 "devicectl must forward StoreKit product arguments positionally after the bundle id");
         });
+
+    /// <summary>
+    /// Lane policy: which lanes may run the live Sandbox section, and that no lane can turn an
+    /// unattested capability into a pass (or into a product FAIL) on its way to the matrix.
+    /// </summary>
+    void AssertStoreKitLanePolicy(string bundle, string product)
+    {
+        // Resolution. A missing product id is offline-only on every platform. A configured id is
+        // live on "ios" and "tvos": the simulators prove readiness with the same-device native
+        // control first, while the physical-device lanes (also "ios") receive the id without a
+        // device-side control, so a configured device run asserts live Sandbox unattested. Mac
+        // lanes stay offline-only because their test apps cannot hold a Sandbox receipt.
+        foreach (var platform in new[] { "ios", "tvos", "macos", "maccatalyst" })
+        {
+            foreach (var missingId in new[] { null, "", "   " })
+            {
+                var offline = StoreKitSandboxReadiness.ResolveLane(missingId, platform, bundle);
+                Assert.True(offline.Mode == StoreKitSandboxReadiness.LaneMode.OfflineOnly
+                    && offline.Configuration is null
+                    && offline.NotQualifiedReason!.Contains(StoreKitSandboxReadiness.ProductIdEnvironmentVariable, StringComparison.Ordinal),
+                    $"{platform}: a missing product id must resolve offline-only and name the missing variable");
+                Assert.True(StoreKitManagedLaunchArguments(offline).Length == 0,
+                    $"{platform}: an offline-only lane must not hand the app a product id");
+            }
+
+            // A malformed id is an operator error on every platform, including the Mac lanes that
+            // never use it.
+            ExpectStoreKitInvalidOperation(() =>
+                StoreKitSandboxReadiness.ResolveLane("com.example.nonexistent", platform, bundle));
+            ExpectStoreKitInvalidOperation(() =>
+                StoreKitSandboxReadiness.ResolveLane("placeholder.product", platform, bundle));
+        }
+
+        foreach (var platform in new[] { "ios", "tvos" })
+        {
+            var live = StoreKitSandboxReadiness.ResolveLane(product, platform, bundle);
+            Assert.True(live.Mode == StoreKitSandboxReadiness.LaneMode.Live
+                && live.Configuration == new StoreKitSandboxReadiness.Configuration(platform, bundle, product)
+                && live.NotQualifiedReason is null,
+                $"{platform}: a configured product id must resolve to a live lane for that platform");
+            Assert.True(StoreKitManagedLaunchArguments(live)
+                    .SequenceEqual(new[] { StoreKitSandboxReadiness.ProductIdArgument, product }),
+                $"{platform}: a live lane must hand the app exactly the product-id argument");
+        }
+
+        foreach (var platform in new[] { "macos", "maccatalyst" })
+        {
+            var mac = StoreKitSandboxReadiness.ResolveLane(product, platform, bundle);
+            Assert.True(mac.Mode == StoreKitSandboxReadiness.LaneMode.OfflineOnly
+                && mac.Configuration is null
+                && mac.NotQualifiedReason!.Contains("no command-line Sandbox readiness control exists", StringComparison.Ordinal),
+                $"{platform}: a configured product id must still be offline-only (no Mac readiness control)");
+            Assert.True(StoreKitManagedLaunchArguments(mac).Length == 0,
+                $"{platform}: the Mac lane must never receive the product id");
+        }
+
+        ExpectStoreKitInvalidOperation(() => StoreKitSandboxReadiness.ResolveLane(product, "watchos", bundle));
+
+        Assert.True(StoreKitLanePlatform(CellPlatform.IosSim) == "ios"
+            && StoreKitLanePlatform(CellPlatform.IosDevice) == "ios"
+            && StoreKitLanePlatform(CellPlatform.IosDeviceMonoAot) == "ios"
+            && StoreKitLanePlatform(CellPlatform.TvOs) == "tvos"
+            && StoreKitLanePlatform(CellPlatform.MacOs) == "macos"
+            && StoreKitLanePlatform(CellPlatform.MacCatalyst) == "maccatalyst",
+            "every matrix platform must map to its StoreKit lane platform");
+
+        // Verdict reconciliation.
+        var offlineLane = StoreKitSandboxReadiness.ResolveLane(null, "macos", bundle);
+        var liveLane = StoreKitSandboxReadiness.ResolveLane(product, "ios", bundle);
+        static TestRunResult Run(TestRunStatus status, string? reason = null) =>
+            new(status, reason, "output", Array.Empty<string>());
+
+        var launderedPass = StoreKitSandboxReadiness.ApplyLaneVerdict(Run(TestRunStatus.Success, "TEST SUCCESS"), offlineLane);
+        Assert.True(launderedPass.Status == TestRunStatus.Failed,
+            "a TEST SUCCESS from an offline-only lane must never survive as a pass");
+
+        var unqualified = StoreKitSandboxReadiness.ApplyLaneVerdict(
+            Run(TestRunStatus.Unqualified, "TEST UNQUALIFIED: offline suite passed"), offlineLane);
+        Assert.True(unqualified.Status == TestRunStatus.Unqualified
+            && unqualified.Reason!.Contains("offline suite passed", StringComparison.Ordinal)
+            && unqualified.Reason.Contains(offlineLane.NotQualifiedReason!, StringComparison.Ordinal),
+            "an offline-only UNQUALIFIED run must keep its status and carry the lane's reason");
+
+        var skippedLive = StoreKitSandboxReadiness.ApplyLaneVerdict(Run(TestRunStatus.Unqualified, "x"), liveLane);
+        Assert.True(skippedLive.Status == TestRunStatus.Failed,
+            "an app that skips live qualification on a live lane is a contract failure");
+
+        foreach (var status in new[] { TestRunStatus.Failed, TestRunStatus.Crashed, TestRunStatus.Timeout, TestRunStatus.Exited })
+        {
+            Assert.True(StoreKitSandboxReadiness.ApplyLaneVerdict(Run(status, "r"), offlineLane).Status == status,
+                $"an offline-lane {status} must be reported as itself");
+            Assert.True(StoreKitSandboxReadiness.ApplyLaneVerdict(Run(status, "r"), liveLane).Status == status,
+                $"a live-lane {status} must be reported as itself");
+        }
+        Assert.True(StoreKitSandboxReadiness.ApplyLaneVerdict(Run(TestRunStatus.Success), liveLane).Status == TestRunStatus.Success,
+            "a live-lane pass stays a pass");
+        Assert.True(ApplyStoreKitLaneVerdict(Run(TestRunStatus.Unqualified, "other library"), null).Status == TestRunStatus.Unqualified,
+            "a non-StoreKit lane leaves the app's own verdict alone");
+
+        // Matrix and standalone reporting: UNQUALIFIED is ERROR, counts as a failure, never a pass.
+        var cell = new Cell(StoreKit2Library, CellPlatform.MacOs);
+        var outcome = ToOutcome(cell, unqualified, TimeSpan.FromSeconds(1));
+        Assert.True(outcome.Result == CellResult.Error
+            && outcome.Reason!.Contains("QUALIFICATION NOT RUN", StringComparison.Ordinal)
+            && outcome.Reason.Contains(offlineLane.NotQualifiedReason!, StringComparison.Ordinal),
+            $"UNQUALIFIED must map to ERROR with the lane reason; got {outcome.Result}: {outcome.Reason}");
+        Assert.True(IsFailure(outcome, allowUnavailable: false) && IsFailure(outcome, allowUnavailable: true),
+            "an UNQUALIFIED cell must fail the run with or without --allow-unavailable");
+        Assert.True(ToOutcome(cell, launderedPass, TimeSpan.Zero).Result == CellResult.Fail,
+            "a laundered offline TEST SUCCESS must reach the matrix as FAIL");
+        ExpectStoreKitInvalidOperation(() => ReportTerminalStatus(unqualified, StoreKit2Library));
+
+        // The managed app and the watcher must agree on the marker, and the app must gate the
+        // live section on the harness-provided product id rather than on the platform.
+        var appSource = File.ReadAllText(RootDirectory / "apple-frameworks" / "StoreKit2" / "tests" / "Tests.cs");
+        Assert.True(appSource.Contains($"$\"{StdoutWatcher.UnqualifiedPrefix}: ", StringComparison.Ordinal),
+            "the StoreKit2 test app must emit the watcher's TEST UNQUALIFIED marker");
+        Assert.True(appSource.Contains("if (sandboxProductId is not null)", StringComparison.Ordinal)
+                && !appSource.Contains("#if IOS || TVOS", StringComparison.Ordinal),
+            "the StoreKit2 live section must be gated on the product id, identically on every platform");
+    }
 
     private static InvalidOperationException ExpectStoreKitInvalidOperation(Action action)
     {

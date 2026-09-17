@@ -111,6 +111,32 @@ partial class Build
                 successResult.Status == TestRunStatus.Success,
                 $"actual={successResult.Status} reason={successResult.Reason}");
 
+            // ── 4b. Unqualified classification ───────────────────────────
+            // An offline-only run that could not attest a capability. It must be its own
+            // terminal state, never Success, and a [SKIP] substring must not hide it.
+            var unqualifiedLine = "2026-09-17 03:12:35.029 App[1:2] TEST UNQUALIFIED: offline suite passed (43 passed, 0 skipped)";
+            var unqualified = StdoutWatcher.Classify(unqualifiedLine);
+            Check("[unqualified] syslog-prefixed 'TEST UNQUALIFIED: ...' → Unqualified",
+                unqualified.Status == TestRunStatus.Unqualified && unqualified.Reason == unqualifiedLine,
+                $"actual={unqualified.Status} reason={unqualified.Reason}");
+            var skipUnqualified = StdoutWatcher.Classify("[SKIP] TEST UNQUALIFIED: hidden?").Status;
+            Check("[unqualified] '[SKIP] TEST UNQUALIFIED' → Unqualified (NOT Running)",
+                skipUnqualified == TestRunStatus.Unqualified, $"actual={skipUnqualified}");
+
+            var psiUnqualified = new ProcessStartInfo
+            {
+                FileName = "/bin/sh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psiUnqualified.ArgumentList.Add("-c");
+            psiUnqualified.ArgumentList.Add("echo 'PASS: offline'; echo 'TEST UNQUALIFIED: live not run'; sleep 30");
+            var unqualifiedResult = await StdoutWatcher.RunAsync(psiUnqualified, TimeSpan.FromSeconds(10));
+            Check("[end-to-end] echo 'TEST UNQUALIFIED: ...' → Unqualified (NOT Timeout, NOT Success)",
+                unqualifiedResult.Status == TestRunStatus.Unqualified,
+                $"actual={unqualifiedResult.Status} reason={unqualifiedResult.Reason}");
+
             // ── 5. End-to-end RunAsync: TEST FAILED: N failures ──────────
             var psiFail = new ProcessStartInfo
             {

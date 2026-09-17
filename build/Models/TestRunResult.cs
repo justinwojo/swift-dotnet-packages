@@ -39,6 +39,14 @@ public enum TestRunStatus
     /// and re-running silence is how an intermittent hang is recorded as a pass.
     /// </summary>
     LauncherAborted,
+
+    /// <summary>
+    /// Saw a line containing <c>TEST UNQUALIFIED</c>: the app ran every check it was allowed to
+    /// run and none failed, but a qualification section that needs an owner-held capability the
+    /// lane could not attest (for example a StoreKit Sandbox account) did not run. Never a pass
+    /// and never retryable; a regression cell records it as ERROR, which still fails the run.
+    /// </summary>
+    Unqualified,
 }
 
 /// <summary>

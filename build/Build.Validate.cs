@@ -95,9 +95,10 @@ partial class Build
             throw new InvalidOperationException(
                 $"Error: App not found at {appPath}\nRun BuildTestApp --library {library} first.");
 
-        return ValidateSimAt(appPath, appName, bundleId,
+        var storeKitLane = ResolveStoreKitSandboxLane(library, "ios", bundleId);
+        return ApplyStoreKitLaneVerdict(ValidateSimAt(appPath, appName, bundleId,
             ResolveRunBudgetSeconds(library, timeoutSeconds), deviceUdid, onLine,
-            storeKitConfiguration: RequireStoreKitSandboxConfiguration(library, "ios", bundleId));
+            storeKitConfiguration: storeKitLane?.Configuration), storeKitLane);
     }
 
     /// <summary>
@@ -236,6 +237,7 @@ partial class Build
 
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var (testDir, appName, bundleId) = ResolveTestNames(library);
+        var storeKitLane = ResolveStoreKitSandboxLane(library, "tvos", bundleId);
 
         // The tvOS sim build is not given an explicit RID, so the SDK picks the
         // host's — probe both rather than hard-coding Apple silicon.
@@ -256,8 +258,8 @@ partial class Build
 
         Info($"tvOS simulator: {tv.Name} [{tv.Runtime}] {tv.Udid} (booted={tv.WasBooted})");
         if (tv.WasBooted)
-            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
-                RequireStoreKitSandboxConfiguration(library, "tvos", bundleId)), null);
+            return (ApplyStoreKitLaneVerdict(ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
+                storeKitLane?.Configuration), storeKitLane), null);
 
         // A tvOS sim we booted ourselves must not outlive this leg. Other lanes
         // install with `simctl install booted`, which becomes ambiguous once a
@@ -268,8 +270,8 @@ partial class Build
         fleet.BootAndWaitForReady(tv.Udid);
         try
         {
-            return (ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
-                RequireStoreKitSandboxConfiguration(library, "tvos", bundleId)), null);
+            return (ApplyStoreKitLaneVerdict(ValidateSimAt(appPath, appName, bundleId, timeoutSeconds, tv.Udid, onLine,
+                storeKitLane?.Configuration), storeKitLane), null);
         }
         finally
         {
@@ -305,7 +307,10 @@ partial class Build
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
         var app = resolvedApp ?? ResolveTestApp(library, forDevice: true);
         var (testDir, appName, bundleId) = (app.TestDir, app.AppName, app.BundleId);
-        var storeKitConfiguration = RequireStoreKitSandboxConfiguration(library, "ios", bundleId);
+        // A configured product id is handed to the device app without a device-side native
+        // readiness control (none exists for physical devices yet). Without a product id the
+        // device lane runs the offline suite and cannot pass.
+        var storeKitLane = ResolveStoreKitSandboxLane(library, "ios", bundleId);
 
         var config = aot ? "Release" : "Debug";
         var appPath = ResolveAppPath(testDir, config, "ios", rid, appName);
@@ -334,12 +339,7 @@ partial class Build
         dev.InstallApp(appPath);
 
         var launchBudget = LaunchBudgetSeconds;
-        var managedLaunchArguments = storeKitConfiguration is null
-            ? Array.Empty<string>()
-            : new[]
-            {
-                StoreKitSandboxReadiness.ProductIdArgument, storeKitConfiguration.ProductId,
-            };
+        var managedLaunchArguments = StoreKitManagedLaunchArguments(storeKitLane);
         TestRunResult result;
         var priorAttempts = new List<string>();
         for (var attempt = 1; ; attempt++)
@@ -373,7 +373,7 @@ partial class Build
             Thread.Sleep(settle);
         }
 
-        result = LaunchDiagnostics.WithPriorAttempts(result, priorAttempts);
+        result = ApplyStoreKitLaneVerdict(LaunchDiagnostics.WithPriorAttempts(result, priorAttempts), storeKitLane);
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
@@ -453,7 +453,10 @@ partial class Build
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
-        var (testDir, appName, _) = ResolveTestNames(library);
+        var (testDir, appName, bundleId) = ResolveTestNames(library);
+        // Offline-only for StoreKit2 whatever is configured: the unbundled macOS test executable
+        // cannot hold a Sandbox receipt and no macOS readiness control exists.
+        var storeKitLane = ResolveStoreKitSandboxLane(library, "macos", bundleId);
 
         var config = "Debug";
         var ridBase = testDir / "bin" / config / "net10.0-macos" / rid;
@@ -494,6 +497,7 @@ partial class Build
         var result = StdoutWatcher
             .RunAsync(psi, TimeSpan.FromSeconds(timeoutSeconds), TimeSpan.FromSeconds(LaunchBudgetSeconds), onLine: Info)
             .GetAwaiter().GetResult();
+        result = ApplyStoreKitLaneVerdict(result, storeKitLane);
 
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
@@ -525,7 +529,10 @@ partial class Build
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
         timeoutSeconds = ResolveRunBudgetSeconds(library, timeoutSeconds);
-        var (testDir, appName, _) = ResolveTestNames(library);
+        var (testDir, appName, bundleId) = ResolveTestNames(library);
+        // Offline-only for StoreKit2 whatever is configured: the ad-hoc signed Catalyst test app
+        // cannot hold a Sandbox receipt and no Mac Catalyst readiness control exists.
+        var storeKitLane = ResolveStoreKitSandboxLane(library, "maccatalyst", bundleId);
         var appPath = ResolveAppPath(testDir, "Debug", "maccatalyst", rid, appName);
         var binaryPath = appPath / "Contents" / "MacOS" / appName;
 
@@ -594,7 +601,8 @@ partial class Build
             lastResult = attempt.Result;
             if (lastResult.Status != TestRunStatus.Success)
             {
-                var terminal = MacCatalystLaunchRunner.FoldAttempts(attempts, lastResult);
+                var terminal = ApplyStoreKitLaneVerdict(
+                    MacCatalystLaunchRunner.FoldAttempts(attempts, lastResult), storeKitLane);
                 Info("=== APP OUTPUT ===\n" + terminal.Output);
                 return terminal;
             }
@@ -604,6 +612,7 @@ partial class Build
             attempts, lastResult!, requireTipKitCorrelation
                 ? "three fresh LaunchServices launches produced correlated managed-entry and TipKit success markers"
                 : lastResult!.Reason);
+        result = ApplyStoreKitLaneVerdict(result, storeKitLane);
         Info("=== APP OUTPUT ===\n" + result.Output);
         return result;
     }
@@ -623,6 +632,10 @@ partial class Build
                 throw new InvalidOperationException($"=== TIMEOUT ({library}) === {result.Reason}");
             case TestRunStatus.Exited:
                 throw new InvalidOperationException($"=== APP EXITED without success marker ({library}) === {result.Reason}");
+            case TestRunStatus.Unqualified:
+                throw new InvalidOperationException(
+                    $"=== QUALIFICATION NOT RUN ({library}) === {result.Reason}; the checks that ran passed, " +
+                    "but this lane could not attest the capability the rest of the suite needs");
             case TestRunStatus.LauncherAborted:
                 // Still terminal and still loud — but named for what it is. The app was never
                 // entered, so this run says nothing about the library either way, and reading

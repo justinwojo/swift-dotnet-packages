@@ -34,6 +34,29 @@ Prerequisites are external: configure that exact product in App Store Connect fo
 There is no public API to inspect or inject that login. The live four-operation receipt therefore
 establishes observed Sandbox readiness for this run; the product id alone does not.
 
+## What each lane asserts
+
+The managed suite has an offline section (binding shape, metadata, cancellation, the unknown-id
+`Product.products(for:)` empty-list check) and a live Sandbox section (`AppTransaction.shared`,
+`Transaction.currentEntitlements`, `Transaction.all`, the exact configured product). The app runs
+the live section only when it receives `--storekit-sandbox-product-id`, and ends with
+`TEST UNQUALIFIED` instead of `TEST SUCCESS` when it did not. The harness never reads that marker
+as a pass: a regression cell records it as ERROR, and the standalone validators throw.
+
+| Lane | No product id | Product id configured |
+|---|---|---|
+| iOS / tvOS simulator | offline suite, ERROR | this control, then the full live suite |
+| iOS device (NativeAOT, Mono AOT) | offline suite, ERROR | product id passed without a device-side control, full live suite |
+| macOS, Mac Catalyst | offline suite, ERROR | offline suite, ERROR |
+
+The Mac lanes never receive the product id. The macOS test app is an unbundled, unprovisioned
+executable and the Catalyst test app is ad-hoc signed, so neither can hold a Sandbox App Store
+receipt, and this control does not run on the Mac. Handing them the product id would make a
+missing capability read as a product FAIL. An offline failure on any lane is still FAIL.
+
+CI (`RunCiSimTest`) and the release-consumption lane still reject a missing product id before
+building: a single-verdict release gate reaches the same non-pass without the build.
+
 A `.storekit` file is intentionally unsupported here. Xcode activates StoreKit configuration state
 when it launches a scheme; passing a path through `simctl`, `mlaunch`, `dotnet`, or this script does
 not reproduce that state. An Xcode-driven control may be maintained separately, but it cannot

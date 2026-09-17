@@ -44,6 +44,37 @@ partial class Build
     }
 
     /// <summary>
+    /// The runtime-lane counterpart of <see cref="RequireStoreKitSandboxConfiguration"/>, used by
+    /// the validators the regression matrix drives. Returns <c>null</c> for any library other than
+    /// StoreKit2. A missing product id yields an offline-only lane instead of throwing, so the
+    /// offline suite still runs and the verdict still cannot be a pass; a malformed id throws.
+    /// CI and the release-consumption lane keep the fail-fast
+    /// <see cref="RequireStoreKitSandboxConfiguration"/>: a single-verdict release gate gains
+    /// nothing from spending a build and a launch to reach the same non-pass.
+    /// </summary>
+    StoreKitSandboxReadiness.Lane? ResolveStoreKitSandboxLane(string library, string platform, string bundleId) =>
+        string.Equals(library, StoreKit2Library, StringComparison.Ordinal)
+            ? StoreKitSandboxReadiness.ResolveLane(EffectiveStoreKitSandboxProductId, platform, bundleId)
+            : null;
+
+    static string StoreKitLanePlatform(CellPlatform platform) => platform switch
+    {
+        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot => "ios",
+        CellPlatform.TvOs => "tvos",
+        CellPlatform.MacOs => "macos",
+        CellPlatform.MacCatalyst => "maccatalyst",
+        _ => throw new InvalidOperationException($"no StoreKit lane platform for {platform}"),
+    };
+
+    static string[] StoreKitManagedLaunchArguments(StoreKitSandboxReadiness.Lane? lane) =>
+        lane?.Configuration is { } configuration
+            ? [StoreKitSandboxReadiness.ProductIdArgument, configuration.ProductId]
+            : [];
+
+    static TestRunResult ApplyStoreKitLaneVerdict(TestRunResult result, StoreKitSandboxReadiness.Lane? lane) =>
+        lane is null ? result : StoreKitSandboxReadiness.ApplyLaneVerdict(result, lane);
+
+    /// <summary>
     /// Build and run the pure-Swift four-operation control on the exact simulator and bundle id
     /// the managed StoreKit app will use. The managed app is not installed until this method has
     /// parsed a fresh Sandbox receipt for the current token.

@@ -46,24 +46,29 @@ internal static class Tests
 
     internal sealed class ManagedUnwindTimeoutException(string message) : TimeoutException(message);
 
-    private static string RequireSandboxProductId()
+    /// <summary>
+    /// Reads the Sandbox product id the harness passes only after it has attested Sandbox readiness
+    /// for this run. Absent means the live qualification section does not run; present but
+    /// unusable is a harness contract violation and throws.
+    /// </summary>
+    private static string? ReadSandboxProductId()
     {
         var arguments = Foundation.NSProcessInfo.ProcessInfo.Arguments;
-        for (var index = 0; index < arguments.Length - 1; index++)
-        {
-            if (!string.Equals(arguments[index], SandboxProductIdArgument, StringComparison.Ordinal))
-                continue;
-            var value = arguments[index + 1]?.Trim();
-            if (!string.IsNullOrWhiteSpace(value)
-                && !value.Contains("placeholder", StringComparison.OrdinalIgnoreCase)
-                && !value.Contains("nonexistent", StringComparison.OrdinalIgnoreCase))
-                return value;
-        }
+        var index = Array.IndexOf(arguments, SandboxProductIdArgument);
+        if (index < 0)
+            return null;
+
+        var value = index + 1 < arguments.Length ? arguments[index + 1]?.Trim() : null;
+        if (!string.IsNullOrWhiteSpace(value)
+            && !value.StartsWith("-", StringComparison.Ordinal)
+            && !value.Contains("placeholder", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("nonexistent", StringComparison.OrdinalIgnoreCase))
+            return value;
 
         throw new InvalidOperationException(
-            $"StoreKit Sandbox readiness argument {SandboxProductIdArgument} is missing or invalid. " +
-            "The command-line iOS/tvOS lane must pass an exact App Store Connect product only after " +
-            "the same-simulator pure-Swift control has emitted a fresh Sandbox receipt; a .storekit path is not supported here.");
+            $"StoreKit Sandbox readiness argument {SandboxProductIdArgument} was passed without a usable value. " +
+            "The harness passes an exact App Store Connect product only after the same-device pure-Swift " +
+            "control has emitted a fresh Sandbox receipt; a .storekit path is not supported here.");
     }
 
     // A completed managed task is not evidence that StoreKit or the native Swift task exited.
@@ -104,12 +109,29 @@ internal static class Tests
     {
         int passed = 0, failed = 0, skipped = 0;
         string? sandboxProductId = null;
+        var notRun = new List<string>();
 
+        // Terminal marker precedence: any failure is TEST FAILED; otherwise a run whose live
+        // Sandbox qualification did not happen is TEST UNQUALIFIED, never TEST SUCCESS. A run can
+        // only succeed after the live section has actually executed.
         int CompleteRun()
         {
-            Log($"Results: {passed} passed, {failed} failed, {skipped} skipped");
-            Log(failed == 0 ? "TEST SUCCESS" : $"TEST FAILED: {failed} failures", prefixed: false);
+            Log($"Results: {passed} passed, {failed} failed, {skipped} skipped, {notRun.Count} live qualification checks not run");
+            if (failed > 0)
+                Log($"TEST FAILED: {failed} failures", prefixed: false);
+            else if (sandboxProductId is null)
+                Log($"TEST UNQUALIFIED: offline suite passed ({passed} passed, {skipped} skipped); " +
+                    $"StoreKit Sandbox live qualification not run ({notRun.Count} checks: {string.Join(", ", notRun)}) " +
+                    $"because {SandboxProductIdArgument} was not provided", prefixed: false);
+            else
+                Log("TEST SUCCESS", prefixed: false);
             return failed;
+        }
+
+        void NotRun(string name)
+        {
+            notRun.Add(name);
+            Log($"NOT RUN: {name} — live Sandbox qualification was not attested for this run");
         }
 
         void Pass(string name)
@@ -143,18 +165,23 @@ internal static class Tests
             catch (Exception ex) { Fail($"{name} metadata", ex.Message); }
         }
 
-#if IOS || TVOS
+        // Every platform reads the same argument. The harness passes it only on a lane whose
+        // Sandbox readiness it attested (today: iOS/tvOS simulators via the native control); the
+        // macOS and Mac Catalyst lanes never receive it.
         try
         {
-            sandboxProductId = RequireSandboxProductId();
-            Pass("StoreKit Sandbox managed readiness argument");
+            sandboxProductId = ReadSandboxProductId();
+            if (sandboxProductId is null)
+                Log($"{SandboxProductIdArgument} not provided: running the offline suite only; " +
+                    "the live Sandbox qualification checks will be reported as not run");
+            else
+                Pass("StoreKit Sandbox managed readiness argument");
         }
         catch (Exception ex)
         {
             Fail("StoreKit Sandbox managed readiness argument", ex.Message);
             return CompleteRun();
         }
-#endif
 
         await TimeoutTests.RunAsync(Pass, Fail);
 
@@ -573,129 +600,142 @@ internal static class Tests
             Fail("Storefront.current", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // Test 27: the first of the four command-line Sandbox qualification operations. The native
-        // control has already proved this exact simulator/bundle/product can reach Sandbox, so the
-        // managed binding must now return the verified payload for this app from that same backend.
-        try
+        // Tests 27 and 27b are live Sandbox qualification. They run only when the harness has
+        // proved Sandbox readiness for this exact device, bundle and product and handed the product
+        // id over. Without it they are recorded as not run and the run ends TEST UNQUALIFIED,
+        // which the harness never reads as a pass.
+        if (sandboxProductId is not null)
         {
-            using var shared = await WithCancellationTimeout(
-                token => AppTransaction.GetSharedAsync(token),
-                TimeSpan.FromSeconds(60),
-                TimeSpan.FromSeconds(10),
-                "AppTransaction.shared").ConfigureAwait(true);
-
-            if (shared is null)
-                throw new InvalidOperationException("AppTransaction.shared returned a null VerificationResult");
-            if (!shared.TryGetVerified(out var projected) || projected is null)
-                throw new InvalidOperationException(
-                    "AppTransaction.shared did not return a verified AppTransaction after native Sandbox readiness passed");
-            using var projectedLease = projected;
-            var bundleId = projected.BundleID;
-            var expectedBundleId = Foundation.NSBundle.MainBundle.BundleIdentifier;
-            if (string.IsNullOrWhiteSpace(expectedBundleId))
-                expectedBundleId = ExpectedApplicationId;
-            var environment = projected.Environment.RawValue;
-            Log($"AppTransaction.shared: verified, bundleID='{bundleId}', host bundle='{expectedBundleId}', environment='{environment}'");
-            if (string.IsNullOrWhiteSpace(bundleId))
-                throw new InvalidOperationException("AppTransaction.bundleID was empty");
-            if (!string.Equals(bundleId, expectedBundleId, StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    $"AppTransaction.bundleID was '{bundleId}' but the running app is '{expectedBundleId}' — " +
-                    "the projected AppTransaction does not describe this app");
-            if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    $"AppTransaction.shared used environment '{environment}', expected Sandbox");
-            Pass("AppTransaction.shared verified this app on Sandbox");
-        }
-        catch (ManagedUnwindTimeoutException ex)
-        {
-            Fail("AppTransaction.shared", ex.Message);
-            return CompleteRun();
-        }
-        catch (Exception ex)
-        {
-            Fail("AppTransaction.shared", $"{ex.GetType().Name}: {ex.Message}");
-        }
-
-        // Test 27b: both finite transaction snapshots must terminate, and every element must be a
-        // verified Sandbox transaction. Empty snapshots are semantically valid for a fresh tester.
-        foreach (var (seqName, seq) in new (string, Transaction.Transactions)[]
-                 {
-                     ("Transaction.currentEntitlements", Transaction.CurrentEntitlements),
-                     ("Transaction.all", Transaction.All),
-                 })
-        {
+            // Test 27: the first of the four command-line Sandbox qualification operations. The native
+            // control has already proved this exact simulator/bundle/product can reach Sandbox, so the
+            // managed binding must now return the verified payload for this app from that same backend.
             try
             {
-                int count = 0;
-                bool observedCancellation = false;
-                // The deadline below has to stop the ENUMERATION, not just this test's wait on it.
-                // The token flows through WithCancellation into the generated
-                // GetAsyncEnumerator(CancellationToken) → NextAsync(CancellationToken), which routes
-                // to SBW_CancelTask and immediately cancels the managed task. Awaiting the
-                // drain proves managed unwind only; native completion/cleanup remains unproven.
-                using var drainCts = new CancellationTokenSource();
-                var drain = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await foreach (var vr in seq.WithCancellation(drainCts.Token).ConfigureAwait(false))
-                        {
-                            count++;
-                            using (vr)
-                            {
-                                if (vr is null || !vr.TryGetVerified(out var transaction) || transaction is null)
-                                    throw new InvalidOperationException(
-                                        $"{seqName} yielded an unverified or null transaction");
-                                using var transactionLease = transaction;
-                                var environment = transaction.Environment.RawValue;
-                                if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
-                                    throw new InvalidOperationException(
-                                        $"{seqName} yielded environment '{environment}', expected Sandbox");
-                            }
-                            if (count > 64)
-                                throw new InvalidOperationException(
-                                    $"{seqName} exceeded the 64-element safety bound");
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        observedCancellation = true;
-                    }
-                });
-                var budget = TimeSpan.FromSeconds(60);
-                var started = DateTime.UtcNow;
-                if (!await CompletesWithin(drain, budget).ConfigureAwait(true))
-                {
-                    // Request native cancellation and bound managed enumeration unwind.
-                    // Stop the suite if the managed loop remains pending.
-                    drainCts.Cancel();
-                    var unwound = await CompletesWithin(drain, TimeSpan.FromSeconds(10)).ConfigureAwait(true);
-                    if (!unwound)
-                        throw new ManagedUnwindTimeoutException(
-                            $"{seqName} exceeded its deadline and its managed enumeration did not unwind " +
-                            "within 10s after cancellation; stopping later tests");
-                    throw new TimeoutException(
-                        $"{seqName} did not terminate within {budget.TotalSeconds:0}s (finite sequence expected); "
-                        + $"{count} element(s) had been yielded when the bound expired; "
-                        + $"managed enumeration unwound (OperationCanceledException observed: {observedCancellation}); "
-                        + "native completion/cleanup is not established");
-                }
+                using var shared = await WithCancellationTimeout(
+                    token => AppTransaction.GetSharedAsync(token),
+                    TimeSpan.FromSeconds(60),
+                    TimeSpan.FromSeconds(10),
+                    "AppTransaction.shared").ConfigureAwait(true);
 
-                if (observedCancellation)
-                    throw new InvalidOperationException($"{seqName} canceled before the deadline instead of completing naturally");
-                Log($"{seqName} terminated after {count} element(s) in {(DateTime.UtcNow - started).TotalSeconds:0.0}s");
-                Pass($"{seqName} terminates with verified Sandbox transactions (count={count})");
+                if (shared is null)
+                    throw new InvalidOperationException("AppTransaction.shared returned a null VerificationResult");
+                if (!shared.TryGetVerified(out var projected) || projected is null)
+                    throw new InvalidOperationException(
+                        "AppTransaction.shared did not return a verified AppTransaction after native Sandbox readiness passed");
+                using var projectedLease = projected;
+                var bundleId = projected.BundleID;
+                var expectedBundleId = Foundation.NSBundle.MainBundle.BundleIdentifier;
+                if (string.IsNullOrWhiteSpace(expectedBundleId))
+                    expectedBundleId = ExpectedApplicationId;
+                var environment = projected.Environment.RawValue;
+                Log($"AppTransaction.shared: verified, bundleID='{bundleId}', host bundle='{expectedBundleId}', environment='{environment}'");
+                if (string.IsNullOrWhiteSpace(bundleId))
+                    throw new InvalidOperationException("AppTransaction.bundleID was empty");
+                if (!string.Equals(bundleId, expectedBundleId, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"AppTransaction.bundleID was '{bundleId}' but the running app is '{expectedBundleId}' — " +
+                        "the projected AppTransaction does not describe this app");
+                if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        $"AppTransaction.shared used environment '{environment}', expected Sandbox");
+                Pass("AppTransaction.shared verified this app on Sandbox");
             }
             catch (ManagedUnwindTimeoutException ex)
             {
-                Fail($"{seqName} managed unwind", ex.Message);
+                Fail("AppTransaction.shared", ex.Message);
                 return CompleteRun();
             }
             catch (Exception ex)
             {
-                Fail($"{seqName} Sandbox snapshot", $"{ex.GetType().Name}: {ex.Message}");
+                Fail("AppTransaction.shared", $"{ex.GetType().Name}: {ex.Message}");
             }
+
+            // Test 27b: both finite transaction snapshots must terminate, and every element must be a
+            // verified Sandbox transaction. Empty snapshots are semantically valid for a fresh tester.
+            foreach (var (seqName, seq) in new (string, Transaction.Transactions)[]
+                     {
+                         ("Transaction.currentEntitlements", Transaction.CurrentEntitlements),
+                         ("Transaction.all", Transaction.All),
+                     })
+            {
+                try
+                {
+                    int count = 0;
+                    bool observedCancellation = false;
+                    // The deadline below has to stop the ENUMERATION, not just this test's wait on it.
+                    // The token flows through WithCancellation into the generated
+                    // GetAsyncEnumerator(CancellationToken) → NextAsync(CancellationToken), which routes
+                    // to SBW_CancelTask and immediately cancels the managed task. Awaiting the
+                    // drain proves managed unwind only; native completion/cleanup remains unproven.
+                    using var drainCts = new CancellationTokenSource();
+                    var drain = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await foreach (var vr in seq.WithCancellation(drainCts.Token).ConfigureAwait(false))
+                            {
+                                count++;
+                                using (vr)
+                                {
+                                    if (vr is null || !vr.TryGetVerified(out var transaction) || transaction is null)
+                                        throw new InvalidOperationException(
+                                            $"{seqName} yielded an unverified or null transaction");
+                                    using var transactionLease = transaction;
+                                    var environment = transaction.Environment.RawValue;
+                                    if (!string.Equals(environment, "Sandbox", StringComparison.OrdinalIgnoreCase))
+                                        throw new InvalidOperationException(
+                                            $"{seqName} yielded environment '{environment}', expected Sandbox");
+                                }
+                                if (count > 64)
+                                    throw new InvalidOperationException(
+                                        $"{seqName} exceeded the 64-element safety bound");
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            observedCancellation = true;
+                        }
+                    });
+                    var budget = TimeSpan.FromSeconds(60);
+                    var started = DateTime.UtcNow;
+                    if (!await CompletesWithin(drain, budget).ConfigureAwait(true))
+                    {
+                        // Request native cancellation and bound managed enumeration unwind.
+                        // Stop the suite if the managed loop remains pending.
+                        drainCts.Cancel();
+                        var unwound = await CompletesWithin(drain, TimeSpan.FromSeconds(10)).ConfigureAwait(true);
+                        if (!unwound)
+                            throw new ManagedUnwindTimeoutException(
+                                $"{seqName} exceeded its deadline and its managed enumeration did not unwind " +
+                                "within 10s after cancellation; stopping later tests");
+                        throw new TimeoutException(
+                            $"{seqName} did not terminate within {budget.TotalSeconds:0}s (finite sequence expected); "
+                            + $"{count} element(s) had been yielded when the bound expired; "
+                            + $"managed enumeration unwound (OperationCanceledException observed: {observedCancellation}); "
+                            + "native completion/cleanup is not established");
+                    }
+
+                    if (observedCancellation)
+                        throw new InvalidOperationException($"{seqName} canceled before the deadline instead of completing naturally");
+                    Log($"{seqName} terminated after {count} element(s) in {(DateTime.UtcNow - started).TotalSeconds:0.0}s");
+                    Pass($"{seqName} terminates with verified Sandbox transactions (count={count})");
+                }
+                catch (ManagedUnwindTimeoutException ex)
+                {
+                    Fail($"{seqName} managed unwind", ex.Message);
+                    return CompleteRun();
+                }
+                catch (Exception ex)
+                {
+                    Fail($"{seqName} Sandbox snapshot", $"{ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+        else
+        {
+            NotRun("AppTransaction.shared verified this app on Sandbox");
+            NotRun("Transaction.currentEntitlements terminates with verified Sandbox transactions");
+            NotRun("Transaction.all terminates with verified Sandbox transactions");
         }
 
         // Test 27c: cancellation starts already requested, removing network timing as a variable.
@@ -874,9 +914,10 @@ internal static class Tests
             Fail("VerificationResult<T>.TryGetVerified/TryGetUnverified shape", ex.Message);
         }
 
-        // Test 31: the fourth qualification operation requests the exact configured App Store
-        // Connect product. iOS/tvOS command-line runs require exactly that one Sandbox-backed
-        // product; desktop compatibility runs retain the unknown-id/empty-list assertion.
+        // Test 31: with live qualification, the fourth qualification operation requests the exact
+        // configured App Store Connect product and requires exactly that one Sandbox-backed product.
+        // Without it, the offline suite keeps the unknown-id/empty-list assertion, which exercises
+        // the async list bridge without depending on a Sandbox account.
         try
         {
             var requestedProductId = sandboxProductId
@@ -904,7 +945,8 @@ internal static class Tests
                     if (products.Count != 0)
                         throw new InvalidOperationException(
                             $"Unknown product IDs must resolve to an empty list; got {products.Count} product(s)");
-                    Pass("Product.ProductsAsync awaited (desktop empty-list result)");
+                    Pass("Product.ProductsAsync awaited (unknown id resolves to an empty list)");
+                    NotRun("Product.products(for:) returns the exact configured Sandbox product");
                 }
             }
             finally

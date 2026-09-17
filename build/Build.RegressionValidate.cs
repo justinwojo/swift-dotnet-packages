@@ -22,6 +22,15 @@ partial class Build
     readonly bool RegressionSerial;
 
     /// <summary>
+    /// Cells pre-flight disqualified, mapped to the reason. Recorded rather than
+    /// thrown so one unconfigurable cell costs its own coverage instead of the
+    /// whole matrix: the run still reports every other cell, and the disqualified
+    /// ones surface as <see cref="CellResult.Error"/> — a failure, not a skip,
+    /// because unsupplied coverage must not read as a green.
+    /// </summary>
+    IReadOnlyDictionary<Cell, string> _preflightBlockedCells = new Dictionary<Cell, string>();
+
+    /// <summary>
     /// Pre-release regression: build + validate every in-scope package across
     /// every TFM its test csproj declares. Cells run in parallel under a
     /// <c>--regression-jobs</c>-sized semaphore; the physical-iPhone lane is
@@ -250,7 +259,15 @@ partial class Build
                             Action<string> sink = line => writer.WriteLine(line);
                             try
                             {
-                                outcome = await Task.Run(() => RunCell(cell, cellSimUdid, deviceUdid, cellSw, sink));
+                                if (_preflightBlockedCells.TryGetValue(cell, out var blockedReason))
+                                {
+                                    writer.WriteLine($"DISQUALIFIED IN PRE-FLIGHT: {blockedReason}");
+                                    outcome = new CellOutcome(cell, CellResult.Error, blockedReason, cellSw.Elapsed);
+                                }
+                                else
+                                {
+                                    outcome = await Task.Run(() => RunCell(cell, cellSimUdid, deviceUdid, cellSw, sink));
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -666,19 +683,35 @@ partial class Build
             (RuntimePackageId, version),
             (ApplePackageId, appleVersion));
 
-        var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim);
-        var needsDevice = cells.Any(c => IsDeviceCell(c.Platform));
-
-        // StoreKit's iOS/tvOS command-line cells are meaningful only with a configured Sandbox
-        // product. Reject the run before the first csproj bump/build; live account/backend state
-        // is then proved by the same-device pure-Swift control immediately before managed launch.
-        foreach (var cell in cells.Where(c => string.Equals(c.Library, StoreKit2Library, StringComparison.Ordinal)
-            && c.Platform is CellPlatform.IosSim or CellPlatform.IosDevice
-                or CellPlatform.IosDeviceMonoAot or CellPlatform.TvOs))
+        // StoreKit2 cells on every platform resolve their Sandbox lane before the first csproj
+        // bump/build. A missing product id is not a disqualification: the cell still runs the
+        // offline suite and records ERROR (QUALIFICATION NOT RUN), so a binding regression in the
+        // offline checks still surfaces as FAIL. Live iOS/tvOS simulator readiness is proved by the
+        // same-device pure-Swift control immediately before managed launch. Only a malformed
+        // product id disqualifies here. Recorded rather than thrown: aborting the whole run would
+        // cost the other cells' coverage and push operators toward a --filter that silently
+        // narrows what the matrix attests to.
+        var blocked = new Dictionary<Cell, string>();
+        foreach (var cell in cells.Where(c => string.Equals(c.Library, StoreKit2Library, StringComparison.Ordinal)))
         {
-            var platform = cell.Platform == CellPlatform.TvOs ? "tvos" : "ios";
-            _ = RequireStoreKitSandboxConfiguration(cell.Library, platform, StoreKit2BundleId);
+            try
+            {
+                _ = ResolveStoreKitSandboxLane(cell.Library, StoreKitLanePlatform(cell.Platform), StoreKit2BundleId);
+            }
+            catch (Exception ex)
+            {
+                blocked[cell] = ex.Message;
+                Serilog.Log.Warning("Pre-flight disqualified {Cell}: {Reason}",
+                    $"{cell.Library}-{PlatformLabel(cell.Platform)}", ex.Message);
+            }
         }
+
+        _preflightBlockedCells = blocked;
+
+        // Host requirements are judged over the cells that will actually launch: a disqualified
+        // cell must not abort the run for a simulator or device it will never use.
+        var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim && !blocked.ContainsKey(c));
+        var needsDevice = cells.Any(c => IsDeviceCell(c.Platform) && !blocked.ContainsKey(c));
 
         // 2. Booted simulator if any sim cells
         if (needsSim)
@@ -1318,6 +1351,14 @@ partial class Build
             TestRunStatus.LauncherAborted => new CellOutcome(
                 cell, CellResult.Error,
                 "LAUNCHER ABORTED — the app never started, so this cell carries no verdict" +
+                (result.Reason is null ? "" : $": {result.Reason}"), duration),
+            // Every check the lane could run passed, but a qualification section that needs an
+            // owner-held capability did not run. ERROR, not SKIP or PASS: IsFailure counts it, so
+            // the matrix cannot go green on coverage it did not take; not FAIL, because the
+            // evidence names a missing capability rather than a product defect.
+            TestRunStatus.Unqualified => new CellOutcome(
+                cell, CellResult.Error,
+                "QUALIFICATION NOT RUN — the offline checks passed; live qualification was not attested" +
                 (result.Reason is null ? "" : $": {result.Reason}"), duration),
             _ => new CellOutcome(cell, CellResult.Error, $"unexpected status {result.Status}", duration),
         };

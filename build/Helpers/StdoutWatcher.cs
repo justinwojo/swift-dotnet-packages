@@ -13,7 +13,7 @@ namespace SwiftBindings.Build.Helpers;
 /// <c>scripts/validate-sim.sh:67–89</c> and <c>scripts/validate-device.sh:102–136</c>.
 /// </para>
 ///
-/// <para>State transitions: <c>Running → Success | Failed | Crashed | Timeout | Exited</c>.</para>
+/// <para>State transitions: <c>Running → Success | Failed | Unqualified | Crashed | Timeout | Exited</c>.</para>
 ///
 /// <para>Match rules — substring semantics, mirroring the bash <c>grep</c>
 /// pipelines exactly:</para>
@@ -32,6 +32,13 @@ namespace SwiftBindings.Build.Helpers;
 ///     (<c>tests/Nuke.SimTests/Program.cs:241</c>) and the existing bash uses
 ///     <c>grep -q "TEST FAILED"</c> at <c>validate-sim.sh:74</c>. Substring
 ///     match handles both the colon suffix and the syslog timestamp prefix.
+///   </item>
+///   <item>
+///     <b>Unqualified</b> — line contains <c>TEST UNQUALIFIED</c>, checked
+///     after Success and Failed and before the <c>[SKIP]</c> filter. An app
+///     emits it when every check it could run passed but a qualification
+///     section needing an owner-held capability did not run. Terminal, and
+///     never a pass: consumers map it to ERROR or a thrown gate failure.
 ///   </item>
 ///   <item>
 ///     <b>Crashed</b> — line contains any of <c>SIGABRT</c>, <c>SIGSEGV</c>,
@@ -63,6 +70,7 @@ public static class StdoutWatcher
     private const string SkipPrefix = "[SKIP]";
     private const string SuccessLine = "TEST SUCCESS";
     private const string FailedPrefix = "TEST FAILED";
+    internal const string UnqualifiedPrefix = "TEST UNQUALIFIED";
 
     /// <summary>
     /// Classify a single stdout line. Returns <see cref="TestRunStatus.Running"/>
@@ -101,6 +109,14 @@ public static class StdoutWatcher
         {
             reason = trimmed;
             return TestRunStatus.Failed;
+        }
+
+        // A qualification section the lane could not attest did not run. Checked after the
+        // pass/fail markers and before [SKIP] so a skip line cannot hide it.
+        if (trimmed.Contains(UnqualifiedPrefix, StringComparison.Ordinal))
+        {
+            reason = trimmed;
+            return TestRunStatus.Unqualified;
         }
 
         // [SKIP] lines may legitimately mention signal names — skip the

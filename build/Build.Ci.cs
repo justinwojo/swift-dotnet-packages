@@ -634,6 +634,12 @@ partial class Build
                 Log.Error("=== TESTS: FAILED ({Status}: {Reason}) ===", result.Status, result.Reason);
                 Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
                 return TestPhaseOutcome.Failed;
+            case TestRunStatus.Unqualified:
+                // The suite skipped a qualification section this gate requires. CI has one
+                // verdict and it is not a pass; nothing about re-running would change it.
+                Log.Error("=== TESTS: QUALIFICATION NOT RUN ({Reason}) ===", result.Reason);
+                Log.Information("=== APP OUTPUT ===\n{Output}", result.Output);
+                return TestPhaseOutcome.Failed;
             case TestRunStatus.LauncherAborted:
                 // The validator path retries the launch itself; by the time one of
                 // these reaches here the app has still never been entered. Raise it

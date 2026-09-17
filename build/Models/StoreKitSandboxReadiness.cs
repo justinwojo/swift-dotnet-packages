@@ -62,6 +62,95 @@ internal static class StoreKitSandboxReadiness
         return new Configuration(platform, bundleId, productId);
     }
 
+    /// <summary>What a StoreKit2 runtime lane may assert on this host.</summary>
+    internal enum LaneMode
+    {
+        /// <summary>
+        /// A same-device native control proves Sandbox readiness before the managed launch, so the
+        /// managed app receives the product id and runs its live Sandbox section.
+        /// </summary>
+        Live,
+
+        /// <summary>
+        /// Readiness cannot be attested on this lane. The managed app runs its offline suite only
+        /// and must end with <c>TEST UNQUALIFIED</c>, which is never a pass.
+        /// </summary>
+        OfflineOnly,
+    }
+
+    internal sealed record Lane(LaneMode Mode, Configuration? Configuration, string? NotQualifiedReason);
+
+    /// <summary>
+    /// Resolve the StoreKit2 lane for <paramref name="platform"/> (<c>ios</c>, <c>tvos</c>,
+    /// <c>macos</c>, <c>maccatalyst</c>).
+    ///
+    /// <para>A missing product id is a fact about the host, not a product result: the lane runs
+    /// offline and records that live qualification did not happen. A malformed product id is an
+    /// operator error and still throws, on every platform, before anything is built.</para>
+    ///
+    /// <para>Mac lanes are offline-only even when a product id is configured. The command-line
+    /// macOS test app is an unbundled, unprovisioned executable and the Catalyst app is ad-hoc
+    /// signed; neither can hold a Sandbox App Store receipt, and no Mac native readiness control
+    /// exists. Handing them the product id would turn a missing capability back into a product
+    /// FAIL, which is the ambiguity the native control exists to remove.</para>
+    /// </summary>
+    internal static Lane ResolveLane(string? productId, string platform, string bundleId)
+    {
+        switch (platform)
+        {
+            case "ios" or "tvos":
+                if (string.IsNullOrWhiteSpace(productId))
+                    return new Lane(LaneMode.OfflineOnly, null,
+                        $"{ProductIdEnvironmentVariable} (or {ProductIdArgument}) is not configured, so the " +
+                        $"{platform} same-device Sandbox readiness control cannot run");
+                return new Lane(LaneMode.Live, RequireConfiguration(productId, platform, bundleId), null);
+
+            case "macos" or "maccatalyst":
+                if (string.IsNullOrWhiteSpace(productId))
+                    return new Lane(LaneMode.OfflineOnly, null,
+                        $"{ProductIdEnvironmentVariable} (or {ProductIdArgument}) is not configured, and no " +
+                        $"command-line Sandbox readiness control exists for {platform}");
+                // Validate exactly as the iOS lane would so a malformed id is rejected everywhere.
+                _ = RequireConfiguration(productId, "ios", bundleId);
+                return new Lane(LaneMode.OfflineOnly, null,
+                    $"no command-line Sandbox readiness control exists for {platform} (the {platform} test app " +
+                    "is not provisioned to hold a Sandbox App Store receipt), so the configured product id " +
+                    "cannot be attested on this lane");
+
+            default:
+                throw new InvalidOperationException(
+                    $"StoreKit Sandbox lane resolution does not know platform '{platform}'.");
+        }
+    }
+
+    /// <summary>
+    /// Reconcile the managed app's terminal marker with what the lane allowed it to assert.
+    /// A pass is only possible on a live lane; an offline lane's best outcome is
+    /// <see cref="TestRunStatus.Unqualified"/>. Offline product failures, crashes and timeouts are
+    /// reported as themselves.
+    /// </summary>
+    internal static TestRunResult ApplyLaneVerdict(TestRunResult result, Lane lane) =>
+        (lane.Mode, result.Status) switch
+        {
+            (LaneMode.OfflineOnly, TestRunStatus.Success) => result with
+            {
+                Status = TestRunStatus.Failed,
+                Reason = "StoreKit2 app reported TEST SUCCESS although live Sandbox qualification was not " +
+                    $"handed to it on this lane ({lane.NotQualifiedReason})",
+            },
+            (LaneMode.OfflineOnly, TestRunStatus.Unqualified) => result with
+            {
+                Reason = $"{result.Reason}; lane: {lane.NotQualifiedReason}",
+            },
+            (LaneMode.Live, TestRunStatus.Unqualified) => result with
+            {
+                Status = TestRunStatus.Failed,
+                Reason = "StoreKit2 app skipped live Sandbox qualification although the harness proved " +
+                    $"readiness and passed the product id: {result.Reason}",
+            },
+            _ => result,
+        };
+
     internal static Receipt RequireFreshNativeReceipt(string output, Configuration expected, string runToken)
     {
         if (!RunTokenPattern.IsMatch(runToken))

@@ -104,6 +104,7 @@ public static class LaunchDiagnostics
     {
         "TEST SUCCESS",
         "TEST FAILED",
+        "TEST UNQUALIFIED",
         "[PASS]",
         "[FAIL]",
         "[SKIP]",
