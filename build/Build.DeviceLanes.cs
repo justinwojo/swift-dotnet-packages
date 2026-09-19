@@ -148,6 +148,10 @@ partial class Build
         if (result.Status is TestRunStatus.Success or TestRunStatus.Unqualified)
             AssertRuntimeFlavor(result.Output, expectMono: mono, laneLabel);
 
+        // A stand-in app's pass says nothing about the capability the lane exists to qualify.
+        if (app.DeferredQualification is not null && result.Status == TestRunStatus.Success)
+            return result with { Status = TestRunStatus.Unqualified, Reason = app.DeferredQualification };
+
         return result;
     }
 }

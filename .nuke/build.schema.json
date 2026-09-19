@@ -204,6 +204,10 @@
           "type": "string",
           "description": "ReleaseConsume: per-package version overrides, \"Id=Version;Id2=Version2\" (default: --version for every referenced package)"
         },
+        "DeferCredentialQualification": {
+          "type": "boolean",
+          "description": "RegressionValidate: record cells whose only missing evidence is an owner-held credential (StoreKit Sandbox product, ActivityKit APNs profile) as DEFERRED instead of ERROR. Every check the cell can run without the credential still runs and still fails the run on any failure. Off by default; the artifact records the opt-out and lists every deferred cell"
+        },
         "Device": {
           "type": "boolean",
           "description": "Build the test app for a physical device (ios-arm64) instead of the simulator"

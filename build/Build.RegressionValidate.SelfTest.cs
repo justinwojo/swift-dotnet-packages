@@ -344,6 +344,52 @@ partial class Build
                         "unavailable leg absent from the failure list");
                 }
 
+                // ── Case 7c: a deferred credential cell passes the run but stays named ──
+                // Deferral is the operator's explicit opt-out for live sections that need an
+                // owner-held credential. The run may go green, but the artifact and the matrix must
+                // still say which cells were not qualified and why.
+                {
+                    var deferred = new CellOutcome(
+                        new Cell("StoreKit2", CellPlatform.IosSim),
+                        CellResult.Deferred,
+                        "CREDENTIAL QUALIFICATION DEFERRED — every check this cell could run passed",
+                        TimeSpan.Zero);
+
+                    var runId = ComposeRunId(new DateTime(2026, 9, 19, 11, 0, 0, DateTimeKind.Utc), "ddddddd");
+                    var result = WriteRegressionArtifacts(
+                        version: version, runId: runId, runDir: runsDir / runId,
+                        platforms: AllPlatforms, filter: null,
+                        packages: new[] { "StoreKit2" },
+                        cellsPlanned: 1,
+                        unreached: Array.Empty<Cell>(),
+                        outcomes: new[] { deferred },
+                        abortReason: null,
+                        totalDuration: TimeSpan.FromSeconds(30),
+                        inputs: new { sdkVersion = version }, apiSurface: new { filesCollected = 0 });
+
+                    using var doc = Read(result.RunArtifact);
+                    var root = doc.RootElement;
+                    Assert("a deferred cell does not fail the run",
+                        root.GetProperty("verdict").GetString() == "PASS",
+                        root.GetProperty("verdict").GetString() ?? "<null>");
+                    Assert("the artifact records the deferral opt-out",
+                        root.TryGetProperty("deferCredentialQualification", out var deferFlag) && deferFlag.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
+                        "deferCredentialQualification missing from the artifact");
+                    Assert("the deferred cell is named with its reason",
+                        root.GetProperty("counts").GetProperty("deferred").GetInt32() == 1
+                        && root.GetProperty("deferredCells")[0].GetProperty("library").GetString() == "StoreKit2"
+                        && root.GetProperty("deferredCells")[0].GetProperty("reason").GetString()!
+                            .Contains("DEFERRED", StringComparison.Ordinal),
+                        "deferredCells lost the cell or its reason");
+
+                    var report = RenderMatrix(
+                        new[] { "StoreKit2" }, new[] { CellPlatform.IosSim }, new[] { deferred },
+                        TimeSpan.FromSeconds(30));
+                    Assert("the matrix renders the cell as DEFERRED and lists it",
+                        report.Contains("1 DEFERRED") && report.Contains("StoreKit2 ios-sim: CREDENTIAL QUALIFICATION DEFERRED"),
+                        "matrix does not surface the deferred cell");
+                }
+
                 // ── Case 8: run ids are unique per run and carry the tree state ──
                 {
                     var startA = new DateTime(2026, 7, 26, 10, 0, 0, DateTimeKind.Utc);

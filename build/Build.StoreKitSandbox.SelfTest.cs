@@ -205,6 +205,22 @@ partial class Build
             "an UNQUALIFIED cell must fail the run with or without --allow-unavailable");
         Assert.True(ToOutcome(cell, launderedPass, TimeSpan.Zero).Result == CellResult.Fail,
             "a laundered offline TEST SUCCESS must reach the matrix as FAIL");
+
+        // Deferring credential qualification turns only UNQUALIFIED into DEFERRED, keeps the lane's
+        // reason, and never touches a real failure or a laundered pass.
+        var deferred = ToOutcome(cell, unqualified, TimeSpan.Zero, deferCredentialQualification: true);
+        Assert.True(deferred.Result == CellResult.Deferred
+            && deferred.Reason!.Contains("CREDENTIAL QUALIFICATION DEFERRED", StringComparison.Ordinal)
+            && deferred.Reason.Contains(offlineLane.NotQualifiedReason!, StringComparison.Ordinal),
+            $"a deferred UNQUALIFIED must map to DEFERRED with the lane reason; got {deferred.Result}: {deferred.Reason}");
+        Assert.True(!IsFailure(deferred, allowUnavailable: false),
+            "a DEFERRED cell is the operator's explicit opt-out and must not fail the run");
+        Assert.True(ToOutcome(cell, launderedPass, TimeSpan.Zero, deferCredentialQualification: true).Result == CellResult.Fail,
+            "deferral must not rescue a laundered offline TEST SUCCESS");
+        foreach (var status in new[] { TestRunStatus.Failed, TestRunStatus.Crashed, TestRunStatus.Timeout })
+            Assert.True(IsFailure(ToOutcome(cell, Run(status, "r"), TimeSpan.Zero, deferCredentialQualification: true),
+                    allowUnavailable: false),
+                $"deferral must leave a {status} failing the run");
         ExpectStoreKitInvalidOperation(() => ReportTerminalStatus(unqualified, StoreKit2Library));
 
         // The managed app and the watcher must agree on the marker, and the app must gate the

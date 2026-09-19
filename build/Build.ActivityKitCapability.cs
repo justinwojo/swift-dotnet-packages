@@ -18,11 +18,17 @@ partial class Build
             : Environment.GetEnvironmentVariable("ACTIVITYKIT_PROVISIONING_PROFILE")
                 ?? Environment.GetEnvironmentVariable("PROVISIONING_PROFILE");
 
+    /// <param name="DeferredQualification">
+    /// Set when the lane runs a stand-in app because the owner-held capability its dedicated app
+    /// needs was deliberately deferred (<c>--defer-credential-qualification</c>). A passing run of
+    /// the stand-in is reported as UNQUALIFIED with this reason, never as a pass of the lane.
+    /// </param>
     sealed record TestAppDescriptor(
         AbsolutePath TestDir,
         string AppName,
         string BundleId,
-        bool RequiresActivityKitPushCapability);
+        bool RequiresActivityKitPushCapability,
+        string? DeferredQualification = null);
 
     sealed record ActivityKitProvisioningSelection(string Name, string Uuid, string Path, string Plist);
 
@@ -120,6 +126,21 @@ partial class Build
         if (!Directory.Exists(testDir))
             throw new InvalidOperationException(
                 $"Test directory not found for '{library}' ({(forDevice ? "device" : "non-device")} lane). Expected: {testDir}");
+
+        // Without an APNs-capable profile the push-token app cannot be signed. When the operator has
+        // deferred credential qualification, the device lane still runs the standard ActivityKit
+        // suite on the phone (the device coverage this lane had before push-token qualification
+        // existed) and the push-token checks are recorded as not run.
+        if (usePushApp && DeferCredentialQualification
+            && string.IsNullOrWhiteSpace(EffectiveActivityKitProvisioningProfile))
+            return new TestAppDescriptor(
+                libDir / "tests",
+                "SwiftBindings.Apple.ActivityKit.Tests",
+                $"com.swiftbindings.{library.ToLowerInvariant()}.tests",
+                RequiresActivityKitPushCapability: false,
+                DeferredQualification:
+                    "standard ActivityKit suite passed on the device; the push-token capability app did not run " +
+                    "because no --activitykit-provisioning-profile was provided");
 
         if (usePushApp)
             return new TestAppDescriptor(

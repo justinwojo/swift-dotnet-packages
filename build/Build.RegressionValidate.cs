@@ -497,6 +497,12 @@ partial class Build
                "The run still reports complete=false and the artifact records the opt-out.")]
     readonly bool AllowUnavailable;
 
+    [Parameter("RegressionValidate: record cells whose only missing evidence is an owner-held credential " +
+               "(StoreKit Sandbox product, ActivityKit APNs profile) as DEFERRED instead of ERROR. Every check " +
+               "the cell can run without the credential still runs and still fails the run on any failure. " +
+               "Off by default; the artifact records the opt-out and lists every deferred cell.")]
+    readonly bool DeferCredentialQualification;
+
     /// <summary>
     /// <see cref="IosDevice"/> is the NativeAOT device lane;
     /// <see cref="IosDeviceMonoAot"/> is Mono full-AOT — the .NET-for-iOS
@@ -512,8 +518,13 @@ partial class Build
     /// host cannot provide what it needs (no tvOS simulator runtime, no device
     /// on the older OS the matrix wants). It is recorded with its reason so the
     /// report states what was NOT covered instead of leaving a silent hole.
+    ///
+    /// <para><see cref="Deferred"/> is produced only under <c>--defer-credential-qualification</c>:
+    /// every check the cell could run passed, and the section that needs an owner-held credential
+    /// was deliberately not run. It is not a failure, and it is listed with its reason in the
+    /// matrix and the artifact so the missing qualification stays visible.</para>
     /// </summary>
-    enum CellResult { Pass, Fail, BuildOnly, Skip, Timeout, Crashed, Error, Unavailable }
+    enum CellResult { Pass, Fail, BuildOnly, Skip, Timeout, Crashed, Error, Unavailable, Deferred }
 
     sealed record Cell(string Library, CellPlatform Platform);
 
@@ -1292,7 +1303,7 @@ partial class Build
             {
                 BuildTestAppSimulator(cell.Library, testDir, "ios", onLine: sink, noRestore: true);
                 var result = ValidateSimFor(cell.Library, Timeout, simUdid, "iossimulator-arm64", onLine: sink);
-                return ToOutcome(cell, result, sw.Elapsed);
+                return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.IosDevice:
             {
@@ -1301,7 +1312,7 @@ partial class Build
                 // runtime banner after the run, so this cell cannot report a
                 // green for a bundle the Mono lane produced.
                 var result = RunDeviceLane(cell.Library, mono: false, deviceUdid, sink);
-                return ToOutcome(cell, result, sw.Elapsed);
+                return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.IosDeviceMonoAot:
             {
@@ -1309,19 +1320,19 @@ partial class Build
                 // the runtime most consumers actually ship. Same suite, same
                 // device slice, different managed build.
                 var result = RunDeviceLane(cell.Library, mono: true, deviceUdid, sink);
-                return ToOutcome(cell, result, sw.Elapsed);
+                return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.MacOs:
             {
                 BuildTestAppSimulator(cell.Library, testDir, "macos", onLine: sink, noRestore: true);
                 var result = ValidateMacFor(cell.Library, Timeout, "osx-arm64", onLine: sink);
-                return ToOutcome(cell, result, sw.Elapsed);
+                return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.MacCatalyst:
             {
                 BuildTestAppSimulator(cell.Library, testDir, "maccatalyst", onLine: sink, noRestore: true);
                 var result = ValidateMacCatalystFor(cell.Library, Timeout, "maccatalyst-arm64", onLine: sink);
-                return ToOutcome(cell, result, sw.Elapsed);
+                return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.TvOs:
             {
@@ -1329,14 +1340,15 @@ partial class Build
                 var (result, unavailable) = ValidateTvOsFor(cell.Library, Timeout, sink);
                 return unavailable is not null
                     ? new CellOutcome(cell, CellResult.Unavailable, unavailable, sw.Elapsed)
-                    : ToOutcome(cell, result!, sw.Elapsed);
+                    : ToOutcome(cell, result!, sw.Elapsed, DeferCredentialQualification);
             }
             default:
                 return new CellOutcome(cell, CellResult.Error, $"unhandled platform {cell.Platform}", sw.Elapsed);
         }
     }
 
-    static CellOutcome ToOutcome(Cell cell, TestRunResult result, TimeSpan duration) =>
+    static CellOutcome ToOutcome(
+        Cell cell, TestRunResult result, TimeSpan duration, bool deferCredentialQualification = false) =>
         result.Status switch
         {
             TestRunStatus.Success => new CellOutcome(cell, CellResult.Pass, null, duration),
@@ -1355,7 +1367,12 @@ partial class Build
             // Every check the lane could run passed, but a qualification section that needs an
             // owner-held capability did not run. ERROR, not SKIP or PASS: IsFailure counts it, so
             // the matrix cannot go green on coverage it did not take; not FAIL, because the
-            // evidence names a missing capability rather than a product defect.
+            // evidence names a missing capability rather than a product defect. The operator can
+            // defer that capability explicitly, which records the cell as DEFERRED with the same reason.
+            TestRunStatus.Unqualified when deferCredentialQualification => new CellOutcome(
+                cell, CellResult.Deferred,
+                "CREDENTIAL QUALIFICATION DEFERRED — every check this cell could run passed; the live section was not run" +
+                (result.Reason is null ? "" : $": {result.Reason}"), duration),
             TestRunStatus.Unqualified => new CellOutcome(
                 cell, CellResult.Error,
                 "QUALIFICATION NOT RUN — the offline checks passed; live qualification was not attested" +
@@ -1369,6 +1386,7 @@ partial class Build
         CellResult.Fail => "FAIL",
         CellResult.BuildOnly => "BUILD-ONLY",
         CellResult.Unavailable => "UNAVAIL",
+        CellResult.Deferred => "DEFERRED",
         CellResult.Skip => "SKIP",
         CellResult.Timeout => "TIMEOUT",
         CellResult.Crashed => "CRASH",
@@ -1432,8 +1450,17 @@ partial class Build
         var buildOnly = counts.GetValueOrDefault(CellResult.BuildOnly);
         var skip = counts.GetValueOrDefault(CellResult.Skip);
         var unavailable = counts.GetValueOrDefault(CellResult.Unavailable);
+        var deferred = counts.GetValueOrDefault(CellResult.Deferred);
         sb.AppendLine($"Verdict: {fail} FAIL, {pass} PASS, {buildOnly} BUILD-ONLY, {skip} SKIP, " +
-                      $"{unavailable} UNAVAILABLE");
+                      $"{unavailable} UNAVAILABLE, {deferred} DEFERRED");
+
+        if (deferred > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Credential qualification deferred (--defer-credential-qualification):");
+            foreach (var o in outcomes.Where(o => o.Result == CellResult.Deferred))
+                sb.AppendLine($"  {o.Cell.Library} {PlatformLabel(o.Cell.Platform)}: {o.Reason}");
+        }
 
         // An unavailable leg is coverage this run did NOT provide. Naming each
         // one with its reason is the whole point of the state: a matrix that
@@ -1725,6 +1752,10 @@ partial class Build
             // never ran, and a consumer of this artifact has to be able to see
             // that rather than infer it from `unavailableCells` being non-empty.
             allowUnavailable = AllowUnavailable,
+
+            // Same reasoning for credential deferral: a PASS with deferred cells did not qualify the
+            // live sections listed under `deferredCells`.
+            deferCredentialQualification = DeferCredentialQualification,
             exitCode = verdict switch
             {
                 "ABORTED" => RegressionExitAborted,
@@ -1741,7 +1772,17 @@ partial class Build
                 buildOnly = outcomes.Count(o => o.Result == CellResult.BuildOnly),
                 skip = outcomes.Count(o => o.Result == CellResult.Skip),
                 unavailable = outcomes.Count(o => o.Result == CellResult.Unavailable),
+                deferred = outcomes.Count(o => o.Result == CellResult.Deferred),
             },
+
+            deferredCells = outcomes
+                .Where(o => o.Result == CellResult.Deferred)
+                .Select(o => new
+                {
+                    library = o.Cell.Library,
+                    platform = PlatformLabel(o.Cell.Platform),
+                    reason = o.Reason,
+                }).ToArray(),
 
             // Legs that were planned and could not run on this host. Carried
             // separately from `cells` so a consumer of the artifact can state
