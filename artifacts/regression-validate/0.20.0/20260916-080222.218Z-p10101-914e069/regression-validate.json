@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 2,
+  "version": "0.20.0",
+  "runId": "20260916-080222.218Z-p10101-914e069",
+  "timestamp": "2026-09-16T08:05:52.2303320Z",
+  "totalDurationSeconds": 40.078444,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter StoreKit2,CryptoKit restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, ios-device-monoaot, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "allowUnavailable": false,
+  "exitCode": 2,
+  "counts": {
+    "planned": 2,
+    "recorded": 2,
+    "unreached": 0,
+    "pass": 1,
+    "fail": 1,
+    "buildOnly": 0,
+    "skip": 0,
+    "unavailable": 0
+  },
+  "unavailableCells": [],
+  "minOsGaps": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "minimumOs": "15.0",
+      "availableOnHost": "26.3.1"
+    }
+  ],
+  "failedCells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "StoreKit Sandbox readiness preflight failed before app launch: STOREKIT_SANDBOX_PRODUCT_ID (or --storekit-sandbox-product-id) is missing. Configure an App Store Connect product for bundle \u0027com.swiftbindings.storekit2.tests\u0027 and sign the target ios simulator into a Sandbox tester account. A .storekit path cannot be activated through simctl, mlaunch, dotnet, or this command-line lane."
+    }
+  ],
+  "filter": "StoreKit2,CryptoKit",
+  "packages": [
+    "StoreKit2",
+    "CryptoKit"
+  ],
+  "platforms": [
+    "ios-sim"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 2,
+  "inputs": {
+    "sdkVersion": "0.20.0",
+    "appleVersion": "26.2.9",
+    "appleBindingsVersion": "26.2.14",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "914e069",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "CryptoKit": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      },
+      "StoreKit2": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069/api-surface",
+    "filesCollected": 2,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "StoreKit Sandbox readiness preflight failed before app launch: STOREKIT_SANDBOX_PRODUCT_ID (or --storekit-sandbox-product-id) is missing. Configure an App Store Connect product for bundle \u0027com.swiftbindings.storekit2.tests\u0027 and sign the target ios simulator into a Sandbox tester account. A .storekit path cannot be activated through simctl, mlaunch, dotnet, or this command-line lane.",
+      "durationSeconds": 0.0002352,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069/cells/StoreKit2-ios-sim.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 40.0766792,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260916-080222.218Z-p10101-914e069/cells/CryptoKit-ios-sim.log"
+    }
+  ]
+}

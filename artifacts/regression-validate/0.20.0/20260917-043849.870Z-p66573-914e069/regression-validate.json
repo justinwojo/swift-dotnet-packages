@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "version": "0.20.0",
+  "runId": "20260917-043849.870Z-p66573-914e069",
+  "timestamp": "2026-09-17T04:44:25.1248820Z",
+  "totalDurationSeconds": 141.513214,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter StoreKit2,CryptoKit restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-device, ios-device-monoaot, tvos"
+  ],
+  "abortReason": null,
+  "allowUnavailable": false,
+  "exitCode": 2,
+  "counts": {
+    "planned": 6,
+    "recorded": 6,
+    "unreached": 0,
+    "pass": 3,
+    "fail": 3,
+    "buildOnly": 0,
+    "skip": 0,
+    "unavailable": 0
+  },
+  "unavailableCells": [],
+  "minOsGaps": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "minimumOs": "15.0",
+      "availableOnHost": "26.3.1"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "minimumOs": "12.0",
+      "availableOnHost": "26.6.2"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "minimumOs": "15.0",
+      "availableOnHost": "26.6.2"
+    }
+  ],
+  "failedCells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "StoreKit Sandbox native readiness control did not pass (Failed): [SK-CONTROL]   60.0s TEST FAILED\n[SK-CONTROL]    0.0s start platform=ios bundle=com.swiftbindings.storekit2.tests product=com.swiftbindings.storekit2.tests.unprovisioned1 token=79d9e4315c0945ca94a5d3cab37620c7\n[SK-CONTROL]   60.0s FAIL deadline exceeded; pending=[\u0022appTransaction\u0022, \u0022currentEntitlements\u0022, \u0022all\u0022]; completed=[\u0022products=failed:assertion: expected one exact configured product, got total=0 exact=0\u0022]\n[SK-CONTROL]   60.0s TEST FAILED\n"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "result": "ERROR",
+      "reason": "QUALIFICATION NOT RUN \u2014 the offline checks passed; live qualification was not attested: TEST UNQUALIFIED: offline suite passed (41 passed, 0 skipped); StoreKit Sandbox live qualification not run (3 checks: AppTransaction.shared verified this app on Sandbox, Transaction.currentEntitlements terminates with verified Sandbox transactions, Transaction.all terminates with verified Sandbox transactions) because --storekit-sandbox-product-id was not provided; lane: no command-line Sandbox readiness control exists for macos (the macos test app is not provisioned to hold a Sandbox App Store receipt), so the configured product id cannot be attested on this lane"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "result": "ERROR",
+      "reason": "QUALIFICATION NOT RUN \u2014 the offline checks passed; live qualification was not attested: 2026-09-16 23:42:48.685 SwiftBindings.Apple.StoreKit2.Tests[71561:4911377] TEST UNQUALIFIED: offline suite passed (44 passed, 0 skipped); StoreKit Sandbox live qualification not run (3 checks: AppTransaction.shared verified this app on Sandbox, Transaction.currentEntitlements terminates with verified Sandbox transactions, Transaction.all terminates with verified Sandbox transactions) because --storekit-sandbox-product-id was not provided; lane: no command-line Sandbox readiness control exists for maccatalyst (the maccatalyst test app is not provisioned to hold a Sandbox App Store receipt), so the configured product id cannot be attested on this lane"
+    }
+  ],
+  "filter": "StoreKit2,CryptoKit",
+  "packages": [
+    "StoreKit2",
+    "CryptoKit"
+  ],
+  "platforms": [
+    "ios-sim",
+    "macos",
+    "maccatalyst"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 6,
+  "inputs": {
+    "sdkVersion": "0.20.0",
+    "appleVersion": "26.2.9",
+    "appleBindingsVersion": "26.2.14",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "914e069",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "CryptoKit": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      },
+      "StoreKit2": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/api-surface",
+    "filesCollected": 12,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-sim",
+      "result": "ERROR",
+      "reason": "StoreKit Sandbox native readiness control did not pass (Failed): [SK-CONTROL]   60.0s TEST FAILED\n[SK-CONTROL]    0.0s start platform=ios bundle=com.swiftbindings.storekit2.tests product=com.swiftbindings.storekit2.tests.unprovisioned1 token=79d9e4315c0945ca94a5d3cab37620c7\n[SK-CONTROL]   60.0s FAIL deadline exceeded; pending=[\u0022appTransaction\u0022, \u0022currentEntitlements\u0022, \u0022all\u0022]; completed=[\u0022products=failed:assertion: expected one exact configured product, got total=0 exact=0\u0022]\n[SK-CONTROL]   60.0s TEST FAILED\n",
+      "durationSeconds": 95.543498,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/StoreKit2-ios-sim.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "macos",
+      "result": "ERROR",
+      "reason": "QUALIFICATION NOT RUN \u2014 the offline checks passed; live qualification was not attested: TEST UNQUALIFIED: offline suite passed (41 passed, 0 skipped); StoreKit Sandbox live qualification not run (3 checks: AppTransaction.shared verified this app on Sandbox, Transaction.currentEntitlements terminates with verified Sandbox transactions, Transaction.all terminates with verified Sandbox transactions) because --storekit-sandbox-product-id was not provided; lane: no command-line Sandbox readiness control exists for macos (the macos test app is not provisioned to hold a Sandbox App Store receipt), so the configured product id cannot be attested on this lane",
+      "durationSeconds": 34.6216145,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/StoreKit2-macos.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "maccatalyst",
+      "result": "ERROR",
+      "reason": "QUALIFICATION NOT RUN \u2014 the offline checks passed; live qualification was not attested: 2026-09-16 23:42:48.685 SwiftBindings.Apple.StoreKit2.Tests[71561:4911377] TEST UNQUALIFIED: offline suite passed (44 passed, 0 skipped); StoreKit Sandbox live qualification not run (3 checks: AppTransaction.shared verified this app on Sandbox, Transaction.currentEntitlements terminates with verified Sandbox transactions, Transaction.all terminates with verified Sandbox transactions) because --storekit-sandbox-product-id was not provided; lane: no command-line Sandbox readiness control exists for maccatalyst (the maccatalyst test app is not provisioned to hold a Sandbox App Store receipt), so the configured product id cannot be attested on this lane",
+      "durationSeconds": 45.9672795,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/StoreKit2-maccatalyst.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "ios-sim",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 60.6420225,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/CryptoKit-ios-sim.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "macos",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 37.4215323,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/CryptoKit-macos.log"
+    },
+    {
+      "library": "CryptoKit",
+      "platform": "maccatalyst",
+      "result": "PASS",
+      "reason": null,
+      "durationSeconds": 55.6049223,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-043849.870Z-p66573-914e069/cells/CryptoKit-maccatalyst.log"
+    }
+  ]
+}

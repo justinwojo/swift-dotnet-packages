@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 2,
+  "version": "0.20.0",
+  "runId": "20260917-045440.734Z-p77711-914e069",
+  "timestamp": "2026-09-17T04:58:25.6720050Z",
+  "totalDurationSeconds": 67.437628,
+  "verdict": "FAIL",
+  "complete": false,
+  "incompleteReasons": [
+    "--filter StoreKit2 restricts the matrix to a package subset",
+    "platform subset \u2014 not run: ios-sim, macos, maccatalyst, tvos"
+  ],
+  "abortReason": null,
+  "allowUnavailable": false,
+  "exitCode": 2,
+  "counts": {
+    "planned": 2,
+    "recorded": 2,
+    "unreached": 0,
+    "pass": 0,
+    "fail": 2,
+    "buildOnly": 0,
+    "skip": 0,
+    "unavailable": 0
+  },
+  "unavailableCells": [],
+  "minOsGaps": [],
+  "failedCells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device-monoaot",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)"
+    }
+  ],
+  "filter": "StoreKit2",
+  "packages": [
+    "StoreKit2"
+  ],
+  "platforms": [
+    "ios-device",
+    "ios-device-monoaot"
+  ],
+  "platformsComplete": false,
+  "cellsPlanned": 2,
+  "inputs": {
+    "sdkVersion": "0.20.0",
+    "appleVersion": "26.2.9",
+    "appleBindingsVersion": "26.2.14",
+    "xcode": "Xcode 26.3 / Build version 17C529",
+    "swift": "Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)",
+    "dotnet": "10.0.107",
+    "gitSha": "914e069",
+    "gitDirty": true,
+    "host": "Justins-MacBook-Pro-2",
+    "libraries": {
+      "StoreKit2": {
+        "kind": "apple-framework",
+        "version": "26.2.14",
+        "mode": null
+      }
+    }
+  },
+  "apiSurface": {
+    "snapshotDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069/api-surface",
+    "filesCollected": 4,
+    "baselineDir": "/Users/wojo/Dev/swift-dotnet-packages/api-surface",
+    "baselinePresent": false,
+    "gateEnabled": false,
+    "drift": []
+  },
+  "artifacts": {
+    "runDir": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069",
+    "cellLogs": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069/cells",
+    "matrix": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069/matrix.txt"
+  },
+  "cells": [
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 31.8746781,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069/cells/StoreKit2-ios-device.log"
+    },
+    {
+      "library": "StoreKit2",
+      "platform": "ios-device-monoaot",
+      "result": "FAIL",
+      "reason": "process exited with code 1 (no marker)",
+      "durationSeconds": 35.5565488,
+      "log": "/Users/wojo/Dev/swift-dotnet-packages/artifacts/regression-validate/0.20.0/20260917-045440.734Z-p77711-914e069/cells/StoreKit2-ios-device-monoaot.log"
+    }
+  ]
+}
