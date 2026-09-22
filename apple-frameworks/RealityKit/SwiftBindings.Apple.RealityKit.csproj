@@ -18,6 +18,6 @@
     <!-- Generated bindings reference RealityFoundation.Entity, so consumers
          need the sibling package on restore. ProjectReference alone would
          not propagate to nuspec <dependencies>. -->
-    <PackageReference Include="SwiftBindings.Apple.RealityFoundation" Version="26.2.14" />
+    <PackageReference Include="SwiftBindings.Apple.RealityFoundation" Version="26.2.15" />
   </ItemGroup>
 </Project>

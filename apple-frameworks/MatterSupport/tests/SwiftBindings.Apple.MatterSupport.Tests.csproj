@@ -32,4 +32,20 @@
     <ProjectReference Include="../../Matter/SwiftBindings.Apple.Matter.csproj" />
   </ItemGroup>
 
+  <!-- MatterSupport PackageReferences Matter. This app also ProjectReferences Matter.
+       Once Matter 26.2.15 is in the local feed both copies import and CSC reports CS1704.
+       The project output is the copy under test. -->
+  <Target Name="_DetectMatterProjectReference">
+    <PropertyGroup>
+      <_HasMatterProjectReference Condition="'%(ProjectReference.Filename)' == 'SwiftBindings.Apple.Matter'">true</_HasMatterProjectReference>
+    </PropertyGroup>
+  </Target>
+  <Target Name="_DropStagedMatterPackageReference" BeforeTargets="ResolveAssemblyReferences"
+          DependsOnTargets="_DetectMatterProjectReference">
+    <ItemGroup>
+      <Reference Remove="@(Reference)"
+                 Condition="'%(Reference.NuGetPackageId)' == 'SwiftBindings.Apple.Matter' and '$(_HasMatterProjectReference)' == 'true'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

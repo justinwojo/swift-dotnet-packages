@@ -308,7 +308,7 @@ public override void DidFinishLoadingStyle(MLNMapView mapView, MLNStyle style)
 }
 ```
 
-Layer types available: `MLNCircleStyleLayer`, `MLNFillStyleLayer`, `MLNFillExtrusionStyleLayer`, `MLNLineStyleLayer`, `MLNSymbolStyleLayer`, `MLNHeatmapStyleLayer`, `MLNHillshadeStyleLayer`, `MLNColorReliefStyleLayer`, `MLNRasterStyleLayer`, `MLNBackgroundStyleLayer`, plus `MLNCustomStyleLayer` / `MLNCustomDrawableStyleLayer` / `MLNPluginLayer` for Metal-level drawing.
+Layer types available: `MLNCircleStyleLayer`, `MLNFillStyleLayer`, `MLNFillExtrusionStyleLayer`, `MLNLineStyleLayer`, `MLNSymbolStyleLayer`, `MLNHeatmapStyleLayer`, `MLNHillshadeStyleLayer`, `MLNColorReliefStyleLayer`, `MLNRasterStyleLayer`, `MLNBackgroundStyleLayer`, plus `MLNCustomStyleLayer` / `MLNPluginStyleLayer` for Metal-level drawing.
 
 Source types: `MLNShapeSource` (GeoJSON / in-memory shapes / a remote URL), `MLNVectorTileSource`, `MLNRasterTileSource`, `MLNRasterDEMSource`, `MLNImageSource`, `MLNComputedShapeSource`.
 

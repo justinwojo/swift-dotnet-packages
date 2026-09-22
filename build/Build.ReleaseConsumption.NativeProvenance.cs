@@ -185,8 +185,13 @@ partial class Build
         var stagedWithNative = stagedImages
             .Select(p => $"{p.PackageId}/{p.Version}")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // SwiftBindings.Apple.<Framework> binds an OS framework and ships managed
+        // assemblies only. There is no wrapper xcframework for this check to find.
+        // The managed identity gate still has to see that assembly. A third-party
+        // package with no identifiable native image stays a failure.
         var stagedWithoutNative = stagedPackages
             .Where(s => !stagedWithNative.Contains($"{s.PackageId}/{s.Version}"))
+            .Where(s => !IsSystemFrameworkBinding(s.PackageId))
             .Select(s => $"{s.PackageId} {s.Version}")
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToList();
@@ -199,6 +204,9 @@ partial class Build
 
         return failures;
     }
+
+    static bool IsSystemFrameworkBinding(string packageId) =>
+        packageId.StartsWith("SwiftBindings.Apple.", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Does this (id, version) list name the package that shipped this image?</summary>
     static bool Names(IReadOnlyCollection<(string PackageId, string Version)> packages, PackageNativeImage image) =>

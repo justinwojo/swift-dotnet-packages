@@ -33,7 +33,7 @@
   <ItemGroup>
     <SwiftFrameworkDependency Include="../BlinkID/BlinkID.xcframework"
                               PackageId="SwiftBindings.BlinkID"
-                              PackageVersion="7.8.7" />
+                              PackageVersion="7.8.8" />
   </ItemGroup>
 
 </Project>

@@ -18,8 +18,8 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../FBAEMKit/FBAEMKit.xcframework" PackageId="SwiftBindings.Facebook.AEM" PackageVersion="18.1.1.1" />
-    <SwiftFrameworkDependency Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework" PackageId="SwiftBindings.Facebook.CoreBasics" PackageVersion="18.1.1.1" />
+    <SwiftFrameworkDependency Include="../FBAEMKit/FBAEMKit.xcframework" PackageId="SwiftBindings.Facebook.AEM" PackageVersion="18.1.1.2" />
+    <SwiftFrameworkDependency Include="../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcframework" PackageId="SwiftBindings.Facebook.CoreBasics" PackageVersion="18.1.1.2" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

@@ -180,6 +180,11 @@ public class MainViewController : UIViewController
         var logger = new TestLogger();
         var results = new TestResults();
 
+        // The umbrella and UICore assemblies export almost nothing this suite calls.
+        // Touch one type from each so a packaged consumer loads them.
+        _ = typeof(ISTPApplePayContextDelegate);
+        _ = typeof(StripeUICore.Functions);
+
         // Phase 1: Smoke tests — type metadata validation
         logger.Info("=== Phase 1: Smoke Tests ===");
         RunSmokeTests(logger, results);

@@ -65,6 +65,44 @@ partial class Build
                     // Assemblies resolve lazily under Mono, so the interesting
                     // ones are usually not loaded yet at module-init time.
                     System.AppDomain.CurrentDomain.AssemblyLoad += (_, e) => Report(e.LoadedAssembly);
+
+                    // A referenced package the suite never touches would otherwise
+                    // stay unloaded, and the consumption lane would reject a
+                    // package the app really does reference. Load each direct
+                    // SwiftBindings reference once so its identity is reported.
+                    foreach (var referenced in System.Reflection.Assembly.GetExecutingAssembly().GetReferencedAssemblies())
+                    {
+                        if (referenced.Name is null || !referenced.Name.StartsWith("SwiftBindings", System.StringComparison.Ordinal))
+                            continue;
+                        try
+                        {
+                            Report(System.Reflection.Assembly.Load(referenced));
+                        }
+                        catch (System.Exception ex)
+                        {
+                            System.Console.WriteLine(Prefix + "assembly-error: " + referenced.Name + ": " + ex.GetType().Name + ": " + ex.Message);
+                        }
+                    }
+
+                    // A package can be deployed beside the app without a static
+                    // reference the linker keeps (Stripe's umbrella and UICore).
+                    // Load every SwiftBindings assembly that actually shipped in
+                    // the bundle so the consumption lane sees those too.
+                    var bundleDir = System.AppContext.BaseDirectory;
+                    if (!string.IsNullOrEmpty(bundleDir) && System.IO.Directory.Exists(bundleDir))
+                    {
+                        foreach (var file in System.IO.Directory.GetFiles(bundleDir, "SwiftBindings*.dll"))
+                        {
+                            try
+                            {
+                                Report(System.Reflection.Assembly.LoadFrom(file));
+                            }
+                            catch (System.Exception ex)
+                            {
+                                System.Console.WriteLine(Prefix + "assembly-error: " + file + ": " + ex.GetType().Name + ": " + ex.Message);
+                            }
+                        }
+                    }
                 }
                 catch (System.Exception ex)
                 {

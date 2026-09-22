@@ -26,4 +26,19 @@
     <ProjectReference Include="../../RealityFoundation/SwiftBindings.Apple.RealityFoundation.csproj" />
   </ItemGroup>
 
+  <!-- RealityKit PackageReferences RealityFoundation, and this app ProjectReferences it too.
+       A staged 26.2.15 nupkg makes both copies import (CS1704). Keep the project output. -->
+  <Target Name="_DetectRealityFoundationProjectReference">
+    <PropertyGroup>
+      <_HasRealityFoundationProjectReference Condition="'%(ProjectReference.Filename)' == 'SwiftBindings.Apple.RealityFoundation'">true</_HasRealityFoundationProjectReference>
+    </PropertyGroup>
+  </Target>
+  <Target Name="_DropStagedRealityFoundationPackageReference" BeforeTargets="ResolveAssemblyReferences"
+          DependsOnTargets="_DetectRealityFoundationProjectReference">
+    <ItemGroup>
+      <Reference Remove="@(Reference)"
+                 Condition="'%(Reference.NuGetPackageId)' == 'SwiftBindings.Apple.RealityFoundation' and '$(_HasRealityFoundationProjectReference)' == 'true'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

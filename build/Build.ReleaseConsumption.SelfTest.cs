@@ -612,6 +612,12 @@ partial class Build
                     .Any(f => f.Contains("vacuously", StringComparison.OrdinalIgnoreCase)),
                 "a package with no native content silently satisfied the native gate");
 
+            var matterResolved = new[] { ("SwiftBindings.Apple.Matter", "26.2.15"), ("SwiftBindings.Runtime", "0.19.4") };
+            Assert("native provenance: an Apple framework package with no wrapper is a system binding",
+                Provenance(new[] { goodBundle[1] }, packageImages,
+                        new[] { ("SwiftBindings.Apple.Matter", "26.2.15") }, matterResolved).Count == 0,
+                "a system-framework binding was required to ship a wrapper xcframework");
+
             // The lane's cache is kept between runs and only the version under
             // test is evicted, so a previous release of the same package is
             // still sitting in it. Its frameworks are not what this run ships.

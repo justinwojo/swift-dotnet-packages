@@ -20,8 +20,8 @@
 
 <!-- BEGIN auto-detected SwiftFrameworkDependency -->
   <ItemGroup>
-    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.9.0.1" />
-    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.9.0.1" />
+    <SwiftFrameworkDependency Include="../StripeCore/StripeCore.xcframework" PackageId="SwiftBindings.Stripe.Core" PackageVersion="26.11.0" />
+    <SwiftFrameworkDependency Include="../StripeUICore/StripeUICore.xcframework" PackageId="SwiftBindings.Stripe.UICore" PackageVersion="26.11.0" />
   </ItemGroup>
   <!-- END auto-detected SwiftFrameworkDependency -->
 

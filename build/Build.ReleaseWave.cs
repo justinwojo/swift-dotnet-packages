@@ -286,6 +286,15 @@ partial class Build
     //  Phase 1+2 — per-library pipeline, dependency-ordered
     // ═══════════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// A simulator run may publish when the suite passed, or when it reported
+    /// <see cref="TestRunStatus.Unqualified"/> because a live credential
+    /// (StoreKit Sandbox) was not configured and every check that could run passed.
+    /// Crashes, assertion failures, and timeouts stay failures.
+    /// </summary>
+    internal static bool ReleaseSimulationAccepted(TestRunStatus status) =>
+        status is TestRunStatus.Success or TestRunStatus.Unqualified;
+
     async Task<IReadOnlyDictionary<string, WaveLibraryResult>> RunWaveLibrariesAsync(
         WavePlan plan, AbsolutePath waveDir)
     {
@@ -622,10 +631,14 @@ partial class Build
                         "[{Library}] the app produced no output within the launch budget", lib.Name);
                 }
 
-                if (result.Status != TestRunStatus.Success)
+                if (!ReleaseSimulationAccepted(result.Status))
                     throw new InvalidOperationException(
                         $"{lib.Name}: simulator validation {result.Status}" +
                         (result.Reason is null ? "" : $" ({result.Reason})"));
+                if (result.Status == TestRunStatus.Unqualified)
+                    router.Console.Warning(
+                        "[{Library}] simulator run is UNQUALIFIED — the checks that could run passed; live credential qualification was not configured",
+                        lib.Name);
 
                 // 5. Consume what was just staged. Everything above this line
                 //    validated the SOURCE in the working tree through a

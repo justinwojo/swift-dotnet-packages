@@ -546,6 +546,14 @@ public partial class MainViewController
             logger.Pass("B11 Lottie gradient differential: static, pure-Swift dynamic, and managed dynamic providers produced the same observable render effect");
             results.Pass("Provider_GradientDifferential");
         }
+        catch (EntryPointNotFoundException ex)
+        {
+            // The cdecl lives only in the isolated *-B11Differential library build.
+            // The packed wrapper must not contain it, so package consumption cannot call it.
+            logger.Skip($"B11 Lottie gradient differential: production wrapper has no test shim ({ex.Message})");
+            results.Skip("Provider_GradientDifferential",
+                "production LottieSwiftBindings does not export the test-only cdecl");
+        }
         catch (Exception ex)
         {
             logger.Fail($"B11 Lottie gradient differential: {ex.GetType().Name}: {ex.Message}");

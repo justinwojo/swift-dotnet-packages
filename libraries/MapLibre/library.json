@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/maplibre/maplibre-native.git",
-  "version": "6.29.0",
+  "version": "6.31.0",
   "mode": "zip",
   "minIOS": "15.0",
   "zipUrl": "https://github.com/maplibre/maplibre-native/releases/download/ios-v{version}/MapLibre.dynamic.xcframework.zip",

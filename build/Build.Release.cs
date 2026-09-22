@@ -156,7 +156,7 @@ partial class Build
             // unless the caller passes --configuration Release explicitly,
             // so we forward it via a local helper that mirrors what the
             // BuildLibrary target's executor does.
-            BuildLibraryAtConfiguration(library, "Release", onLine);
+            BuildLibraryAtConfiguration(library, "Release", version, onLine);
 
             // Step 2: pack at Release into the release output dir.
             // Same Configuration override note: pack --no-build needs to
@@ -174,9 +174,10 @@ partial class Build
 
     /// <summary>
     /// Apple-framework variant of the third-party build+pack pair. Single
-    /// <c>dotnet build -c Release</c> (the SDK handles binding generation
+    /// <c>dotnet build -c Release -p:Version=…</c> (the SDK handles binding generation
     /// from <c>SwiftAppleFrameworkTarget</c> in one shot, all TFMs at once),
-    /// then <c>dotnet pack --no-build</c> with the version override.
+    /// then <c>dotnet pack --no-build</c> with the same version. The version has to
+    /// be applied at build time: <c>--no-build</c> does not recompile the assembly.
     /// </summary>
     static void BuildAndPackAppleFramework(
         AbsolutePath dir, string version, AbsolutePath outputDir, Action<string>? onLine = null)
@@ -191,8 +192,11 @@ partial class Build
             ?? throw new InvalidOperationException(
                 $"No SwiftBindings.*.csproj found in {dir}");
 
-        Info($"BuildAndPackRelease (Apple framework): build {csproj} -c Release");
-        var buildExit = RunDotnet(new[] { "build", (string)csproj, "-c", "Release" }, onLine);
+        // /p:Version has to be on the build. pack --no-build only rewrites the
+        // nuspec, and the consumption lane rejects a package whose assembly
+        // version is still the csproj's previous <Version>.
+        Info($"BuildAndPackRelease (Apple framework): build {csproj} -c Release -p:Version={version}");
+        var buildExit = RunDotnet(new[] { "build", (string)csproj, "-c", "Release", $"/p:Version={version}" }, onLine);
         if (buildExit != 0)
             throw new InvalidOperationException($"dotnet build failed (exit {buildExit}) for {csproj}");
 
@@ -305,7 +309,7 @@ partial class Build
     /// instance, so we re-implement the per-pass dotnet build invocations
     /// here with the explicit config rather than mutating shared state.
     /// </summary>
-    void BuildLibraryAtConfiguration(string library, string configuration, Action<string>? onLine = null)
+    void BuildLibraryAtConfiguration(string library, string configuration, string version, Action<string>? onLine = null)
     {
         var libraryDir = LibraryDir(library);
         var config = LibraryConfigLoader.Load(LibraryConfigPath(library));
@@ -336,18 +340,18 @@ partial class Build
 
         if (!multiProduct)
         {
-            DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false, onLine);
+            DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, version, tolerateFailure: false, onLine);
             return;
         }
 
         // Multi-product two-pass orchestration with the explicit config.
         InjectFrameworkDepsForLibrary(library, Array.Empty<string>(), allProducts: true);
         Log.Information("=== Pass 1: dotnet build -c {Config} (wrapper failures tolerated) ===", configuration);
-        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: true, onLine);
+        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, version, tolerateFailure: true, onLine);
 
         InjectProjectRefsForLibrary(library, Array.Empty<string>(), allProducts: true, configurationOverride: configuration);
         Log.Information("=== Pass 2: dotnet build -c {Config} (must succeed) ===", configuration);
-        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, tolerateFailure: false, onLine);
+        DotNetBuildSelectedAtConfiguration(libraryDir, selected, configuration, version, tolerateFailure: false, onLine);
     }
 
     /// <summary>
@@ -357,6 +361,7 @@ partial class Build
         AbsolutePath libraryDir,
         IReadOnlyList<SwiftBindings.Build.Models.Product> selected,
         string configuration,
+        string version,
         bool tolerateFailure,
         Action<string>? onLine = null)
     {
@@ -366,9 +371,9 @@ partial class Build
                 continue;
 
             var csproj = product.CsprojPath(libraryDir);
-            Log.Information("dotnet build -c {Config} {Csproj}", configuration, csproj);
+            Log.Information("dotnet build -c {Config} -p:Version={Version} {Csproj}", configuration, version, csproj);
 
-            var exit = RunDotnet(new[] { "build", (string)csproj, "-c", configuration }, onLine);
+            var exit = RunDotnet(new[] { "build", (string)csproj, "-c", configuration, $"/p:Version={version}" }, onLine);
             if (exit != 0)
             {
                 if (tolerateFailure)
