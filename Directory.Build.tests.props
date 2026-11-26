@@ -39,6 +39,22 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!-- Desktop test apps build for the host architecture in every configuration.
+       The platform SDK picks a desktop app's RID set by configuration: Debug
+       gets the host RID, Release (with SupportedOSPlatformVersion below 27)
+       gets the universal maccatalyst-x64;maccatalyst-arm64 / osx-x64;osx-arm64
+       pair. The harness restores each test csproj once and builds every cell,
+       Debug and Release, with no-restore, so a Release desktop build asked for
+       an x64 target the assets file never had (NETSDK1047). The validators
+       also launch the single-RID bundle. Pinning the host RID here makes
+       restore and both configurations agree on one RID set. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' AND '$(RuntimeIdentifiers)' == '' AND ($(TargetFramework.Contains('-maccatalyst')) OR $(TargetFramework.Contains('-macos')))">
+    <_SwiftBindingsTestHostArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</_SwiftBindingsTestHostArch>
+    <_SwiftBindingsTestHostArch Condition="'$(_SwiftBindingsTestHostArch)' == ''">x64</_SwiftBindingsTestHostArch>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-$(_SwiftBindingsTestHostArch)</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-macos'))">osx-$(_SwiftBindingsTestHostArch)</RuntimeIdentifier>
+  </PropertyGroup>
+
   <!-- tvOS test apps: Apple disallows JIT on any tvOS target, so the default
        Debug pipeline AOT-compiles managed code, which surfaces the Swift
        stdlib P/Invokes (Swift.Array.init, Swift.Dictionary.*, …) declared in
