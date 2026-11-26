@@ -18,11 +18,11 @@ namespace SwiftBindings.Build.Models;
 ///         CoreCLR must also be corroborated by <c>libcoreclr.dylib</c> or
 ///         <c>libcoreclr.framework</c>, and Mono must not ship next to it. (NativeAOT device
 ///         cells are proven separately, by <c>AssertDeviceAppFlavor</c>.)</item>
-///   <item>ReadyToRun vs interpreter (.NET 11): the app assembly and every <c>SwiftBindings.*</c>
-///         assembly carry a ReadyToRun header (a managed native header) when their code was
-///         precompiled. A bundle where they disagree proves neither engine. Debug builds leave user
-///         assemblies out of the composite image, so they run on the interpreter even though
-///         the bundle carries a <c>*.r2r</c> image for the framework assemblies.</item>
+///   <item>ReadyToRun vs interpreter (.NET 11): ReadyToRun needs a ReadyToRun header (a managed
+///         native header) on the app assembly and on every <c>SwiftBindings.*</c> assembly; an IL
+///         binding next to a ReadyToRun app proves neither engine. The interpreter needs an IL app
+///         assembly: Debug builds leave project-built assemblies out of the composite image, while
+///         package assemblies (the Apple supplement, the runtime) stay precompiled.</item>
 ///   <item>macOS: CoreCLR with the JIT; any CoreCLR bundle without Mono qualifies.</item>
 /// </list>
 /// Anything else (no CoreLib, both runtimes, an unreadable assembly) fails closed.
@@ -37,7 +37,7 @@ public static class EngineEvidence
     /// <summary>What a bundle carries, reduced to the facts the classification reads.</summary>
     /// <param name="CoreLibIsMono">Null when the bundle has no CoreLib.</param>
     /// <param name="AppIsReadyToRun">Null when the app assembly is not in the bundle.</param>
-    /// <param name="MixedReadyToRun">The app and its bindings disagree: some are ReadyToRun, some IL only.</param>
+    /// <param name="MixedReadyToRun">The app is ReadyToRun but a <c>SwiftBindings.*</c> assembly is IL only.</param>
     public sealed record Facts(bool? CoreLibIsMono, bool MonoLibrary, bool CoreClrLibrary, bool? AppIsReadyToRun,
         bool MixedReadyToRun = false);
 
@@ -70,7 +70,7 @@ public static class EngineEvidence
                 coreLib is null ? null : DefinesMonoNamespace(coreLib),
                 monoLib, coreClrLib,
                 app is null ? null : HasReadyToRunCode(app),
-                app is not null && bindings.Any(b => HasReadyToRunCode(b) != HasReadyToRunCode(app))));
+                app is not null && HasReadyToRunCode(app) && !bindings.All(HasReadyToRunCode)));
         }
         catch (Exception ex) when (ex is BadImageFormatException or IOException or InvalidOperationException)
         {
@@ -86,7 +86,7 @@ public static class EngineEvidence
         if (f.MonoLibrary) markers.Add(MonoLibrary);
         if (f.CoreClrLibrary) markers.Add("libcoreclr");
         markers.Add(f.AppIsReadyToRun switch { true => "app is ReadyToRun", false => "app is IL only", null => "app assembly missing" });
-        if (f.MixedReadyToRun) markers.Add("a SwiftBindings assembly disagrees with the app on ReadyToRun");
+        if (f.MixedReadyToRun) markers.Add("a SwiftBindings assembly is IL only next to a ReadyToRun app");
 
         AppEngine? engine = f.MixedReadyToRun ? null : (f.CoreLibIsMono, f.MonoLibrary, f.CoreClrLibrary, f.AppIsReadyToRun) switch
         {

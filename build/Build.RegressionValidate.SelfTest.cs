@@ -588,10 +588,8 @@ partial class Build
                 Assert("engine: Mono CoreLib next to libcoreclr proves nothing", C(true, false, true, false) is null, "classified");
                 Assert("engine: CoreCLR without the app assembly proves nothing", C(false, false, true, null) is null, "classified");
                 Assert("engine: a bundle with no CoreLib proves nothing", C(null, false, false, null) is null, "classified");
-                Assert("engine: a binding that disagrees with the app on ReadyToRun proves neither CoreCLR engine",
+                Assert("engine: an IL binding next to a ReadyToRun app proves neither CoreCLR engine",
                     SwiftBindings.Build.Models.EngineEvidence.Classify(
-                        new SwiftBindings.Build.Models.EngineEvidence.Facts(false, false, true, false, MixedReadyToRun: true)).Engine is null
-                    && SwiftBindings.Build.Models.EngineEvidence.Classify(
                         new SwiftBindings.Build.Models.EngineEvidence.Facts(false, false, true, true, MixedReadyToRun: true)).Engine is null,
                     "classified");
 
