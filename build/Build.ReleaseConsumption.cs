@@ -228,7 +228,7 @@ partial class Build
         //    killed mid-run.
         var result = ValidateSimAt(appPath, appName, bundleId,
             ResolveRunBudgetSeconds(library, timeoutSeconds), simUdid, Info,
-            storeKitConfiguration);
+            storeKitConfiguration, library);
         if (!ReleaseSimulationAccepted(result.Status))
             throw new InvalidOperationException(
                 $"{laneLabel}: the packaged consumer failed on the simulator — {result.Status}" +
@@ -237,7 +237,8 @@ partial class Build
             Info($"{laneLabel}: UNQUALIFIED — the checks that could run passed; live credential qualification was not configured");
 
         // 9. Runtime identity — what the process itself says it loaded.
-        AssertRuntimeFlavor(result.Output, expectMono: true, laneLabel);
+        // .NET 10 simulator apps run Mono; .NET 11 ones run CoreCLR (interpreter in Debug).
+        AssertRuntimeFlavor(result.Output, expectMono: AppsRunOnMono, laneLabel);
         var identityFailures = swaps
             .Select(s => LaneEvidenceGate.JudgeAssemblyIdentity(result.Output, s.PackageId, s.Version))
             .Where(f => f is not null)

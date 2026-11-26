@@ -47,6 +47,28 @@ public sealed class AppDelegate : UIApplicationDelegate
 {
     public override UIWindow? Window { get; set; }
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
     {
         var pass = 0;
@@ -473,13 +495,14 @@ public sealed class AppDelegate : UIApplicationDelegate
         // binding (it ships a generated FBAEMKitSwiftBindings.xcframework wrapper),
         // so these calls also exercise the Swift calling convention, not just ObjC.
 
+        // A non-@objc Int-backed Swift enum: its C# members are keyed by case name, not by the
+        // Swift raw value or position, so check the members are distinct, name-keyed cases.
         Check("AEM AEMAdvertiserRuleOperator enum raw values", () =>
-        {
-            if ((long)AEMAdvertiserRuleOperator.Unknown != 0) throw new Exception("Unknown");
-            if ((long)AEMAdvertiserRuleOperator.And != 1) throw new Exception("And");
-            if ((long)AEMAdvertiserRuleOperator.RegexMatch != 10) throw new Exception("RegexMatch");
-            if ((long)AEMAdvertiserRuleOperator.GreaterThanOrEqual != 16) throw new Exception("GreaterThanOrEqual");
-        });
+            AssertNameKeyedMembers(
+                AEMAdvertiserRuleOperator.Unknown,
+                AEMAdvertiserRuleOperator.And,
+                AEMAdvertiserRuleOperator.RegexMatch,
+                AEMAdvertiserRuleOperator.GreaterThanOrEqual));
 
         Check("AEM AEMSettings.GetAppID is callable", () =>
         {
@@ -556,8 +579,8 @@ public sealed class AppDelegate : UIApplicationDelegate
             Console.WriteLine($"TEST FAILED: {fail} test(s) failed ({pass} passed, {skip} skipped)");
         }
 
-        Window = new UIWindow(UIScreen.MainScreen.Bounds) { RootViewController = new UIViewController() };
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new UIViewController());
         return true;
     }
 }

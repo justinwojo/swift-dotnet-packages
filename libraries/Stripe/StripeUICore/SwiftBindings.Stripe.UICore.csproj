@@ -1,7 +1,7 @@
-<Project Sdk="SwiftBindings.Sdk/0.20.2">
+<Project Sdk="SwiftBindings.Sdk/11.0.0">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <!-- Not required: this module's binding emits no Swift wrapper that its P/Invokes reference. -->
     <SwiftWrapperRequired>false</SwiftWrapperRequired>
 

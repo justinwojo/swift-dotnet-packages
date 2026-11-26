@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework />
-    <TargetFrameworks>net10.0-ios;net10.0-macos;net10.0-maccatalyst;net10.0-tvos</TargetFrameworks>
+    <TargetFrameworks>$(SwiftBindingsTfmIos);$(SwiftBindingsTfmMacos);$(SwiftBindingsTfmMaccatalyst);$(SwiftBindingsTfmTvos)</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -35,6 +35,28 @@ internal static class Tests
     /// </summary>
     private const string ForegroundPreconditionText = "Target is not foreground";
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -70,13 +92,10 @@ internal static class Tests
             catch (Exception ex) { Fail($"{name} metadata", ex.Message); }
         }
 
-        // Test 1: ActivityStyle plain enum — Standard=0, Transient=1.
+        // Test 1: ActivityStyle plain enum — Standard, Transient are distinct, name-keyed cases.
         try
         {
-            if ((int)ActivityStyle.Standard != 0)
-                throw new InvalidOperationException($"Standard expected 0, got {(int)ActivityStyle.Standard}");
-            if ((int)ActivityStyle.Transient != 1)
-                throw new InvalidOperationException($"Transient expected 1, got {(int)ActivityStyle.Transient}");
+            AssertNameKeyedMembers(ActivityStyle.Standard, ActivityStyle.Transient);
             Pass("ActivityStyle values");
         }
         catch (Exception ex)
@@ -84,19 +103,11 @@ internal static class Tests
             Fail("ActivityStyle values", ex.Message);
         }
 
-        // Test 2: ActivityState plain enum — five states with expected integer tags.
+        // Test 2: ActivityState plain enum — five states, each a distinct, name-keyed case.
         try
         {
-            if ((int)ActivityState.Pending != 0)
-                throw new InvalidOperationException($"Pending expected 0, got {(int)ActivityState.Pending}");
-            if ((int)ActivityState.Active != 1)
-                throw new InvalidOperationException($"Active expected 1, got {(int)ActivityState.Active}");
-            if ((int)ActivityState.Ended != 2)
-                throw new InvalidOperationException($"Ended expected 2, got {(int)ActivityState.Ended}");
-            if ((int)ActivityState.Dismissed != 3)
-                throw new InvalidOperationException($"Dismissed expected 3, got {(int)ActivityState.Dismissed}");
-            if ((int)ActivityState.Stale != 4)
-                throw new InvalidOperationException($"Stale expected 4, got {(int)ActivityState.Stale}");
+            AssertNameKeyedMembers(ActivityState.Pending, ActivityState.Active, ActivityState.Ended,
+                ActivityState.Dismissed, ActivityState.Stale);
             Pass("ActivityState values");
         }
         catch (Exception ex)
@@ -104,15 +115,11 @@ internal static class Tests
             Fail("ActivityState values", ex.Message);
         }
 
-        // Test 3: ActivityAuthorizationError plain enum — verify boundary values.
+        // Test 3: ActivityAuthorizationError plain enum — boundary members are distinct, name-keyed cases.
         try
         {
-            if ((int)ActivityAuthorizationError.AttributesTooLarge != 0)
-                throw new InvalidOperationException($"AttributesTooLarge expected 0, got {(int)ActivityAuthorizationError.AttributesTooLarge}");
-            if ((int)ActivityAuthorizationError.Unentitled != 9)
-                throw new InvalidOperationException($"Unentitled expected 9, got {(int)ActivityAuthorizationError.Unentitled}");
-            if ((int)ActivityAuthorizationError.ReconnectNotPermitted != 11)
-                throw new InvalidOperationException($"ReconnectNotPermitted expected 11, got {(int)ActivityAuthorizationError.ReconnectNotPermitted}");
+            AssertNameKeyedMembers(ActivityAuthorizationError.AttributesTooLarge, ActivityAuthorizationError.Unentitled,
+                ActivityAuthorizationError.ReconnectNotPermitted);
             Pass("ActivityAuthorizationError values");
         }
         catch (Exception ex)

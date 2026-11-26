@@ -110,7 +110,11 @@ partial class Build
             || path == "libraries/Directory.Build.props"
             || path == "apple-frameworks/Directory.Build.props"
             || path == "global.json"
-            || path == ".github/workflows/ci.yml";
+            || path == ".github/workflows/ci.yml"
+            || path == "Directory.Build.targets"
+            || path.StartsWith("toolchains/", StringComparison.Ordinal)
+            || path.StartsWith("tests-shared/", StringComparison.Ordinal)
+            || path.StartsWith(".github/actions/", StringComparison.Ordinal);
 
         if (changed.Any(IsSharedInfra))
         {
@@ -548,7 +552,7 @@ partial class Build
         // delays the run instead of shortening it; sharing one countdown let it eat the
         // run budget, which is the mid-suite kill the budgets exist to prevent.
         var rem = (deadline - DateTime.UtcNow).TotalSeconds;
-        var nativeControlBudgetSeconds = storeKitConfiguration is null
+        var nativeControlBudgetSeconds = storeKitConfiguration is null && !VisionKitWarmup.AppliesTo(library, "ios")
             ? 0
             : ResolveNativeControlBudgetSeconds(library);
         var reservedBudgetSeconds = watchBudgetSeconds + nativeControlBudgetSeconds;
@@ -577,6 +581,7 @@ partial class Build
         if (storeKitConfiguration is not null)
             RunStoreKitSandboxNativeControl(storeKitConfiguration, sim.Device,
                 line => Log.Information("{Line}", line));
+        EnsureVisionKitDaemonWarm(library, "ios", sim.Device, line => Log.Information("{Line}", line));
         try
         {
             // Protects against a hung install on slow GHA macOS-26 runners without

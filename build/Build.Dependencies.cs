@@ -305,7 +305,7 @@ partial class Build
     {
         var productDir = product.ProductDir(libraryDir);
         var configuration = configurationOverride ?? (string)Configuration;
-        return productDir / "obj" / configuration / "net10.0-ios" / "swift-binding";
+        return productDir / "obj" / configuration / ResolveTfm("ios") / "swift-binding";
     }
 
     /// <summary>

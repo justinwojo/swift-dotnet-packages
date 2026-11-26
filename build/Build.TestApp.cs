@@ -10,7 +10,8 @@ partial class Build
     ///
     /// <para>Three modes (mirrors <c>build-testapp.sh:50–87</c>):</para>
     /// <list type="bullet">
-    ///   <item><b>Default</b> — <c>dotnet build -c Debug</c> for the simulator.</item>
+    ///   <item><b>Default</b> — <c>dotnet build -c Debug</c> for the simulator (<c>--configuration Release</c>
+    ///         builds the Release app: ReadyToRun CoreCLR on .NET 11).</item>
     ///   <item><c>--device</c> — <c>dotnet build -c Debug -p:RuntimeIdentifier=ios-arm64</c> (Mono AOT).</item>
     ///   <item><c>--device --aot</c> — <c>dotnet publish -c Release -r ios-arm64 -p:PublishAot=true ...</c>
     ///         (NativeAOT). Requires the codesign env vars listed below.</item>
@@ -52,7 +53,7 @@ partial class Build
             }
             else
             {
-                BuildTestAppSimulator(library, testDir, platform);
+                BuildTestAppSimulator(library, testDir, platform, configuration: Configuration.ToString());
             }
 
             Log.Information("=== Build complete ===");
@@ -66,12 +67,13 @@ partial class Build
     /// shape of the default one.
     /// </summary>
     void BuildTestAppSimulator(string library, AbsolutePath testDir, string platform = "ios",
-        Action<string>? onLine = null, bool noRestore = false, IEnumerable<string>? extraArgs = null)
+        Action<string>? onLine = null, bool noRestore = false, IEnumerable<string>? extraArgs = null,
+        string configuration = "Debug")
     {
-        var startLine = $"=== Building {library} tests for {platform} ===";
+        var startLine = $"=== Building {library} tests for {platform} ({configuration}) ===";
         if (onLine is null) Log.Information("{Line}", startLine);
         else onLine(startLine);
-        var args = new List<string> { "build", (string)testDir, "-c", "Debug" };
+        var args = new List<string> { "build", (string)testDir, "-c", configuration };
         // Pass -f only when necessary: non-default platform always needs it
         // (e.g. --platform macos), and multi-TFM projects need it to select
         // the right TFM. Single-TFM legacy projects (which may use versioned

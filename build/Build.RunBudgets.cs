@@ -1,4 +1,5 @@
 using Nuke.Common;
+using SwiftBindings.Build.Models;
 
 partial class Build
 {
@@ -49,17 +50,28 @@ partial class Build
     ///   (offline-style snapshot) + 20s + 15s + 10s + 45s (a second map's style/load) before it
     ///   reports: ~195s of sequential waiting in the all-suppressed worst case, before the
     ///   unbounded-but-fast probes and the final report.</item>
+    ///   <item><b>Mappedin</b> — each of its two map views is kept on screen and given up to 60s
+    ///   for its page to load (the content process launch is the slow part on a loaded host)
+    ///   before the call under test, then <c>Destroy</c> waits 15s and <c>GetMapData</c> 30s:
+    ///   ~165s of sequential waiting before the report.</item>
     ///   <item><b>StoreKit2</b> — four Sandbox qualification operations are independently
     ///   bounded at 60s, followed by the existing 30s Storefront/update probes and short
     ///   pre-canceled unwind checks. The 600s floor preserves reporting headroom if every
     ///   operation reaches its own bound.</item>
+    ///   <item><b>VisionKit</b> — the harness warms mediaanalysisd before the app runs
+    ///   (<c>Build.VisionKitWarmup.cs</c>, budgeted in <see cref="ResolveNativeControlBudgetSeconds"/>),
+    ///   so the app's first <c>ImageAnalyzer.AnalyzeAsync</c> is bounded at 60s, the repeat on the
+    ///   running daemon at 30s, then <c>ImageAnalysisInteraction.GetSubjectsAsync</c> at 15s: ~105s
+    ///   of sequential waiting before the report.</item>
     /// </list>
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, int> LibraryRunBudgetSeconds =
         new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["MapLibre"] = 300,
+            ["Mappedin"] = 240,
             ["StoreKit2"] = 600,
+            ["VisionKit"] = 150,
         };
 
     /// <summary>
@@ -77,13 +89,17 @@ partial class Build
     int LaunchBudgetSeconds => ResolveLaunchBudgetSeconds(LaunchTimeout);
 
     /// <summary>
-    /// Extra host-tool, install, launch, and run reservation required before the managed StoreKit2
-    /// app can be installed. Other libraries have no native readiness phase.
+    /// Extra host-tool, install, launch, and run reservation required before the managed app can be
+    /// installed: StoreKit2's Sandbox native control, and VisionKit's once-per-boot analysis-daemon
+    /// warm-up on the iOS simulator (charged in full, since the harness cannot know in advance
+    /// whether this boot is already warm). Other libraries have no native readiness phase.
     /// </summary>
     internal static int ResolveNativeControlBudgetSeconds(string library) =>
         string.Equals(library, StoreKit2Library, StringComparison.Ordinal)
             ? StoreKitNativePhaseBudgetSeconds
-            : 0;
+            : VisionKitWarmup.AppliesTo(library, "ios")
+                ? VisionKitWarmupPhaseBudgetSeconds
+                : 0;
 
     /// <summary>
     /// How long an <c>simctl install</c> may take before the attempt gives up on it, given the

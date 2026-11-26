@@ -29,14 +29,32 @@ public partial class MainViewController
         BuilderMutationSurvives(logger, results);
     }
 
-    // Create a MapView, put its web view on screen, and tear it down.
+    // How long a map view's web content may take to finish loading. The library holds every call
+    // until its page has loaded and answers through the page's JavaScript bridge, so this wait is
+    // the content process launching and loading the bundled page, not the call under test. On a
+    // heavily loaded host the content process took up to 25s to launch.
+    private const int MapViewReadyTimeoutMs = 60_000;
+
+    // The only public readiness signal the library offers: MapViewController is the WKWebView that
+    // hosts its JavaScript bridge, and the bridge comes up when that page finishes loading
+    // (the library flushes its queued calls from its own navigation delegate). There is no
+    // public "ready" event or callback.
+    private static Task<bool> WaitForMapViewReadyAsync(WebKit.WKWebView webView) =>
+        Await.UntilAsync(() => webView.Url is not null && !webView.IsLoading, MapViewReadyTimeoutMs);
+
+    // Create a MapView, put its web view on screen, and tear it down. The view stays in the
+    // window until Destroy has answered: WebKit drops the content process of a web view that is in
+    // no window to the background and suspends it a few seconds after its page loads, and a call
+    // still waiting on that page then never completes. A map screen destroys its map while it is
+    // still showing, which is the order exercised here.
     private async Task MapViewCreateAttachDestroy(TestLogger logger, TestResults results)
     {
         MapView? mapView = null;
+        WebKit.WKWebView? webView = null;
         try
         {
             mapView = new MapView();
-            var webView = mapView.View;
+            webView = mapView.View;
             if (webView is null)
             {
                 logger.Fail("MapView.View returned null");
@@ -55,7 +73,6 @@ public partial class MainViewController
 
             bool attached = webView.Superview is not null && webView.Window is not null;
             var size = webView.Frame.Size;
-            webView.RemoveFromSuperview();
 
             if (!attached)
             {
@@ -69,7 +86,7 @@ public partial class MainViewController
             }
             else
             {
-                logger.Pass("MapView created, its WKWebView attached to the window at 200x200, and detached");
+                logger.Pass("MapView created and its WKWebView attached to the window at 200x200");
                 results.Pass("MapView_CreateAttach");
             }
         }
@@ -83,6 +100,15 @@ public partial class MainViewController
         // round-trips today, so it is safe to order ahead of the aborting probes.
         try
         {
+            if (webView is not null && !await WaitForMapViewReadyAsync(webView))
+            {
+                logger.Fail($"MapView's web content did not finish loading within {MapViewReadyTimeoutMs / 1000}s " +
+                            $"(url={(webView.Url is null ? "none" : "set")}, loading={webView.IsLoading}, " +
+                            $"progress={webView.EstimatedProgress:0.00}); Destroy was not called");
+                results.Fail("MapView_Destroy", "map view never became ready");
+                return;
+            }
+
             // The closure firing at all is only half the claim: Destroy reports its
             // outcome IN the Result, so a teardown that failed would invoke the
             // closure exactly the same way. Success is what this test asserts.
@@ -104,7 +130,7 @@ public partial class MainViewController
             bool arrived = await Await.UntilAsync(() => Volatile.Read(ref destroyed), 15000);
             if (!arrived)
             {
-                logger.Fail("MapView.Destroy never invoked its result closure within 15s");
+                logger.Fail("MapView.Destroy never invoked its result closure within 15s of the map view being ready");
                 results.Fail("MapView_Destroy", "closure never fired");
             }
             else if (!Volatile.Read(ref succeeded))
@@ -125,6 +151,7 @@ public partial class MainViewController
         }
         finally
         {
+            webView?.RemoveFromSuperview();
             mapView?.Dispose();
         }
     }
@@ -260,13 +287,29 @@ public partial class MainViewController
     // The documented map-loading entry point, driven with deliberately invalid
     // credentials so no account is needed: the failure must be delivered to the
     // result closure. That delivery is exactly what aborts today, so it is ordered
-    // near the end of the suite.
+    // near the end of the suite. The answer needs a network round trip from the map
+    // view's page, so the view is on screen while the call is outstanding, as a map
+    // screen's is: WebKit suspends the content process of a web view in no window a few
+    // seconds after its page loads, and the answer then never arrives.
     private async Task GetMapDataFailurePath(TestLogger logger, TestResults results)
     {
         MapView? mapView = null;
+        WebKit.WKWebView? webView = null;
         try
         {
             mapView = new MapView();
+            webView = mapView.View;
+            webView.Frame = new CGRect(0, 0, 200, 200);
+            View!.AddSubview(webView);
+            if (!await WaitForMapViewReadyAsync(webView))
+            {
+                logger.Fail($"MapView's web content did not finish loading within {MapViewReadyTimeoutMs / 1000}s " +
+                            $"(url={(webView.Url is null ? "none" : "set")}, loading={webView.IsLoading}, " +
+                            $"progress={webView.EstimatedProgress:0.00}); GetMapData was not called");
+                results.Fail("MapView_GetMapData_InvalidCredentials", "map view never became ready");
+                return;
+            }
+
             var options = new GetMapDataWithCredentialsOptions(
                 "invalid-key-for-tests", "invalid-secret-for-tests", "invalid-map-id-for-tests");
 
@@ -281,7 +324,7 @@ public partial class MainViewController
             bool arrived = await Await.UntilAsync(() => delivered, 30000);
             if (!arrived)
             {
-                logger.Fail("MapView.GetMapData never delivered a result for invalid credentials within 30s");
+                logger.Fail("MapView.GetMapData never delivered a result for invalid credentials within 30s of the map view being ready");
                 results.Fail("MapView_GetMapData_InvalidCredentials", "no result delivered");
             }
             else if (!wasFailure)
@@ -302,6 +345,7 @@ public partial class MainViewController
         }
         finally
         {
+            webView?.RemoveFromSuperview();
             mapView?.Dispose();
         }
     }

@@ -13,6 +13,28 @@ namespace SwiftBindings.RealityKit.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -57,14 +79,11 @@ internal static class Tests
         MetadataTest<ARView.RenderOptionsInfo>("ARView.RenderOptionsInfo");
         MetadataTest<EntityTranslationGestureRecognizer>("EntityTranslationGestureRecognizer");
 
-        // Plain-enum case values — pin Swift case order. ARView.CameraModeKind
+        // Plain-enum case values — the members are distinct, name-keyed cases. ARView.CameraModeKind
         // is iOS 13.0+ so safely under the deployment floor.
         try
         {
-            if ((int)ARView.CameraModeKind.Ar != 0)
-                throw new InvalidOperationException($"Ar expected 0, got {(int)ARView.CameraModeKind.Ar}");
-            if ((int)ARView.CameraModeKind.NonAR != 1)
-                throw new InvalidOperationException($"NonAR expected 1, got {(int)ARView.CameraModeKind.NonAR}");
+            AssertNameKeyedMembers(ARView.CameraModeKind.Ar, ARView.CameraModeKind.NonAR);
             Pass("ARView.CameraModeKind case values");
         }
         catch (Exception ex) { Fail("ARView.CameraModeKind case values", ex.Message); }

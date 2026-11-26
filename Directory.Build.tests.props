@@ -45,8 +45,10 @@
        Swift.Runtime as undefined externs at the native link step. The Mono
        interpreter is permitted on tvOS and resolves P/Invokes lazily, same
        as the iOS sim Mono JIT path. Mirrors the workaround already in
-       BindingTests/RuntimeTestsApp.tvOS.csproj. -->
-  <PropertyGroup Condition="$(TargetFramework.Contains('tvos'))">
+       BindingTests/RuntimeTestsApp.tvOS.csproj. .NET 10 only: a .NET 11 tvOS app
+       runs CoreCLR (the interpreter in Debug), and the SDK's own tvOS lanes
+       likewise apply this Mono workaround to net10 alone. -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('tvos')) AND $(TargetFramework.StartsWith('net10.0'))">
     <MtouchLink>None</MtouchLink>
     <UseInterpreter>true</UseInterpreter>
   </PropertyGroup>

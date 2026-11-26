@@ -155,7 +155,7 @@ partial class Build
 
         Assert.True(StoreKitLanePlatform(CellPlatform.IosSim) == "ios"
             && StoreKitLanePlatform(CellPlatform.IosDevice) == "ios"
-            && StoreKitLanePlatform(CellPlatform.IosDeviceMonoAot) == "ios"
+            && StoreKitLanePlatform(CellPlatform.IosDeviceDefault) == "ios"
             && StoreKitLanePlatform(CellPlatform.TvOs) == "tvos"
             && StoreKitLanePlatform(CellPlatform.MacOs) == "macos"
             && StoreKitLanePlatform(CellPlatform.MacCatalyst) == "maccatalyst",

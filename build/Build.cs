@@ -1,6 +1,7 @@
 using Nuke.Common;
 using Nuke.Common.IO;
 using Serilog;
+using SwiftBindings.Build.Models;
 
 enum LibraryKind { ThirdParty, AppleFramework }
 
@@ -167,10 +168,38 @@ partial class Build : NukeBuild
         !string.IsNullOrEmpty(RuntimeIdentifier) ? RuntimeIdentifier : defaultRid;
 
     /// <summary>
-    /// Resolve the effective TFM string for the given platform. Returns
-    /// <c>net10.0-{platform}</c> (e.g. <c>net10.0-ios</c>, <c>net10.0-macos</c>).
+    /// The .NET + Xcode pairing this process builds for, from <c>toolchains/&lt;pairing&gt;.json</c>.
+    /// Selected by the <c>SwiftBindingsPairing</c> environment variable, which MSBuild also reads
+    /// as a property, so the harness's paths and every project's TFM come from the same input
+    /// (Directory.Build.props applies the same <c>net10-xcode26</c> default). Set it through
+    /// <c>scripts/use-toolchain.sh</c>, which also selects the matching SDK and Xcode.
     /// </summary>
-    static string ResolveTfm(string platform) => $"net10.0-{platform}";
+    internal static ToolchainPairing ActivePairing => LazyPairing.Value;
+
+    static readonly Lazy<ToolchainPairing> LazyPairing = new(() =>
+    {
+        var raw = Environment.GetEnvironmentVariable(ToolchainPairing.EnvironmentVariable);
+        var name = string.IsNullOrWhiteSpace(raw) ? ToolchainPairing.Default : raw.Trim();
+        return ToolchainPairing.Load(RootDirectory / "toolchains", name);
+    });
+
+    /// <summary>True when the run's simulator, tvOS and Catalyst apps run on Mono (.NET 10).
+    /// .NET 11 Apple apps run CoreCLR: the interpreter in Debug, ReadyToRun in Release.</summary>
+    internal static bool AppsRunOnMono => ActivePairing.AppsRunOnMono;
+
+    /// <summary>
+    /// Resolve the build TFM for the given platform, exactly as Directory.Build.props spells
+    /// <c>$(SwiftBindingsTfm&lt;Platform&gt;)</c> (<c>net10.0-ios</c>, <c>net10.0-ios27.2</c>,
+    /// <c>net11.0-ios27.2</c>).
+    /// </summary>
+    static string ResolveTfm(string platform) => ActivePairing.Tfm(platform);
+
+    /// <summary>Expand the pairing TFM properties a csproj spells its TFMs with.</summary>
+    internal static string ExpandLaneTfm(string tfm) => tfm
+        .Replace("$(SwiftBindingsTfmIos)", ResolveTfm("ios"), StringComparison.Ordinal)
+        .Replace("$(SwiftBindingsTfmMacos)", ResolveTfm("macos"), StringComparison.Ordinal)
+        .Replace("$(SwiftBindingsTfmMaccatalyst)", ResolveTfm("maccatalyst"), StringComparison.Ordinal)
+        .Replace("$(SwiftBindingsTfmTvos)", ResolveTfm("tvos"), StringComparison.Ordinal);
 
     /// <summary>
     /// Return the effective platform name from the <c>--platform</c> parameter,
@@ -179,40 +208,13 @@ partial class Build : NukeBuild
     string EffectivePlatform => string.IsNullOrEmpty(Platform) ? "ios" : Platform;
 
     /// <summary>
-    /// Resolve the <c>.app</c> bundle path under <c>bin/{config}/</c>,
-    /// probing both the unversioned TFM (<c>net10.0-ios</c>) and any
-    /// versioned variant (<c>net10.0-ios26.2</c>) that may exist. This
-    /// handles both multi-TFM test projects (which output to the
-    /// unversioned TFM folder) and legacy single-TFM projects (which
-    /// may use a versioned TFM like <c>net10.0-ios26.2</c>).
+    /// Resolve the <c>.app</c> bundle path under <c>bin/{config}/</c> for the active pairing's
+    /// exact TFM folder. No other TFM folder is probed: another pairing's build of the same app
+    /// (<c>net10.0-ios27.2</c> next to <c>net10.0-ios</c>) must never stand in for this one.
     /// </summary>
     static AbsolutePath ResolveAppPath(
         AbsolutePath testDir, string config, string platform, string rid, string appName)
-    {
-        var binConfig = testDir / "bin" / config;
-        var unversioned = binConfig / ResolveTfm(platform) / rid / $"{appName}.app";
-        if (Directory.Exists(unversioned))
-            return unversioned;
-
-        // Probe for a versioned TFM directory (e.g. net10.0-ios26.2)
-        var prefix = ResolveTfm(platform);
-        if (Directory.Exists(binConfig))
-        {
-            foreach (var dir in Directory.EnumerateDirectories(binConfig))
-            {
-                var name = Path.GetFileName(dir);
-                if (name != null && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && name != prefix)
-                {
-                    var candidate = (AbsolutePath)dir / rid / $"{appName}.app";
-                    if (Directory.Exists(candidate))
-                        return candidate;
-                }
-            }
-        }
-
-        // Fall back to the unversioned path (caller will report "not found")
-        return unversioned;
-    }
+        => testDir / "bin" / config / ResolveTfm(platform) / rid / $"{appName}.app";
 
     /// <summary>
     /// Check whether a test directory contains a multi-TFM project
@@ -252,7 +254,7 @@ partial class Build : NukeBuild
             {
                 foreach (var raw in multi.Groups[1].Value.Split(';'))
                 {
-                    var t = raw.Trim();
+                    var t = ExpandLaneTfm(raw.Trim());
                     if (t.Length > 0) tfms.Add(t);
                 }
                 return tfms;
@@ -262,7 +264,7 @@ partial class Build : NukeBuild
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (single.Success)
             {
-                var t = single.Groups[1].Value.Trim();
+                var t = ExpandLaneTfm(single.Groups[1].Value.Trim());
                 if (t.Length > 0) tfms.Add(t);
                 return tfms;
             }

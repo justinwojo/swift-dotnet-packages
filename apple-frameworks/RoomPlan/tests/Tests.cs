@@ -8,6 +8,28 @@ namespace SwiftBindings.RoomPlan.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -57,13 +79,12 @@ internal static class Tests
         MetadataTest<CapturedRoom.USDExportOptions>("CapturedRoom.USDExportOptions metadata");
         MetadataTest<RoomBuilder.ConfigurationOptions>("RoomBuilder.ConfigurationOptions metadata");
 
-        // Nested plain-enum values: exercise that the generated enum has the
-        // correct layout and Swift case order.
+        // Nested plain-enum values: exercise that the generated enum's members are
+        // distinct, name-keyed cases.
         try
         {
-            if ((int)RoomCaptureSession.CaptureError.ExceedSceneSizeLimit != 0 ||
-                (int)RoomCaptureSession.CaptureError.InternalError != 5)
-                throw new InvalidOperationException("CaptureError values mismatch");
+            AssertNameKeyedMembers(RoomCaptureSession.CaptureError.ExceedSceneSizeLimit,
+                RoomCaptureSession.CaptureError.InternalError);
             Pass("RoomCaptureSession.CaptureError values");
         }
         catch (Exception ex)
@@ -73,9 +94,8 @@ internal static class Tests
 
         try
         {
-            if ((int)RoomCaptureSession.Instruction.MoveCloseToWall != 0 ||
-                (int)RoomCaptureSession.Instruction.LowTexture != 5)
-                throw new InvalidOperationException("Instruction values mismatch");
+            AssertNameKeyedMembers(RoomCaptureSession.Instruction.MoveCloseToWall,
+                RoomCaptureSession.Instruction.LowTexture);
             Pass("RoomCaptureSession.Instruction values");
         }
         catch (Exception ex)
@@ -115,13 +135,13 @@ internal static class Tests
         // RoomCaptureSession.Instruction plain-enum values.
         try
         {
-            if ((int)RoomCaptureSession.Instruction.MoveCloseToWall != 0 ||
-                (int)RoomCaptureSession.Instruction.MoveAwayFromWall != 1 ||
-                (int)RoomCaptureSession.Instruction.SlowDown != 2 ||
-                (int)RoomCaptureSession.Instruction.TurnOnLight != 3 ||
-                (int)RoomCaptureSession.Instruction.Normal != 4 ||
-                (int)RoomCaptureSession.Instruction.LowTexture != 5)
-                throw new InvalidOperationException("Instruction enum case values mismatch");
+            AssertNameKeyedMembers(
+                RoomCaptureSession.Instruction.MoveCloseToWall,
+                RoomCaptureSession.Instruction.MoveAwayFromWall,
+                RoomCaptureSession.Instruction.SlowDown,
+                RoomCaptureSession.Instruction.TurnOnLight,
+                RoomCaptureSession.Instruction.Normal,
+                RoomCaptureSession.Instruction.LowTexture);
             Pass("RoomCaptureSession.Instruction case values");
         }
         catch (Exception ex)
@@ -132,12 +152,12 @@ internal static class Tests
         // RoomBuilder.BuildError plain-enum values.
         try
         {
-            if ((int)RoomBuilder.BuildError.InsufficientInput != 0 ||
-                (int)RoomBuilder.BuildError.InvalidInput != 1 ||
-                (int)RoomBuilder.BuildError.ExceedSceneSizeLimit != 2 ||
-                (int)RoomBuilder.BuildError.DeviceNotSupported != 3 ||
-                (int)RoomBuilder.BuildError.InternalError != 4)
-                throw new InvalidOperationException("RoomBuilder.BuildError case values mismatch");
+            AssertNameKeyedMembers(
+                RoomBuilder.BuildError.InsufficientInput,
+                RoomBuilder.BuildError.InvalidInput,
+                RoomBuilder.BuildError.ExceedSceneSizeLimit,
+                RoomBuilder.BuildError.DeviceNotSupported,
+                RoomBuilder.BuildError.InternalError);
             Pass("RoomBuilder.BuildError case values");
         }
         catch (Exception ex)
@@ -148,13 +168,13 @@ internal static class Tests
         // StructureBuilder.BuildError plain-enum values.
         try
         {
-            if ((int)StructureBuilder.BuildError.InsufficientInput != 0 ||
-                (int)StructureBuilder.BuildError.InvalidInput != 1 ||
-                (int)StructureBuilder.BuildError.InvalidRoomLocation != 2 ||
-                (int)StructureBuilder.BuildError.ExceedSceneSizeLimit != 3 ||
-                (int)StructureBuilder.BuildError.DeviceNotSupported != 4 ||
-                (int)StructureBuilder.BuildError.InternalError != 5)
-                throw new InvalidOperationException("StructureBuilder.BuildError case values mismatch");
+            AssertNameKeyedMembers(
+                StructureBuilder.BuildError.InsufficientInput,
+                StructureBuilder.BuildError.InvalidInput,
+                StructureBuilder.BuildError.InvalidRoomLocation,
+                StructureBuilder.BuildError.ExceedSceneSizeLimit,
+                StructureBuilder.BuildError.DeviceNotSupported,
+                StructureBuilder.BuildError.InternalError);
             Pass("StructureBuilder.BuildError case values");
         }
         catch (Exception ex)
@@ -165,12 +185,12 @@ internal static class Tests
         // CapturedRoom.Error plain-enum values.
         try
         {
-            if ((int)CapturedRoom.Error.UrlInvalidScheme != 0 ||
-                (int)CapturedRoom.Error.UrlInvalidFilePath != 1 ||
-                (int)CapturedRoom.Error.UrlMissingFileExtension != 2 ||
-                (int)CapturedRoom.Error.UrlInvalidFileExtension != 3 ||
-                (int)CapturedRoom.Error.DeviceNotSupported != 4)
-                throw new InvalidOperationException("CapturedRoom.Error case values mismatch");
+            AssertNameKeyedMembers(
+                CapturedRoom.Error.UrlInvalidScheme,
+                CapturedRoom.Error.UrlInvalidFilePath,
+                CapturedRoom.Error.UrlMissingFileExtension,
+                CapturedRoom.Error.UrlInvalidFileExtension,
+                CapturedRoom.Error.DeviceNotSupported);
             Pass("CapturedRoom.Error case values");
         }
         catch (Exception ex)
@@ -181,10 +201,7 @@ internal static class Tests
         // CapturedRoom.Confidence plain-enum values.
         try
         {
-            if ((int)CapturedRoom.Confidence.High != 0 ||
-                (int)CapturedRoom.Confidence.Medium != 1 ||
-                (int)CapturedRoom.Confidence.Low != 2)
-                throw new InvalidOperationException("CapturedRoom.Confidence case values mismatch");
+            AssertNameKeyedMembers(CapturedRoom.Confidence.High, CapturedRoom.Confidence.Medium, CapturedRoom.Confidence.Low);
             Pass("CapturedRoom.Confidence case values");
         }
         catch (Exception ex)
@@ -192,12 +209,10 @@ internal static class Tests
             Fail("CapturedRoom.Confidence case values", ex.Message);
         }
 
-        // CapturedElementCategory.CaseTag — discriminated union Surface=0, Object=1.
+        // CapturedElementCategory.CaseTag — discriminated union Surface, Object.
         try
         {
-            if ((uint)CapturedElementCategory.CaseTag.Surface != 0u ||
-                (uint)CapturedElementCategory.CaseTag.Object != 1u)
-                throw new InvalidOperationException("CapturedElementCategory.CaseTag values mismatch");
+            AssertNameKeyedMembers(CapturedElementCategory.CaseTag.Surface, CapturedElementCategory.CaseTag.Object);
             Pass("CapturedElementCategory.CaseTag values");
         }
         catch (Exception ex)
@@ -205,15 +220,15 @@ internal static class Tests
             Fail("CapturedElementCategory.CaseTag values", ex.Message);
         }
 
-        // CapturedRoom.Surface.CategoryKind.CaseTag — Door=0..Floor=4.
+        // CapturedRoom.Surface.CategoryKind.CaseTag — Door..Floor.
         try
         {
-            if ((uint)CapturedRoom.Surface.CategoryKind.CaseTag.Door != 0u ||
-                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Wall != 1u ||
-                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Opening != 2u ||
-                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Window != 3u ||
-                (uint)CapturedRoom.Surface.CategoryKind.CaseTag.Floor != 4u)
-                throw new InvalidOperationException("Surface.CategoryKind.CaseTag values mismatch");
+            AssertNameKeyedMembers(
+                CapturedRoom.Surface.CategoryKind.CaseTag.Door,
+                CapturedRoom.Surface.CategoryKind.CaseTag.Wall,
+                CapturedRoom.Surface.CategoryKind.CaseTag.Opening,
+                CapturedRoom.Surface.CategoryKind.CaseTag.Window,
+                CapturedRoom.Surface.CategoryKind.CaseTag.Floor);
             Pass("CapturedRoom.Surface.CategoryKind.CaseTag values");
         }
         catch (Exception ex)
@@ -221,16 +236,16 @@ internal static class Tests
             Fail("CapturedRoom.Surface.CategoryKind.CaseTag values", ex.Message);
         }
 
-        // CapturedRoom.Section.LabelKind.CaseTag — LivingRoom=0..Unidentified=5.
+        // CapturedRoom.Section.LabelKind.CaseTag — LivingRoom..Unidentified.
         try
         {
-            if ((uint)CapturedRoom.Section.LabelKind.CaseTag.LivingRoom != 0u ||
-                (uint)CapturedRoom.Section.LabelKind.CaseTag.Bedroom != 1u ||
-                (uint)CapturedRoom.Section.LabelKind.CaseTag.Bathroom != 2u ||
-                (uint)CapturedRoom.Section.LabelKind.CaseTag.Kitchen != 3u ||
-                (uint)CapturedRoom.Section.LabelKind.CaseTag.DiningRoom != 4u ||
-                (uint)CapturedRoom.Section.LabelKind.CaseTag.Unidentified != 5u)
-                throw new InvalidOperationException("Section.LabelKind.CaseTag values mismatch");
+            AssertNameKeyedMembers(
+                CapturedRoom.Section.LabelKind.CaseTag.LivingRoom,
+                CapturedRoom.Section.LabelKind.CaseTag.Bedroom,
+                CapturedRoom.Section.LabelKind.CaseTag.Bathroom,
+                CapturedRoom.Section.LabelKind.CaseTag.Kitchen,
+                CapturedRoom.Section.LabelKind.CaseTag.DiningRoom,
+                CapturedRoom.Section.LabelKind.CaseTag.Unidentified);
             Pass("CapturedRoom.Section.LabelKind.CaseTag values");
         }
         catch (Exception ex)
@@ -238,12 +253,11 @@ internal static class Tests
             Fail("CapturedRoom.Section.LabelKind.CaseTag values", ex.Message);
         }
 
-        // CapturedRoom.ModelProvider.Error.CaseTag — NonExistingFile=0, AttributeCombinationNotSupported=1.
+        // CapturedRoom.ModelProvider.Error.CaseTag — NonExistingFile, AttributeCombinationNotSupported.
         try
         {
-            if ((uint)CapturedRoom.ModelProvider.Error.CaseTag.NonExistingFile != 0u ||
-                (uint)CapturedRoom.ModelProvider.Error.CaseTag.AttributeCombinationNotSupported != 1u)
-                throw new InvalidOperationException("ModelProvider.Error.CaseTag values mismatch");
+            AssertNameKeyedMembers(CapturedRoom.ModelProvider.Error.CaseTag.NonExistingFile,
+                CapturedRoom.ModelProvider.Error.CaseTag.AttributeCombinationNotSupported);
             Pass("CapturedRoom.ModelProvider.Error.CaseTag values");
         }
         catch (Exception ex)
@@ -251,7 +265,7 @@ internal static class Tests
             Fail("CapturedRoom.ModelProvider.Error.CaseTag values", ex.Message);
         }
 
-        // ChairType.CaseTag — Dining=0, Stool=1, Swivel=2, Unidentified=3.
+        // ChairType.CaseTag — Dining, Stool, Swivel, Unidentified.
         // Access singleton to force lazy init and verify CaseTag round-trips.
         try
         {
@@ -268,7 +282,7 @@ internal static class Tests
             Fail("ChairType.CaseTag round-trip", ex.Message);
         }
 
-        // SofaType.CaseTag — Rectangular=0, LShaped=1, Unidentified=4.
+        // SofaType.CaseTag — Rectangular, LShaped, …, Unidentified.
         try
         {
             var rectangular = SofaType.Rectangular;
@@ -284,7 +298,7 @@ internal static class Tests
             Fail("SofaType.CaseTag round-trip", ex.Message);
         }
 
-        // TableType.CaseTag — Coffee=0, Dining=1, Unidentified=2.
+        // TableType.CaseTag — Coffee, Dining, Unidentified.
         try
         {
             var coffee = TableType.Coffee;
@@ -300,7 +314,7 @@ internal static class Tests
             Fail("TableType.CaseTag round-trip", ex.Message);
         }
 
-        // StorageType.CaseTag — Cabinet=0, Shelf=1.
+        // StorageType.CaseTag — Cabinet, Shelf.
         try
         {
             var cabinet = StorageType.Cabinet;

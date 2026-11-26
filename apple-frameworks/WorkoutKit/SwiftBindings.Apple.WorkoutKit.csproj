@@ -1,7 +1,7 @@
-<Project Sdk="SwiftBindings.Sdk/0.20.2">
+<Project Sdk="SwiftBindings.Sdk/11.0.0">
   <PropertyGroup>
     <TargetFramework />
-    <TargetFrameworks>net10.0-ios26.2;net10.0-macos26.2;net10.0-maccatalyst26.2</TargetFrameworks>
+    <TargetFrameworks>$(SwiftBindingsTfmIos);$(SwiftBindingsTfmMacos);$(SwiftBindingsTfmMaccatalyst)</TargetFrameworks>
     <PackageId>SwiftBindings.Apple.WorkoutKit</PackageId>
     <Version>26.2.14</Version>
     <Description>Native Swift interop bindings for Apple WorkoutKit</Description>

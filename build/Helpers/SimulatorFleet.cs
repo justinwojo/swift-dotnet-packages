@@ -41,11 +41,51 @@ public sealed class SimulatorFleet
         "iPhone 16", "iPhone 16 Pro", "iPhone 15 Pro", "iPhone 15",
     };
 
-    /// <summary>Preferred runtime prefixes, newest first.</summary>
-    public IReadOnlyList<string> PreferredRuntimes { get; init; } = new[]
+    /// <summary>
+    /// Preferred runtime prefixes, newest first. When a toolchain pairing is selected
+    /// (<c>scripts/use-toolchain.sh</c> exports <c>SWIFTBINDINGS_SIM_RUNTIMES</c> from
+    /// <c>toolchains/&lt;pairing&gt;.json</c>), the list is also a hard filter: see
+    /// <see cref="RequiredRuntimes"/>.
+    /// </summary>
+    public IReadOnlyList<string> PreferredRuntimes { get; init; } = DefaultPreferredRuntimes();
+
+    /// <summary>
+    /// The iOS runtimes a pairing may use (<c>SWIFTBINDINGS_SIM_RUNTIMES</c>), or empty when no
+    /// pairing is selected. Non-empty means strict: every adoption, lookup and creation of an
+    /// iPhone simulator is limited to these runtimes, with no fallback to another one. A booted
+    /// simulator of another Xcode's runtime (another session's, on a shared host) would otherwise
+    /// be adopted, and the cell would report a result for an OS its pairing does not run.
+    /// </summary>
+    public IReadOnlyList<string> RequiredRuntimes { get; init; } = EnvList("SWIFTBINDINGS_SIM_RUNTIMES");
+
+    /// <summary>The tvOS runtimes a pairing may use (<c>SWIFTBINDINGS_TV_SIM_RUNTIMES</c>); same rule.</summary>
+    public IReadOnlyList<string> RequiredTvRuntimes { get; init; } = EnvList("SWIFTBINDINGS_TV_SIM_RUNTIMES");
+
+    static IReadOnlyList<string> EnvList(string name)
     {
-        "iOS-19", "iOS-18", "iOS-17",
-    };
+        var env = Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(env)
+            ? Array.Empty<string>()
+            : env.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    static IReadOnlyList<string> DefaultPreferredRuntimes()
+    {
+        var required = EnvList("SWIFTBINDINGS_SIM_RUNTIMES");
+        return required.Count > 0 ? required : new[] { "iOS-27", "iOS-26", "iOS-18", "iOS-17" };
+    }
+
+    /// <summary>True when <paramref name="runtimeId"/> (a <c>simctl</c> runtime identifier such as
+    /// <c>com.apple.CoreSimulator.SimRuntime.iOS-27-2</c>) is one this run may use.</summary>
+    public bool RuntimeAllowed(string runtimeId) => RuntimeAllowed(runtimeId, RequiredRuntimes);
+
+    /// <summary>tvOS counterpart of <see cref="RuntimeAllowed(string)"/>.</summary>
+    public bool TvRuntimeAllowed(string runtimeId) => RuntimeAllowed(runtimeId, RequiredTvRuntimes);
+
+    internal static bool RuntimeAllowed(string runtimeId, IReadOnlyList<string> required) =>
+        required.Count == 0
+        || required.Any(r => runtimeId.EndsWith("." + r, StringComparison.Ordinal)
+                             || runtimeId.Equals(r, StringComparison.Ordinal));
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -64,6 +104,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains("iOS", StringComparison.Ordinal)) continue;
+            if (!RuntimeAllowed(runtime.Name)) continue;
             if (runtimePrefix is not null && !runtime.Name.Contains(runtimePrefix, StringComparison.Ordinal))
                 continue;
 
@@ -101,6 +142,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains("iOS", StringComparison.Ordinal)) continue;
+            if (!RuntimeAllowed(runtime.Name)) continue;
             foreach (var d in runtime.Value.EnumerateArray())
             {
                 var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
@@ -126,6 +168,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains("iOS", StringComparison.Ordinal)) continue;
+            if (!RuntimeAllowed(runtime.Name)) continue;
             foreach (var d in runtime.Value.EnumerateArray())
             {
                 var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
@@ -155,6 +198,7 @@ public sealed class SimulatorFleet
         // Preferred runtimes first, then any iOS runtime — same shape as FindExistingShutdownIPhone.
         var runtimes = byRuntime.EnumerateObject()
             .Where(r => r.Name.Contains("iOS", StringComparison.Ordinal))
+            .Where(r => RuntimeAllowed(r.Name))
             .Where(r => runtimePrefix is null || r.Name.Contains(runtimePrefix, StringComparison.Ordinal))
             .ToList();
 
@@ -554,7 +598,8 @@ public sealed class SimulatorFleet
     /// booted; that is the device the ProjectReference lanes have always
     /// picked.</para>
     /// </summary>
-    public static string? SelectBootedUdid(string devicesJson, SimulatorFamily family)
+    public static string? SelectBootedUdid(string devicesJson, SimulatorFamily family,
+        IReadOnlyList<string>? requiredRuntimes = null)
     {
         using var doc = JsonDocument.Parse(devicesJson);
         if (!doc.RootElement.TryGetProperty("devices", out var byRuntime))
@@ -566,6 +611,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains(keyword, StringComparison.Ordinal)) continue;
+            if (requiredRuntimes is not null && !RuntimeAllowed(runtime.Name, requiredRuntimes)) continue;
             foreach (var d in runtime.Value.EnumerateArray())
             {
                 if (State(d) != "Booted") continue;
@@ -595,7 +641,8 @@ public sealed class SimulatorFleet
     /// simulator of <paramref name="family"/> this host would install onto.
     /// </summary>
     public string? FindBootedUdid(SimulatorFamily family) =>
-        SelectBootedUdid(ListDevicesJson(), family);
+        SelectBootedUdid(ListDevicesJson(), family,
+            family == SimulatorFamily.TvOs ? RequiredTvRuntimes : RequiredRuntimes);
 
     /// <summary>One tvOS simulator this host can actually run.</summary>
     public sealed record TvOsSimulator(string Udid, string Name, string Runtime, bool WasBooted);
@@ -621,6 +668,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains("tvOS", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!TvRuntimeAllowed(runtime.Name)) continue;
             foreach (var d in runtime.Value.EnumerateArray())
             {
                 var udid = Udid(d);
@@ -685,6 +733,7 @@ public sealed class SimulatorFleet
         foreach (var runtime in byRuntime.EnumerateObject())
         {
             if (!runtime.Name.Contains("iOS", StringComparison.Ordinal)) continue;
+            if (!RuntimeAllowed(runtime.Name)) continue;
             foreach (var d in runtime.Value.EnumerateArray())
             {
                 var name = d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
@@ -759,6 +808,11 @@ public sealed class SimulatorFleet
             if (matches.Count > 0)
                 return matches[0].GetProperty("identifier").GetString()!;
         }
+
+        // A pairing names its runtimes; never create a simulator on another one.
+        if (RequiredRuntimes.Count > 0)
+            throw new InvalidOperationException(
+                $"None of the pairing's simulator runtimes ({string.Join(", ", RequiredRuntimes)}) is installed and available.");
 
         // Fallback: newest available
         return available

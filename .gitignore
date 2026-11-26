@@ -90,3 +90,4 @@ __pycache__/
 
 # Local working notes (binding pipeline scratch — references private worktrees/paths)
 /BINDING-CANDIDATES.md
+.global.json.use-toolchain*

@@ -37,6 +37,28 @@ internal static class Tests
         return await task.ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -106,13 +128,10 @@ internal static class Tests
         // Test 7: HourWeather metadata loads.
         MetadataTest<HourWeather>("HourWeather");
 
-        // Test 8: WeatherError plain enum values match expected int tags.
+        // Test 8: WeatherError plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)WeatherError.PermissionDenied != 0)
-                throw new InvalidOperationException($"PermissionDenied expected 0, got {(int)WeatherError.PermissionDenied}");
-            if ((int)WeatherError.Unknown != 1)
-                throw new InvalidOperationException($"Unknown expected 1, got {(int)WeatherError.Unknown}");
+            AssertNameKeyedMembers(WeatherError.PermissionDenied, WeatherError.Unknown);
             Pass("WeatherError enum values");
         }
         catch (Exception ex)
@@ -180,13 +199,10 @@ internal static class Tests
             Fail("MoonPhase.ToRawValue/FromRawValue", ex.Message);
         }
 
-        // Test 13: Deviation plain enum values.
+        // Test 13: Deviation plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)Deviation.MuchHigher != 0)
-                throw new InvalidOperationException($"MuchHigher expected 0, got {(int)Deviation.MuchHigher}");
-            if ((int)Deviation.MuchLower != 4)
-                throw new InvalidOperationException($"MuchLower expected 4, got {(int)Deviation.MuchLower}");
+            AssertNameKeyedMembers(Deviation.MuchHigher, Deviation.MuchLower);
             Pass("Deviation enum values");
         }
         catch (Exception ex)
@@ -202,7 +218,7 @@ internal static class Tests
                 throw new InvalidOperationException("WeatherCondition.Clear returned null");
             var tag = clear.Tag;
             if (tag != WeatherCondition.CaseTag.Clear)
-                throw new InvalidOperationException($"Expected CaseTag.Clear (4), got {tag}");
+                throw new InvalidOperationException($"Expected CaseTag.Clear, got {tag}");
             Pass("WeatherCondition.Clear singleton + CaseTag");
         }
         catch (Exception ex)
@@ -217,7 +233,7 @@ internal static class Tests
             if (rain is null)
                 throw new InvalidOperationException("WeatherCondition.Rain returned null");
             if (rain.Tag != WeatherCondition.CaseTag.Rain)
-                throw new InvalidOperationException($"Expected CaseTag.Rain (22), got {rain.Tag}");
+                throw new InvalidOperationException($"Expected CaseTag.Rain, got {rain.Tag}");
             Pass("WeatherCondition.Rain singleton + CaseTag");
         }
         catch (Exception ex)
@@ -471,7 +487,7 @@ internal static class Tests
             if (err != WeatherError.PermissionDenied && err != WeatherError.Unknown)
             {
                 Fail("WeatherService.attribution error category",
-                     $"typed WeatherError out of the declared range (permissionDenied=0, unknown=1): {(int)err}");
+                     $"typed WeatherError is not a declared case (permissionDenied, unknown): {(int)err}");
             }
             else if (string.IsNullOrWhiteSpace(typed.Message))
             {

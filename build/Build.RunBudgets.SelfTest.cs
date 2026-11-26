@@ -45,6 +45,21 @@ partial class Build
                 ResolveRunBudgetSeconds("MapLibre", 60) > mapLibreSequentialBoundsSeconds,
                 $"actual={ResolveRunBudgetSeconds("MapLibre", 60)} bounds={mapLibreSequentialBoundsSeconds}");
 
+            // VisionKit's app bounds its first analysis at 60s (the harness has already warmed the
+            // daemon), the repeat at 30s and GetSubjectsAsync at 15s
+            // (apple-frameworks/VisionKit/tests/Tests.cs).
+            const int visionKitSequentialBoundsSeconds = 60 + 30 + 15;
+            Check("[run-budget] VisionKit clears the app's own sequential waits",
+                ResolveRunBudgetSeconds("VisionKit", 60) > visionKitSequentialBoundsSeconds,
+                $"actual={ResolveRunBudgetSeconds("VisionKit", 60)} bounds={visionKitSequentialBoundsSeconds}");
+
+            // Mappedin's app waits up to 60s for each map view's page to load, then 15s for Destroy
+            // and 30s for GetMapData (libraries/Mappedin/tests/Program.Behaviour.cs).
+            const int mappedinSequentialBoundsSeconds = 60 + 15 + 60 + 30;
+            Check("[run-budget] Mappedin clears the app's own sequential waits",
+                ResolveRunBudgetSeconds("Mappedin", 60) > mappedinSequentialBoundsSeconds,
+                $"actual={ResolveRunBudgetSeconds("Mappedin", 60)} bounds={mappedinSequentialBoundsSeconds}");
+
             // ── 2. A floor never LOWERS an explicit request ──────────────────
             // An operator asking for more time gets it; the table is a floor, not a cap.
             Check("[run-budget] an explicit larger --timeout wins over the floor",
@@ -104,6 +119,14 @@ partial class Build
             Check("[native-budget] StoreKit2 reserves its host tools, install, launch, and run phase",
                 ResolveNativeControlBudgetSeconds("StoreKit2") == StoreKitNativePhaseBudgetSeconds,
                 $"actual={ResolveNativeControlBudgetSeconds("StoreKit2")} expected={StoreKitNativePhaseBudgetSeconds}");
+            Check("[native-budget] VisionKit reserves its once-per-boot daemon warm-up phase",
+                ResolveNativeControlBudgetSeconds("VisionKit") == VisionKitWarmupPhaseBudgetSeconds,
+                $"actual={ResolveNativeControlBudgetSeconds("VisionKit")} expected={VisionKitWarmupPhaseBudgetSeconds}");
+            // The warm-up's own bound has to clear the slowest first-run migration observed
+            // (356s on a loaded host), or the warm-up fails exactly where it is needed.
+            Check("[native-budget] the VisionKit warm-up outlasts the slowest observed daemon migration",
+                VisionKitWarmupRunBudgetSeconds > 356,
+                $"actual={VisionKitWarmupRunBudgetSeconds}");
             Check("[native-budget] other libraries have no native readiness reservation",
                 ResolveNativeControlBudgetSeconds("MapLibre") == 0,
                 $"actual={ResolveNativeControlBudgetSeconds("MapLibre")}");

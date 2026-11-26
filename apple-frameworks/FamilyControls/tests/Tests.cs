@@ -8,6 +8,28 @@ namespace SwiftBindings.FamilyControls.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -71,15 +93,11 @@ internal static class Tests
             Fail("AuthorizationStatus singletons", ex.Message);
         }
 
-        // Test 3: AuthorizationStatus.CaseTag uint values match Swift ordering.
+        // Test 3: AuthorizationStatus.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)AuthorizationStatus.CaseTag.NotDetermined != 0u)
-                throw new InvalidOperationException($"NotDetermined expected 0, got {(uint)AuthorizationStatus.CaseTag.NotDetermined}");
-            if ((uint)AuthorizationStatus.CaseTag.Denied != 1u)
-                throw new InvalidOperationException($"Denied expected 1, got {(uint)AuthorizationStatus.CaseTag.Denied}");
-            if ((uint)AuthorizationStatus.CaseTag.Approved != 2u)
-                throw new InvalidOperationException($"Approved expected 2, got {(uint)AuthorizationStatus.CaseTag.Approved}");
+            AssertNameKeyedMembers(AuthorizationStatus.CaseTag.NotDetermined, AuthorizationStatus.CaseTag.Denied,
+                AuthorizationStatus.CaseTag.Approved);
             Pass("AuthorizationStatus.CaseTag values");
         }
         catch (Exception ex)
@@ -100,15 +118,11 @@ internal static class Tests
             Fail("AuthorizationStatus.NotDetermined.Tag round-trip", ex.Message);
         }
 
-        // Test 5: FamilyControlsError plain enum — verify expected integer values.
+        // Test 5: FamilyControlsError plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)FamilyControlsError.Restricted != 0)
-                throw new InvalidOperationException($"Restricted expected 0, got {(int)FamilyControlsError.Restricted}");
-            if ((int)FamilyControlsError.Unavailable != 1)
-                throw new InvalidOperationException($"Unavailable expected 1, got {(int)FamilyControlsError.Unavailable}");
-            if ((int)FamilyControlsError.AuthenticationMethodUnavailable != 7)
-                throw new InvalidOperationException($"AuthenticationMethodUnavailable expected 7, got {(int)FamilyControlsError.AuthenticationMethodUnavailable}");
+            AssertNameKeyedMembers(FamilyControlsError.Restricted, FamilyControlsError.Unavailable,
+                FamilyControlsError.AuthenticationMethodUnavailable);
             Pass("FamilyControlsError values");
         }
         catch (Exception ex)

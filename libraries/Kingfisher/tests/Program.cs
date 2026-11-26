@@ -93,9 +93,8 @@ public class AppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new MainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new MainViewController());
         return true;
     }
 }
@@ -775,6 +774,28 @@ public partial class MainViewController : UIViewController
     // Section 7: C# Integer Enums
     // ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     private void RunIntegerEnumTests(TestLogger logger, TestResults results)
     {
         // CacheType enum
@@ -792,20 +813,21 @@ public partial class MainViewController : UIViewController
             results.Fail("CacheType_values", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // CacheType cast roundtrip
+        // CacheType cast roundtrip: a member's value casts back to the member, and the members are
+        // keyed by Swift case name, so the declaration position (2) is not a case.
         try
         {
-            var disk = (CacheType)2;
-            bool ok = disk == CacheType.Disk;
+            var disk = (CacheType)(int)CacheType.Disk;
+            bool ok = disk == CacheType.Disk && Enum.IsDefined(disk) && !Enum.IsDefined((CacheType)2);
             if (ok)
             {
-                logger.Pass($"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
+                logger.Pass($"CacheType roundtrip: (CacheType)(int)Disk == Disk, position 2 undefined: {ok}");
                 results.Pass("CacheType_roundtrip");
             }
             else
             {
-                logger.Fail($"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
-                results.Fail("CacheType_roundtrip", $"CacheType roundtrip: (CacheType)2 == Disk: {ok}");
+                logger.Fail($"CacheType roundtrip: (CacheType)(int)Disk == Disk, position 2 undefined: {ok}");
+                results.Fail("CacheType_roundtrip", $"CacheType roundtrip: (CacheType)(int)Disk == Disk, position 2 undefined: {ok}");
             }
         }
         catch (Exception ex)
@@ -829,20 +851,21 @@ public partial class MainViewController : UIViewController
             results.Fail("ContentMode_values", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // ContentMode cast roundtrip
+        // ContentMode cast roundtrip: a member's value casts back to the member, and the members are
+        // keyed by Swift case name, so the declaration position (1) is not a case.
         try
         {
-            var fit = (ContentMode)1;
-            bool ok = fit == ContentMode.AspectFit;
+            var fit = (ContentMode)(int)ContentMode.AspectFit;
+            bool ok = fit == ContentMode.AspectFit && Enum.IsDefined(fit) && !Enum.IsDefined((ContentMode)1);
             if (ok)
             {
-                logger.Pass($"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
+                logger.Pass($"ContentMode roundtrip: (ContentMode)(int)AspectFit == AspectFit, position 1 undefined: {ok}");
                 results.Pass("ContentMode_roundtrip");
             }
             else
             {
-                logger.Fail($"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
-                results.Fail("ContentMode_roundtrip", $"ContentMode roundtrip: (ContentMode)1 == AspectFit: {ok}");
+                logger.Fail($"ContentMode roundtrip: (ContentMode)(int)AspectFit == AspectFit, position 1 undefined: {ok}");
+                results.Fail("ContentMode_roundtrip", $"ContentMode roundtrip: (ContentMode)(int)AspectFit == AspectFit, position 1 undefined: {ok}");
             }
         }
         catch (Exception ex)
@@ -2050,24 +2073,17 @@ public partial class MainViewController : UIViewController
             results.Fail("KingfisherError_CaseTag_values", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // CaseTag numeric values
+        // CaseTag numeric values: distinct, name-keyed members
         try
         {
-            bool ok = (uint)KingfisherError.CaseTag.RequestError == 0
-                   && (uint)KingfisherError.CaseTag.ResponseError == 1
-                   && (uint)KingfisherError.CaseTag.CacheError == 2
-                   && (uint)KingfisherError.CaseTag.ProcessorError == 3
-                   && (uint)KingfisherError.CaseTag.ImageSettingError == 4;
-            if (ok)
-            {
-                logger.Pass($"KingfisherError.CaseTag numeric values correct: {ok}");
-                results.Pass("KingfisherError_CaseTag_numeric");
-            }
-            else
-            {
-                logger.Fail($"KingfisherError.CaseTag numeric values correct: {ok}");
-                results.Fail("KingfisherError_CaseTag_numeric", $"KingfisherError.CaseTag numeric values correct: {ok}");
-            }
+            AssertNameKeyedMembers(
+                KingfisherError.CaseTag.RequestError,
+                KingfisherError.CaseTag.ResponseError,
+                KingfisherError.CaseTag.CacheError,
+                KingfisherError.CaseTag.ProcessorError,
+                KingfisherError.CaseTag.ImageSettingError);
+            logger.Pass("KingfisherError.CaseTag members distinct and name-keyed");
+            results.Pass("KingfisherError_CaseTag_numeric");
         }
         catch (Exception ex)
         {
@@ -3410,22 +3426,13 @@ public partial class MainViewController : UIViewController
             results.Fail("Interval_TryGet_negative", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // Interval CaseTag numeric values
+        // Interval CaseTag numeric values: distinct, name-keyed members
         try
         {
-            bool ok = (uint)DelayRetryStrategy.Interval.CaseTag.Seconds == 0
-                   && (uint)DelayRetryStrategy.Interval.CaseTag.Accumulated == 1
-                   && (uint)DelayRetryStrategy.Interval.CaseTag.Custom == 2;
-            if (ok)
-            {
-                logger.Pass($"Interval.CaseTag numeric values correct: {ok}");
-                results.Pass("Interval_CaseTag_numeric");
-            }
-            else
-            {
-                logger.Fail($"Interval.CaseTag numeric values correct: {ok}");
-                results.Fail("Interval_CaseTag_numeric", $"Interval.CaseTag numeric values correct: {ok}");
-            }
+            AssertNameKeyedMembers(DelayRetryStrategy.Interval.CaseTag.Seconds, DelayRetryStrategy.Interval.CaseTag.Accumulated,
+                DelayRetryStrategy.Interval.CaseTag.Custom);
+            logger.Pass("Interval.CaseTag members distinct and name-keyed");
+            results.Pass("Interval_CaseTag_numeric");
         }
         catch (Exception ex)
         {
@@ -3527,21 +3534,12 @@ public partial class MainViewController : UIViewController
             results.Fail("ImageProcessItem_Data_tag", $"{ex.GetType().Name}: {ex.Message}");
         }
 
-        // CaseTag numeric values
+        // CaseTag numeric values: distinct, name-keyed members
         try
         {
-            bool ok = (uint)ImageProcessItem.CaseTag.Image == 0
-                   && (uint)ImageProcessItem.CaseTag.Data == 1;
-            if (ok)
-            {
-                logger.Pass($"ImageProcessItem.CaseTag numeric values: {ok}");
-                results.Pass("ImageProcessItem_CaseTag_numeric");
-            }
-            else
-            {
-                logger.Fail($"ImageProcessItem.CaseTag numeric values: {ok}");
-                results.Fail("ImageProcessItem_CaseTag_numeric", $"ImageProcessItem.CaseTag numeric values: {ok}");
-            }
+            AssertNameKeyedMembers(ImageProcessItem.CaseTag.Image, ImageProcessItem.CaseTag.Data);
+            logger.Pass("ImageProcessItem.CaseTag members distinct and name-keyed");
+            results.Pass("ImageProcessItem_CaseTag_numeric");
         }
         catch (Exception ex)
         {

@@ -2,7 +2,7 @@
   "repository": "https://github.com/onevcat/Kingfisher.git",
   "version": "8.12.0",
   "mode": "source",
-  "minIOS": "13.0",
+  "minIOS": "15.0",
   "products": [
     { "framework": "Kingfisher" }
   ]

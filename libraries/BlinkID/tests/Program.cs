@@ -96,9 +96,8 @@ public class AppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new MainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new MainViewController());
         return true;
     }
 }
@@ -279,6 +278,28 @@ public class MainViewController : UIViewController
     // ──────────────────────────────────────────────
     // Section 2: Simple Enums
     // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
 
     private void RunSimpleEnumTests(TestLogger logger, TestResults results)
     {
@@ -479,18 +500,9 @@ public class MainViewController : UIViewController
         // --- ScanningSide ---
         try
         {
-            var first = ScanningSide.First;
-            var second = ScanningSide.Second;
-            if ((long)first == 0 && (long)second == 1 && first != second)
-            {
-                logger.Pass("ScanningSide: First=0, Second=1, distinct");
-                results.Pass("ScanningSide_Cases");
-            }
-            else
-            {
-                logger.Fail($"ScanningSide: unexpected values First={(long)first}, Second={(long)second}");
-                results.Fail("ScanningSide_Cases", "Unexpected values");
-            }
+            AssertNameKeyedMembers(ScanningSide.First, ScanningSide.Second);
+            logger.Pass("ScanningSide: First, Second distinct and name-keyed");
+            results.Pass("ScanningSide_Cases");
         }
         catch (Exception ex)
         {
@@ -520,20 +532,10 @@ public class MainViewController : UIViewController
         // --- BarcodeElementKey sample ---
         try
         {
-            var docType = BarcodeElementKey.DocumentType;
-            var dob = BarcodeElementKey.DateOfBirth;
-            var sex = BarcodeElementKey.Sex;
-            var custId = BarcodeElementKey.CustomerIdNumber;
-            if ((int)docType == 0 && (int)dob == 5 && (int)sex == 6 && (int)custId == 26)
-            {
-                logger.Pass("BarcodeElementKey: DocumentType=0, DateOfBirth=5, Sex=6, CustomerIdNumber=26");
-                results.Pass("BarcodeElementKey_Values");
-            }
-            else
-            {
-                logger.Fail("BarcodeElementKey: unexpected values");
-                results.Fail("BarcodeElementKey_Values", "Unexpected values");
-            }
+            AssertNameKeyedMembers(BarcodeElementKey.DocumentType, BarcodeElementKey.DateOfBirth, BarcodeElementKey.Sex,
+                BarcodeElementKey.CustomerIdNumber);
+            logger.Pass("BarcodeElementKey: DocumentType, DateOfBirth, Sex, CustomerIdNumber distinct and name-keyed");
+            results.Pass("BarcodeElementKey_Values");
         }
         catch (Exception ex)
         {

@@ -57,9 +57,9 @@ partial class Build
             ? StoreKitSandboxReadiness.ResolveLane(EffectiveStoreKitSandboxProductId, platform, bundleId)
             : null;
 
-    static string StoreKitLanePlatform(CellPlatform platform) => platform switch
+    static string StoreKitLanePlatform(CellPlatform platform) => BasePlatform(platform) switch
     {
-        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot => "ios",
+        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceDefault => "ios",
         CellPlatform.TvOs => "tvos",
         CellPlatform.MacOs => "macos",
         CellPlatform.MacCatalyst => "maccatalyst",

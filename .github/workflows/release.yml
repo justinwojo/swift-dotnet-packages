@@ -50,14 +50,27 @@ permissions:
   contents: read
 
 jobs:
-  # ── Job 1: Build, test, and pack ─────────────────────────────────────────────
-  build:
-    runs-on: macos-26
+  # ── Job 1: Parse the tag ──────────────────────────────────────────────────────
+  parse:
+    runs-on: ubuntu-latest
     outputs:
       library: ${{ steps.parse.outputs.library }}
       version: ${{ steps.parse.outputs.version }}
       dry_run: ${{ steps.parse.outputs.dry_run }}
+      pairings: ${{ steps.pairings.outputs.pairings }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: toolchains
+
+      # One pack/consume job per pairing, on the runner image toolchains/<pairing>.json names
+      # (Xcode 27 is only on the xcode-27 image).
+      - name: Read the pairings
+        id: pairings
+        run: |
+          echo "pairings=$(jq -cs '{include: [.[] | {pairing: .pairing, runner: .ciRunner}]}' \
+            toolchains/net10-xcode26.json toolchains/net10-xcode27.json toolchains/net11-xcode27.json)" >> "$GITHUB_OUTPUT"
+
       - name: Parse and validate tag
         id: parse
         run: |
@@ -79,12 +92,11 @@ jobs:
           VERSION="${TAG#*/}"
 
           # All three outputs MUST be emitted in this single step — the
-          # publish job's `if: needs.build.outputs.dry_run != 'true'` gate
+          # publish job's `if: needs.parse.outputs.dry_run != 'true'` gate
           # depends on dry_run being a real step output, not a literal.
           echo "library=$LIBRARY" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Release"
@@ -93,109 +105,176 @@ jobs:
             echo "- **Dry run:** $DRY_RUN"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── Job 2: Pack one copy per .NET + Xcode pairing ──────────────────────────────
+  # Every package ships ONE nupkg carrying one copy per pairing (net10.0-<plat>26.0,
+  # net10.0-<plat>27.2, net11.0-<plat>27.2). Each pairing packs its own copy here (a
+  # "contribution", never published on its own) and runs its own simulator test;
+  # the merge job folds the contributions together.
+  pack:
+    needs: parse
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.parse.outputs.pairings) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
       - uses: actions/checkout@v4
 
-      # The macos-26 runner ships multiple Xcodes side-by-side. Default is
-      # Xcode 26.2, but the .NET 10 iOS workload (26.2.10233+) requires
-      # Xcode 26.3 — without this select, the test app build fails with
-      # "This version of .NET for iOS requires Xcode 26.3". The package
-      # itself targets net10.0-ios26.2 (the iOS SDK, not the build
-      # toolchain), so building with Xcode 26.3 produces packages with
-      # the same API surface.
-      - name: Select Xcode 26.3
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-
-      - name: Ensure local NuGet source exists
-        run: mkdir -p local-packages
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Set up ${{ matrix.pairing }}
+        uses: ./.github/actions/setup-pairing
         with:
-          dotnet-version: 10.0.x
-          dotnet-quality: preview
-
-      - name: Install workloads
-        # `dotnet workload restore` needs a project in cwd to read TFMs from;
-        # the repo root has none. Explicit install honors the workloadVersion
-        # pin in global.json.
-        run: dotnet workload install ios macos maccatalyst tvos
+          pairing: ${{ matrix.pairing }}
 
       # Cache must come BEFORE `dotnet tool restore` so the restored
       # ~/.nuget/packages already contains nuke.globaltool on cache-hit
-      # runs — otherwise tool restore re-downloads the tool every time
-      # and only the post-restore steps benefit from the cache.
+      # runs. One cache per pairing: the pairings restore the same package
+      # ids and versions with different contents.
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
-          restore-keys: nuget-${{ runner.os }}-
+          key: nuget-${{ runner.os }}-${{ matrix.pairing }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-${{ matrix.pairing }}-
 
       - name: Restore Nuke tool
         run: dotnet tool restore
 
-      - name: Build, pack, and write release manifest
+      - name: Build and pack this pairing's copy
         id: pack
         run: |
           dotnet nuke BuildAndPackRelease \
-            --library "${{ steps.parse.outputs.library }}" \
-            --version "${{ steps.parse.outputs.version }}" \
-            --output "${{ runner.temp }}/packages" \
-            ${{ steps.parse.outputs.dry_run == 'true' && '--dry-run' || '' }}
+            --library "${{ needs.parse.outputs.library }}" \
+            --version "${{ needs.parse.outputs.version }}" \
+            --output "${{ runner.temp }}/contribution" \
+            ${{ needs.parse.outputs.dry_run == 'true' && '--dry-run' || '' }}
 
-      # Note: RunCiSimTest below builds the test app at -c Debug, which
-      # transitively rebuilds the library .csproj files at Debug (the test
-      # app references them via <ProjectReference>). This is wasted work
-      # relative to the Release build BuildAndPackRelease just produced —
-      # but the test app has always validated Debug binaries (matches the
-      # pre-Session-4 release flow), and the .nupkg files are already on
-      # disk and will be uploaded as-is regardless of what RunCiSimTest
-      # rebuilds. Optimizing this is tracked as a follow-up; for now,
-      # the Release artifacts and the simulator validation are independent.
+      # Validates the code through <ProjectReference> on this pairing's simulator
+      # runtime and engine (Mono on .NET 10, the CoreCLR interpreter on .NET 11).
       - name: Build and validate on iOS Simulator
         # 40 min total gives Nuke's --step-timeout 1800 (30 min) headroom for
-        # cleanup, diagnostics collection, and binlog upload. The step budget
-        # has to cover install + launch + the library's run budget in one attempt.
+        # cleanup, diagnostics collection, and binlog upload.
         timeout-minutes: 40
         run: |
-          # --timeout is the RUN budget: how long the suite may take to reach a
-          # marker, measured from the app's FIRST line. A library whose test app
-          # awaits more than this raises it from the harness's own per-library
-          # table, so this is a floor for the rest, not a cap for them.
-          # --launch-timeout is the separate budget for reaching that first line
-          # (install/boot/dyld); a hung launch is called there instead of eating
-          # the run budget.
+          # --timeout is the RUN budget (from the app's first line); --launch-timeout is
+          # the separate budget for reaching that first line (install/boot/dyld).
           dotnet nuke RunCiSimTest \
-            --library "${{ steps.parse.outputs.library }}" \
+            --library "${{ needs.parse.outputs.library }}" \
             --timeout 60 \
             --launch-timeout 120 \
             --step-timeout 1800 \
             --reuse-sim
 
-      # The step above validates the code through <ProjectReference>; it never
-      # opens the .nupkg that is about to be published. This step closes that
-      # gap: it restores the EXACT staged packages into the same test app
-      # (PackageReference mode, an isolated package cache, and a feed holding
-      # only the staged packages plus nuget.org for transitive SDK/runtime
-      # deps), runs it on the simulator, and asserts the assemblies that
-      # actually loaded came from those packages. A failure fails the release —
-      # a package that cannot be consumed must not be published.
-      - name: Consume the packed packages from the staged feed
-        # Restore + rebuild + a full simulator run, so it needs the same headroom
-        # as the sim job above: the largest per-library run budget plus its launch
-        # budget on top of package restore and an app build.
+      - name: Upload simulator diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-diagnostics-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-${{ matrix.pairing }}
+          path: /tmp/sim-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload this pairing's contribution
+        if: ${{ always() && steps.pack.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: contribution-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-${{ matrix.pairing }}
+          path: ${{ runner.temp }}/contribution/
+          retention-days: 7
+
+  # ── Job 3: Merge the contributions into the one package that ships ────────────
+  # SwiftBindingsMergePackages refuses copies whose public API or compiled-in values
+  # disagree. A refusal fails the release; it is a finding, never something to bypass.
+  merge:
+    needs: [parse, pack]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up net10-xcode26
+        uses: ./.github/actions/setup-pairing
+        with:
+          pairing: net10-xcode26
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
+      - name: Download contributions
+        uses: actions/download-artifact@v4
+        with:
+          pattern: contribution-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-*
+          path: ${{ runner.temp }}/artifacts/
+
+      - name: Lay out contributions per pairing
+        run: |
+          for p in net10-xcode26 net10-xcode27 net11-xcode27; do
+            src="${{ runner.temp }}/artifacts/contribution-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-$p"
+            [ -d "$src" ] || { echo "::error::no contribution from $p"; exit 1; }
+            mkdir -p "${{ runner.temp }}/merge/contributions/$p"
+            cp "$src"/*.nupkg "${{ runner.temp }}/merge/contributions/$p/"
+          done
+
+      - name: Merge
+        run: |
+          dotnet nuke MergePackages \
+            --library "${{ needs.parse.outputs.library }}" \
+            --version "${{ needs.parse.outputs.version }}" \
+            --contributions "${{ runner.temp }}/merge/contributions" \
+            --output "${{ runner.temp }}/merge"
+          # The release manifest travels with the merged packages.
+          cp "${{ runner.temp }}/artifacts/contribution-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-net10-xcode26/release-manifest.json" \
+             "${{ runner.temp }}/merge/merged/" 2>/dev/null || true
+
+      - name: Summarize merged packages
+        run: |
+          {
+            echo ""
+            echo "### Merged packages"
+            for pkg in "${{ runner.temp }}/merge/merged"/*.nupkg; do
+              [ -f "$pkg" ] || continue
+              echo "- \`$(basename "$pkg")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}
+          path: ${{ runner.temp }}/merge/merged/
+          retention-days: 30
+
+  # ── Job 4: Consume the merged package on every pairing ─────────────────────────
+  # Restores the EXACT merged packages into the test app (PackageReference mode, an
+  # isolated package cache, a feed holding only the merged packages plus nuget.org),
+  # runs it on the simulator and asserts the assemblies that loaded came from them.
+  # On each pairing the consumer must select that pairing's copy.
+  consume:
+    needs: [parse, merge]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.parse.outputs.pairings) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up ${{ matrix.pairing }}
+        uses: ./.github/actions/setup-pairing
+        with:
+          pairing: ${{ matrix.pairing }}
+
+      - name: Restore Nuke tool
+        run: dotnet tool restore
+
+      - name: Download merged packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}
+          path: ${{ runner.temp }}/packages/
+
+      - name: Consume the merged packages from the staged feed
         timeout-minutes: 40
         run: |
-          # --timeout is the RUN budget: how long the suite may take to reach a
-          # marker, measured from the app's FIRST line. A library whose test app
-          # awaits more than this raises it from the harness's own per-library
-          # table, so this is a floor for the rest, not a cap for them.
-          # --launch-timeout is the separate budget for reaching that first line
-          # (install/boot/dyld); a hung launch is called there instead of eating
-          # the run budget.
           dotnet nuke ReleaseConsume \
-            --library "${{ steps.parse.outputs.library }}" \
-            --version "${{ steps.parse.outputs.version }}" \
+            --library "${{ needs.parse.outputs.library }}" \
+            --version "${{ needs.parse.outputs.version }}" \
             --consume-feed "${{ runner.temp }}/packages" \
             --timeout 60 \
             --launch-timeout 120 \
@@ -205,46 +284,18 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: sim-diagnostics-${{ steps.parse.outputs.library }}-${{ steps.parse.outputs.version }}
+          name: consume-diagnostics-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}-${{ matrix.pairing }}
           path: /tmp/sim-diagnostics/
           retention-days: 7
           if-no-files-found: ignore
 
-      # Summarize + upload run whenever the pack step succeeded, even if a
-      # later step (e.g. the sim test) failed. `if: steps.pack.outcome ==
-      # 'success'` ALONE is implicitly `success() && ...`, so GHA still
-      # short-circuits when an earlier step failed. The explicit
-      # `always() && ...` guard is required to actually run after a sim
-      # failure and recover the .nupkg for inspection — particularly
-      # frustrating during dry-runs where flaky sim infrastructure
-      # shouldn't block artifact retrieval.
-      - name: Summarize packed packages
-        if: ${{ always() && steps.pack.outcome == 'success' }}
-        run: |
-          {
-            echo ""
-            echo "### Packages"
-            for pkg in "${{ runner.temp }}/packages"/*.nupkg; do
-              [ -f "$pkg" ] || continue
-              echo "- \`$(basename "$pkg")\`"
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload package artifacts
-        if: ${{ always() && steps.pack.outcome == 'success' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-packages-${{ steps.parse.outputs.library }}-${{ steps.parse.outputs.version }}
-          path: ${{ runner.temp }}/packages/
-          retention-days: 30
-
-  # ── Job 2: Publish to NuGet ──────────────────────────────────────────────────
+  # ── Job 5: Publish the merged packages to NuGet ──────────────────────────────────────────────────
   # Runs on ubuntu-latest in the `nuget-publish` environment so the
   # NUGET_API_KEY secret is never exposed to the macOS build job and an
   # approval gate can be enforced before publishing.
   publish:
-    needs: build
-    if: needs.build.outputs.dry_run != 'true'
+    needs: [parse, consume]
+    if: needs.parse.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     environment: nuget-publish
     steps:
@@ -253,7 +304,7 @@ jobs:
       - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
-          name: nuget-packages-${{ needs.build.outputs.library }}-${{ needs.build.outputs.version }}
+          name: nuget-packages-${{ needs.parse.outputs.library }}-${{ needs.parse.outputs.version }}
           path: packages/
 
       - name: Setup .NET
@@ -312,8 +363,8 @@ jobs:
           {
             echo ""
             echo "### Published to NuGet"
-            echo "- **Library:** ${{ needs.build.outputs.library }}"
-            echo "- **Version:** ${{ needs.build.outputs.version }}"
+            echo "- **Library:** ${{ needs.parse.outputs.library }}"
+            echo "- **Version:** ${{ needs.parse.outputs.version }}"
             for pkg in packages/*.nupkg; do
               [ -f "$pkg" ] || continue
               echo "- \`$(basename "$pkg")\`"

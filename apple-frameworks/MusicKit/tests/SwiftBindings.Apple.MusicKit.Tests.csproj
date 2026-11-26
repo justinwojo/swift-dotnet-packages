@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework />
-    <TargetFrameworks>net10.0-ios;net10.0-macos;net10.0-maccatalyst;net10.0-tvos</TargetFrameworks>
+    <TargetFrameworks>$(SwiftBindingsTfmIos);$(SwiftBindingsTfmMacos);$(SwiftBindingsTfmMaccatalyst);$(SwiftBindingsTfmTvos)</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -14,6 +14,8 @@
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-macos'))">14.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-tvos'))">16.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst'))">16.0</SupportedOSPlatformVersion>
+    <!-- The .NET 11 workload's floor for this platform is 17.0. -->
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-maccatalyst')) and $(TargetFramework.StartsWith('net11.0'))">17.0</SupportedOSPlatformVersion>
     <IncludeSwiftBindingsRuntimeNative Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos'))">true</IncludeSwiftBindingsRuntimeNative>
     <!-- macOS console apps don't need provisioning -->
     <CodesignProvision Condition="$(TargetFramework.Contains('-macos'))"></CodesignProvision>

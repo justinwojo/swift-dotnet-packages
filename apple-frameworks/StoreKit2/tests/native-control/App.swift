@@ -100,6 +100,23 @@ private func sandboxTransaction(_ result: VerificationResult<Transaction>) throw
     return transaction
 }
 
+@objc(SKControlSceneDelegate)
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        guard let windowScene = scene as? UIWindowScene else { return }
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = UIViewController()
+        window.makeKeyAndVisible()
+        self.window = window
+    }
+}
+
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
@@ -110,9 +127,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        window = UIWindow(frame: UIScreen.main.bounds)
-        window?.rootViewController = UIViewController()
-        window?.makeKeyAndVisible()
+        // The window lives on the UIKit scene (SKControl-Info.plist's scene manifest names
+        // SKControlSceneDelegate): built against the iOS 27 SDK, an app without the scene
+        // lifecycle crashes at launch.
 
         do {
             let config = try Configuration.load()

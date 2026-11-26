@@ -1,4 +1,18 @@
 <Project>
+  <Target Name="_SwiftBindingsPairingInvalid"
+          BeforeTargets="CollectPackageReferences;Restore;Build;Pack"
+          Condition="'$(SwiftBindingsPairing)' != 'net10-xcode26' and '$(SwiftBindingsPairing)' != 'net10-xcode27' and '$(SwiftBindingsPairing)' != 'net11-xcode27'">
+    <Error Text="SwiftBindingsPairing='$(SwiftBindingsPairing)' is not a supported pairing; use net10-xcode26, net10-xcode27 or net11-xcode27 (source scripts/use-toolchain.sh &lt;pairing&gt;)." />
+  </Target>
+
+  <!-- UIKit scene lifecycle for every iOS, tvOS and Mac Catalyst test app (the Info.plists name
+       its "SceneDelegate"). Xcode 27.2's workloads fail an iOS/Catalyst app without a scene
+       manifest (MT7199). Added here, after the project body, where the inner build's
+       TargetFramework is known. -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) and ($(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-tvos')) or $(TargetFramework.Contains('-maccatalyst')))">
+    <Compile Include="$(MSBuildThisFileDirectory)tests-shared/SwiftBindingsSceneDelegate.cs" Link="Shared/SwiftBindingsSceneDelegate.cs" />
+  </ItemGroup>
+
   <!--
     Harness lane hook.
 

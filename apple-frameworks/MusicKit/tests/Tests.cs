@@ -24,6 +24,31 @@ internal static class Tests
         return await task.ConfigureAwait(true);
     }
 
+    /// <summary>Search term for the array-shim factories: 18 UTF-16 chars, 23 UTF-8 bytes.</summary>
+    private const string ShimSearchTerm = "rush — 2112 ✓ café";
+
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -147,10 +172,7 @@ internal static class Tests
         // Test 7: ContentRating plain enum is reachable.
         try
         {
-            var clean = ContentRating.Clean;
-            var explicitRating = ContentRating.Explicit;
-            if ((int)clean != 0 || (int)explicitRating != 1)
-                throw new InvalidOperationException($"unexpected values Clean={clean}, Explicit={explicitRating}");
+            AssertNameKeyedMembers(ContentRating.Clean, ContentRating.Explicit);
             Pass("ContentRating values");
         }
         catch (Exception ex)
@@ -241,13 +263,10 @@ internal static class Tests
         Skip("SystemMusicPlayer.Shared", "SystemMusicPlayer is iOS-only");
 #endif
 
-        // Test 13: MusicPropertySource plain enum — verify Catalog=0 and Library=1.
+        // Test 13: MusicPropertySource plain enum — Catalog and Library are distinct, name-keyed cases.
         try
         {
-            if ((int)MusicPropertySource.Catalog != 0)
-                throw new InvalidOperationException($"Catalog expected 0, got {(int)MusicPropertySource.Catalog}");
-            if ((int)MusicPropertySource.Library != 1)
-                throw new InvalidOperationException($"Library expected 1, got {(int)MusicPropertySource.Library}");
+            AssertNameKeyedMembers(MusicPropertySource.Catalog, MusicPropertySource.Library);
             Pass("MusicPropertySource values");
         }
         catch (Exception ex)
@@ -268,15 +287,11 @@ internal static class Tests
             Fail("MusicPropertySource.AllCases", ex.Message);
         }
 
-        // Test 15: MusicCatalogChartKind plain enum — verify values.
+        // Test 15: MusicCatalogChartKind plain enum — members are distinct, name-keyed cases.
         try
         {
-            if ((int)MusicCatalogChartKind.MostPlayed != 0)
-                throw new InvalidOperationException($"MostPlayed expected 0, got {(int)MusicCatalogChartKind.MostPlayed}");
-            if ((int)MusicCatalogChartKind.CityTop != 1)
-                throw new InvalidOperationException($"CityTop expected 1, got {(int)MusicCatalogChartKind.CityTop}");
-            if ((int)MusicCatalogChartKind.DailyGlobalTop != 2)
-                throw new InvalidOperationException($"DailyGlobalTop expected 2, got {(int)MusicCatalogChartKind.DailyGlobalTop}");
+            AssertNameKeyedMembers(MusicCatalogChartKind.MostPlayed, MusicCatalogChartKind.CityTop,
+                MusicCatalogChartKind.DailyGlobalTop);
             Pass("MusicCatalogChartKind values");
         }
         catch (Exception ex)
@@ -311,15 +326,11 @@ internal static class Tests
             Fail("MusicCatalogChartKind.AllCases", ex.Message);
         }
 
-        // Test 18: MusicPlayer.PlaybackStatus plain enum — verify values.
+        // Test 18: MusicPlayer.PlaybackStatus plain enum — members are distinct, name-keyed cases.
         try
         {
-            if ((int)MusicPlayer.PlaybackStatus.Stopped != 0)
-                throw new InvalidOperationException($"Stopped expected 0, got {(int)MusicPlayer.PlaybackStatus.Stopped}");
-            if ((int)MusicPlayer.PlaybackStatus.Playing != 1)
-                throw new InvalidOperationException($"Playing expected 1, got {(int)MusicPlayer.PlaybackStatus.Playing}");
-            if ((int)MusicPlayer.PlaybackStatus.SeekingBackward != 5)
-                throw new InvalidOperationException($"SeekingBackward expected 5, got {(int)MusicPlayer.PlaybackStatus.SeekingBackward}");
+            AssertNameKeyedMembers(MusicPlayer.PlaybackStatus.Stopped, MusicPlayer.PlaybackStatus.Playing,
+                MusicPlayer.PlaybackStatus.SeekingBackward);
             Pass("MusicPlayer.PlaybackStatus values");
         }
         catch (Exception ex)
@@ -327,15 +338,10 @@ internal static class Tests
             Fail("MusicPlayer.PlaybackStatus values", ex.Message);
         }
 
-        // Test 19: MusicPlayer.RepeatMode plain enum — verify values.
+        // Test 19: MusicPlayer.RepeatMode plain enum — members are distinct, name-keyed cases.
         try
         {
-            if ((int)MusicPlayer.RepeatMode.None != 0)
-                throw new InvalidOperationException($"None expected 0, got {(int)MusicPlayer.RepeatMode.None}");
-            if ((int)MusicPlayer.RepeatMode.One != 1)
-                throw new InvalidOperationException($"One expected 1, got {(int)MusicPlayer.RepeatMode.One}");
-            if ((int)MusicPlayer.RepeatMode.All != 2)
-                throw new InvalidOperationException($"All expected 2, got {(int)MusicPlayer.RepeatMode.All}");
+            AssertNameKeyedMembers(MusicPlayer.RepeatMode.None, MusicPlayer.RepeatMode.One, MusicPlayer.RepeatMode.All);
             Pass("MusicPlayer.RepeatMode values");
         }
         catch (Exception ex)
@@ -343,13 +349,10 @@ internal static class Tests
             Fail("MusicPlayer.RepeatMode values", ex.Message);
         }
 
-        // Test 20: MusicPlayer.ShuffleMode plain enum — verify values.
+        // Test 20: MusicPlayer.ShuffleMode plain enum — members are distinct, name-keyed cases.
         try
         {
-            if ((int)MusicPlayer.ShuffleMode.Off != 0)
-                throw new InvalidOperationException($"Off expected 0, got {(int)MusicPlayer.ShuffleMode.Off}");
-            if ((int)MusicPlayer.ShuffleMode.Songs != 1)
-                throw new InvalidOperationException($"Songs expected 1, got {(int)MusicPlayer.ShuffleMode.Songs}");
+            AssertNameKeyedMembers(MusicPlayer.ShuffleMode.Off, MusicPlayer.ShuffleMode.Songs);
             Pass("MusicPlayer.ShuffleMode values");
         }
         catch (Exception ex)
@@ -357,16 +360,13 @@ internal static class Tests
             Fail("MusicPlayer.ShuffleMode values", ex.Message);
         }
 
-        // Test 21: MusicLibrary.Error.CaseTag round-trip — verify tag uint values.
+        // Test 21: MusicLibrary.Error.CaseTag round-trip — verify the tag and the CaseTag members.
         try
         {
             var unknown = MusicLibrary.Error.Unknown;
             if (unknown.Tag != MusicLibrary.Error.CaseTag.Unknown)
                 throw new InvalidOperationException($"Unknown tag expected {MusicLibrary.Error.CaseTag.Unknown}, got {unknown.Tag}");
-            if ((uint)MusicLibrary.Error.CaseTag.Unknown != 0u)
-                throw new InvalidOperationException($"Unknown CaseTag value expected 0, got {(uint)MusicLibrary.Error.CaseTag.Unknown}");
-            if ((uint)MusicLibrary.Error.CaseTag.EditPlaylistFailed != 7u)
-                throw new InvalidOperationException($"EditPlaylistFailed CaseTag expected 7, got {(uint)MusicLibrary.Error.CaseTag.EditPlaylistFailed}");
+            AssertNameKeyedMembers(MusicLibrary.Error.CaseTag.Unknown, MusicLibrary.Error.CaseTag.EditPlaylistFailed);
             Pass("MusicLibrary.Error.CaseTag round-trip");
         }
         catch (Exception ex)
@@ -374,16 +374,13 @@ internal static class Tests
             Fail("MusicLibrary.Error.CaseTag round-trip", ex.Message);
         }
 
-        // Test 22: MusicTokenRequestError.CaseTag round-trip — verify tag uint values.
+        // Test 22: MusicTokenRequestError.CaseTag round-trip — verify the tag and the CaseTag members.
         try
         {
             var unknown = MusicTokenRequestError.Unknown;
             if (unknown.Tag != MusicTokenRequestError.CaseTag.Unknown)
                 throw new InvalidOperationException($"Unknown tag mismatch: got {unknown.Tag}");
-            if ((uint)MusicTokenRequestError.CaseTag.Unknown != 0u)
-                throw new InvalidOperationException($"Unknown CaseTag expected 0, got {(uint)MusicTokenRequestError.CaseTag.Unknown}");
-            if ((uint)MusicTokenRequestError.CaseTag.UserTokenRequestFailed != 6u)
-                throw new InvalidOperationException($"UserTokenRequestFailed expected 6, got {(uint)MusicTokenRequestError.CaseTag.UserTokenRequestFailed}");
+            AssertNameKeyedMembers(MusicTokenRequestError.CaseTag.Unknown, MusicTokenRequestError.CaseTag.UserTokenRequestFailed);
             Pass("MusicTokenRequestError.CaseTag round-trip");
         }
         catch (Exception ex)
@@ -391,13 +388,10 @@ internal static class Tests
             Fail("MusicTokenRequestError.CaseTag round-trip", ex.Message);
         }
 
-        // Test 23: Track.CaseTag — verify Song=0 and MusicVideo=1.
+        // Test 23: Track.CaseTag — Song and MusicVideo are distinct, name-keyed cases.
         try
         {
-            if ((uint)Track.CaseTag.Song != 0u)
-                throw new InvalidOperationException($"Song expected 0, got {(uint)Track.CaseTag.Song}");
-            if ((uint)Track.CaseTag.MusicVideo != 1u)
-                throw new InvalidOperationException($"MusicVideo expected 1, got {(uint)Track.CaseTag.MusicVideo}");
+            AssertNameKeyedMembers(Track.CaseTag.Song, Track.CaseTag.MusicVideo);
             Pass("Track.CaseTag values");
         }
         catch (Exception ex)
@@ -418,17 +412,14 @@ internal static class Tests
         MetadataTest<MusicCatalogSearchRequest>("MusicCatalogSearchRequest");
         MetadataTest<MusicLibrarySearchRequest>("MusicLibrarySearchRequest");
 
-        // Test 34: MusicAuthorization.Status.CaseTag uint values
+        // Test 34: MusicAuthorization.Status.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)MusicAuthorization.Status.CaseTag.NotDetermined != 0)
-                throw new InvalidOperationException($"NotDetermined expected 0, got {(uint)MusicAuthorization.Status.CaseTag.NotDetermined}");
-            if ((uint)MusicAuthorization.Status.CaseTag.Denied != 1)
-                throw new InvalidOperationException($"Denied expected 1, got {(uint)MusicAuthorization.Status.CaseTag.Denied}");
-            if ((uint)MusicAuthorization.Status.CaseTag.Restricted != 2)
-                throw new InvalidOperationException($"Restricted expected 2, got {(uint)MusicAuthorization.Status.CaseTag.Restricted}");
-            if ((uint)MusicAuthorization.Status.CaseTag.Authorized != 3)
-                throw new InvalidOperationException($"Authorized expected 3, got {(uint)MusicAuthorization.Status.CaseTag.Authorized}");
+            AssertNameKeyedMembers(
+                MusicAuthorization.Status.CaseTag.NotDetermined,
+                MusicAuthorization.Status.CaseTag.Denied,
+                MusicAuthorization.Status.CaseTag.Restricted,
+                MusicAuthorization.Status.CaseTag.Authorized);
             Pass("MusicAuthorization.Status.CaseTag values");
         }
         catch (Exception ex)
@@ -436,15 +427,13 @@ internal static class Tests
             Fail("MusicAuthorization.Status.CaseTag values", ex.Message);
         }
 
-        // Test 35: MusicSubscription.Error.CaseTag uint values
+        // Test 35: MusicSubscription.Error.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)MusicSubscription.Error.CaseTag.Unknown != 0)
-                throw new InvalidOperationException($"Unknown expected 0, got {(uint)MusicSubscription.Error.CaseTag.Unknown}");
-            if ((uint)MusicSubscription.Error.CaseTag.PermissionDenied != 1)
-                throw new InvalidOperationException($"PermissionDenied expected 1, got {(uint)MusicSubscription.Error.CaseTag.PermissionDenied}");
-            if ((uint)MusicSubscription.Error.CaseTag.PrivacyAcknowledgementRequired != 2)
-                throw new InvalidOperationException($"PrivacyAcknowledgementRequired expected 2, got {(uint)MusicSubscription.Error.CaseTag.PrivacyAcknowledgementRequired}");
+            AssertNameKeyedMembers(
+                MusicSubscription.Error.CaseTag.Unknown,
+                MusicSubscription.Error.CaseTag.PermissionDenied,
+                MusicSubscription.Error.CaseTag.PrivacyAcknowledgementRequired);
             Pass("MusicSubscription.Error.CaseTag values");
         }
         catch (Exception ex)
@@ -452,15 +441,11 @@ internal static class Tests
             Fail("MusicSubscription.Error.CaseTag values", ex.Message);
         }
 
-        // Test 36: RecentlyPlayedMusicItem.CaseTag uint values
+        // Test 36: RecentlyPlayedMusicItem.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)RecentlyPlayedMusicItem.CaseTag.Album != 0)
-                throw new InvalidOperationException($"Album expected 0, got {(uint)RecentlyPlayedMusicItem.CaseTag.Album}");
-            if ((uint)RecentlyPlayedMusicItem.CaseTag.Playlist != 1)
-                throw new InvalidOperationException($"Playlist expected 1, got {(uint)RecentlyPlayedMusicItem.CaseTag.Playlist}");
-            if ((uint)RecentlyPlayedMusicItem.CaseTag.Station != 2)
-                throw new InvalidOperationException($"Station expected 2, got {(uint)RecentlyPlayedMusicItem.CaseTag.Station}");
+            AssertNameKeyedMembers(RecentlyPlayedMusicItem.CaseTag.Album, RecentlyPlayedMusicItem.CaseTag.Playlist,
+                RecentlyPlayedMusicItem.CaseTag.Station);
             Pass("RecentlyPlayedMusicItem.CaseTag values");
         }
         catch (Exception ex)
@@ -652,11 +637,17 @@ internal static class Tests
         // construction since that's what the shim covers.
         try
         {
-            var req = MusicCatalogSearchRequest.Create("rush",
+            // The term must come back exactly: the shim passes its UTF-8 length as Swift Int, so
+            // a length marshalled at the wrong width reads garbage (a crash, or a wrong term).
+            // The multi-byte characters make the byte length differ from the char count.
+            var req = MusicCatalogSearchRequest.Create(ShimSearchTerm,
                 MusicCatalogSearchTypes.Album | MusicCatalogSearchTypes.Artist);
             if (req is null)
                 throw new InvalidOperationException("Create returned null");
+            string term = req.Term;
             req.Dispose();
+            if (term != ShimSearchTerm)
+                throw new InvalidOperationException($"term round-trip: expected \"{ShimSearchTerm}\", got \"{term}\"");
             Pass("MusicCatalogSearchRequest.Create (array-shim factory)");
         }
         catch (DllNotFoundException ex)
@@ -701,11 +692,14 @@ internal static class Tests
         // mask legal (Apple's default is []).
         try
         {
-            var req = MusicCatalogSearchSuggestionsRequest.Create("rush",
+            var req = MusicCatalogSearchSuggestionsRequest.Create(ShimSearchTerm,
                 MusicCatalogSearchTypes.Song);
             if (req is null)
                 throw new InvalidOperationException("Create returned null");
+            string term = req.Term;
             req.Dispose();
+            if (term != ShimSearchTerm)
+                throw new InvalidOperationException($"term round-trip: expected \"{ShimSearchTerm}\", got \"{term}\"");
             Pass("MusicCatalogSearchSuggestionsRequest.Create (array-shim factory)");
         }
         catch (DllNotFoundException ex)
@@ -719,6 +713,38 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail("MusicCatalogSearchSuggestionsRequest.Create", ex.Message);
+        }
+
+        // Test 40b: MusicLibrarySearchRequest.Create — the third array shim
+        // (init(term:types: [any MusicLibrarySearchable.Type])), same length contract.
+        try
+        {
+            var req = MusicLibrarySearchRequest.Create(ShimSearchTerm,
+                MusicLibrarySearchTypes.Album | MusicLibrarySearchTypes.Song);
+            if (req is null)
+                throw new InvalidOperationException("Create returned null");
+            string term = req.Term;
+            req.Dispose();
+            if (term != ShimSearchTerm)
+                throw new InvalidOperationException($"term round-trip: expected \"{ShimSearchTerm}\", got \"{term}\"");
+            Pass("MusicLibrarySearchRequest.Create (array-shim factory)");
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicLibrarySearchRequest.Create", $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        // Empty term: the shim gets a null pointer and a zero length and must build "".
+        try
+        {
+            using var req = MusicCatalogSearchRequest.Create("", MusicCatalogSearchTypes.None);
+            if (req.Term != "")
+                throw new InvalidOperationException($"expected an empty term, got \"{req.Term}\"");
+            Pass("MusicCatalogSearchRequest.Create (empty term, empty mask)");
+        }
+        catch (Exception ex)
+        {
+            Fail("MusicCatalogSearchRequest.Create (empty term, empty mask)", $"{ex.GetType().Name}: {ex.Message}");
         }
 
         // Test 41a: ApplicationMusicPlayer queue-factory -> player-assignment shape (audit BQ-10).

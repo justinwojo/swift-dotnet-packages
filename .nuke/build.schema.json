@@ -42,7 +42,9 @@
         "ListChangedLibraries",
         "ListLibraries",
         "ListSims",
+        "MergePackages",
         "Pack",
+        "PackAllPairings",
         "PackValidate",
         "PackValidateAppleFramework",
         "PublishRelease",
@@ -63,6 +65,7 @@
         "TestReleaseWave",
         "TestRunBudgets",
         "TestStoreKitSandbox",
+        "TestVisionKitWarmup",
         "ValidateDevice",
         "ValidateDeviceLane",
         "ValidateMac",
@@ -204,6 +207,10 @@
           "type": "string",
           "description": "ReleaseConsume: per-package version overrides, \"Id=Version;Id2=Version2\" (default: --version for every referenced package)"
         },
+        "Contributions": {
+          "type": "string",
+          "description": "MergePackages: directory holding one <pairing>/ folder of packed contributions per pairing (default: <output>/contributions)"
+        },
         "DeferCredentialQualification": {
           "type": "boolean",
           "description": "RegressionValidate: record cells whose only missing evidence is an owner-held credential (StoreKit Sandbox product, ActivityKit APNs profile) as DEFERRED instead of ERROR. Every check the cell can run without the credential still runs and still fails the run on any failure. Off by default; the artifact records the opt-out and lists every deferred cell"
@@ -284,13 +291,17 @@
           "type": "string",
           "description": "Directory containing .nupkg files for PublishRelease (artifact-staged)"
         },
+        "Pairing": {
+          "type": "string",
+          "description": "RegressionValidate: the .NET + Xcode pairing to validate — net10-xcode26, net10-xcode27, net11-xcode27, or all (each pairing in turn under scripts/use-toolchain.sh, one aggregate verdict). Default: the pairing the shell selected (SwiftBindingsPairing, else net10-xcode26)"
+        },
         "Platform": {
           "type": "string",
           "description": "Target platform for test app build/validate: ios (default), macos, maccatalyst, tvos"
         },
         "Platforms": {
           "type": "string",
-          "description": "RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT), macos, maccatalyst, tvos"
+          "description": "RegressionValidate: subset of platforms to run (comma list, default: all of the pairing's). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT, .NET 10), ios-device-coreclr (.NET 11), macos, maccatalyst, tvos, ios-sim-release / maccatalyst-release / tvos-release (ReadyToRun, .NET 11), host (every non-device lane of the pairing)"
         },
         "Products": {
           "type": "array",

@@ -1,0 +1,56 @@
+name: Set up a .NET + Xcode pairing
+description: >-
+  Select the Xcode, .NET SDK and workload set that toolchains/<pairing>.json pins, rewrite
+  global.json to that exact SDK, and export the pairing (SwiftBindingsPairing, DEVELOPER_DIR,
+  DOTNET_ROOT, simulator runtimes) to every later step of the job.
+inputs:
+  pairing:
+    description: net10-xcode26, net10-xcode27 or net11-xcode27
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Read the pairing record
+      id: rec
+      shell: bash
+      run: |
+        f="toolchains/${{ inputs.pairing }}.json"
+        [ -f "$f" ] || { echo "::error::no pairing record $f"; exit 1; }
+        echo "sdk=$(jq -r .sdkVersion "$f")" >> "$GITHUB_OUTPUT"
+        echo "xcode=$(jq -r .xcodeVersion "$f")" >> "$GITHUB_OUTPUT"
+
+    # Runner images install each Xcode as /Applications/Xcode_<version>.app.
+    - name: Select Xcode ${{ steps.rec.outputs.xcode }}
+      shell: bash
+      run: |
+        dev="/Applications/Xcode_${{ steps.rec.outputs.xcode }}.app/Contents/Developer"
+        [ -d "$dev" ] || { echo "::error::this runner has no Xcode ${{ steps.rec.outputs.xcode }} ($dev)"; exit 1; }
+        sudo xcode-select -s "$dev"
+        echo "SWIFTBINDINGS_DEVELOPER_DIR=$dev" >> "$GITHUB_ENV"
+
+    - name: Set up .NET SDK ${{ steps.rec.outputs.sdk }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ steps.rec.outputs.sdk }}
+
+    # use-toolchain.sh pins global.json to the pairing's SDK and workload set (roll-forward
+    # disabled) and exports the pairing; GITHUB_ENV/GITHUB_PATH carry it to later steps.
+    - name: Select the pairing
+      shell: bash
+      run: |
+        export SWIFTBINDINGS_DOTNET_ROOT="$DOTNET_ROOT"
+        source scripts/use-toolchain.sh "${{ inputs.pairing }}"
+        for v in DOTNET_ROOT DOTNET_MULTILEVEL_LOOKUP DEVELOPER_DIR SwiftBindingsPairing \
+                 SWIFTBINDINGS_SIM_RUNTIMES SWIFTBINDINGS_TV_SIM_RUNTIMES; do
+          echo "$v=${!v}" >> "$GITHUB_ENV"
+        done
+        echo "$DOTNET_ROOT" >> "$GITHUB_PATH"
+
+    # Explicit install honors the workloadVersion global.json now pins.
+    - name: Install workloads
+      shell: bash
+      run: dotnet workload install ios macos maccatalyst tvos
+
+    - name: Ensure local NuGet source exists
+      shell: bash
+      run: mkdir -p local-packages

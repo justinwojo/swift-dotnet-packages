@@ -12,7 +12,7 @@ using SwiftBindings.Build.Models;
 
 partial class Build
 {
-    [Parameter("RegressionValidate: subset of platforms to run (comma list, default: all). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT), macos, maccatalyst, tvos")]
+    [Parameter("RegressionValidate: subset of platforms to run (comma list, default: all of the pairing's). Values: ios-sim, ios-device (NativeAOT), ios-device-monoaot (Mono full-AOT, .NET 10), ios-device-coreclr (.NET 11), macos, maccatalyst, tvos, ios-sim-release / maccatalyst-release / tvos-release (ReadyToRun, .NET 11), host (every non-device lane of the pairing)")]
     readonly string? Platforms;
 
     [Parameter("RegressionValidate: max parallel cells (default 4, capped at 16). NativeAOT publish + concurrent app-bundle builds can push a 32 GB box into swap before CPU saturates — bump only after observing actual memory headroom.")]
@@ -41,7 +41,7 @@ partial class Build
     /// <c>UNAVAIL</c> when the host has no tvOS runtime installed.
     /// </summary>
     Target RegressionValidate => _ => _
-        .Description("Build + validate every package across every declared TFM (--version X.Y.Z --apple-version NN.N.N [--apple-bindings-version NN.N.N] [--filter Foo] [--platforms ios-sim,macos] [--regression-jobs N] [--regression-serial])")
+        .Description("Build + validate every package across every declared TFM (--version X.Y.Z --apple-version NN.N.N [--pairing net10-xcode26|net10-xcode27|net11-xcode27|all] [--apple-bindings-version NN.N.N] [--filter Foo] [--platforms ios-sim,macos] [--regression-jobs N] [--regression-serial])")
         .Requires(() => Version)
         .Requires(() => AppleVersion)
         .Executes(() => WithAbortExitCode(async () =>
@@ -53,6 +53,16 @@ partial class Build
             // --apple-bindings-version when the two trains have de-synced (the
             // common case once a wave ships bindings without a new supplement).
             var appleBindingsVersion = ResolveAppleBindingsVersion(AppleBindingsVersion, appleVersion)!;
+
+            // --pairing all (or a pairing other than this shell's): one child run per pairing,
+            // each on its own toolchain, folded into one verdict.
+            var delegated = PairingsToDelegate();
+            if (delegated.Count > 0)
+            {
+                RunPairingsInChildren(delegated, version);
+                return;
+            }
+
             var requestedPlatforms = ParsePlatformsParam(Platforms);
             var packages = ResolvePackages(Filter);
 
@@ -86,7 +96,11 @@ partial class Build
             // wiped on entry and the JSON verdict was a single clobbered slot —
             // a 1-cell spot check silently replaced a full matrix's evidence.)
             var runStartUtc = DateTime.UtcNow;
-            var runId = ComposeRunId(runStartUtc, TryGitShortSha());
+            // A --pairing all parent names its children's run id, so it reads back exactly the
+            // artifact its own child wrote and never another run's.
+            var runId = Environment.GetEnvironmentVariable(RegressionRunIdEnvironmentVariable) is { Length: > 0 } assigned
+                ? assigned
+                : ComposeRunId(runStartUtc, TryGitShortSha());
             var runDir = RegressionRunsDir(version) / runId;
             var cellLogDir = runDir / "cells";
             Log.Information("Run directory: {Dir}", runDir);
@@ -137,7 +151,7 @@ partial class Build
             // lanes both draining the same semaphore, max simultaneous sim
             // cells is min(maxJobs, totalSimCells); over-provisioning sims
             // just leaves expensive CoreSimulator boots idle.
-            var simCellCount = cells.Count(c => c.Platform == CellPlatform.IosSim);
+            var simCellCount = cells.Count(c => IsSimCell(c.Platform));
             SimulatorFleet? fleet = null;
             IReadOnlyList<SimulatorFleet.FleetMember> fleetMembers = Array.Empty<SimulatorFleet.FleetMember>();
             ConcurrentQueue<string>? simUdidQueue = null;
@@ -199,19 +213,29 @@ partial class Build
                             await Task.WhenAll(depTasks);
                     }
 
-                    // Device cell waits for its own library's sim cell so that
-                    // the device-side `dotnet publish` (which does an implicit
-                    // restore that overwrites the sim-RID assets.json — see
-                    // PreRestoreCells / BuildTestAppNativeAot) cannot race a
-                    // concurrent sim cell that's still mid-build under
-                    // --no-restore. A library without a paired sim cell just
-                    // skips this wait. Both device runtimes restore, so both
-                    // wait.
+                    // Device cell waits for every host cell of its own library so
+                    // that the device-side build (whose implicit restore overwrites
+                    // the project's shared assets.json — see PreRestoreCells /
+                    // BuildTestAppNativeAot) cannot race a host cell (Debug or
+                    // Release, any platform of the multi-TFM project) that is still
+                    // mid-build under --no-restore. Both device runtimes restore, so
+                    // both wait.
                     if (IsDeviceCell(cell.Platform))
                     {
-                        var simSibling = new Cell(cell.Library, CellPlatform.IosSim);
-                        if (cellComplete.TryGetValue(simSibling, out var simTcs))
-                            await simTcs.Task;
+                        foreach (var (sibling, tcs) in cellComplete)
+                            if (sibling.Library == cell.Library && !IsDeviceCell(sibling.Platform))
+                                await tcs.Task;
+                    }
+
+                    // A Release cell builds and launches the same app (same bundle id, same
+                    // project) as its Debug sibling; running them one after the other keeps
+                    // two launches of one bundle id from contending for the same Catalyst
+                    // LaunchServices registration or simulator install.
+                    if (IsReleaseCell(cell.Platform))
+                    {
+                        var debugSibling = new Cell(cell.Library, BasePlatform(cell.Platform));
+                        if (cellComplete.TryGetValue(debugSibling, out var debugTcs))
+                            await debugTcs.Task;
                     }
 
                     // Acquire ORDER: device-lock FIRST, THEN global semaphore.
@@ -238,7 +262,7 @@ partial class Build
                         }
                         await semaphore.WaitAsync();
                         tookSemaphore = true;
-                        if (cell.Platform == CellPlatform.IosSim)
+                        if (IsSimCell(cell.Platform))
                         {
                             if (simUdidQueue is null || !simUdidQueue.TryDequeue(out cellSimUdid))
                                 throw new InvalidOperationException(
@@ -505,12 +529,20 @@ partial class Build
 
     /// <summary>
     /// <see cref="IosDevice"/> is the NativeAOT device lane;
-    /// <see cref="IosDeviceMonoAot"/> is Mono full-AOT — the .NET-for-iOS
-    /// default runtime for a physical device. They are separate platforms
-    /// rather than a flag on one, because they run different runtimes and
-    /// neither may grade or stand in for the other.
+    /// <see cref="IosDeviceDefault"/> is the .NET-for-iOS default runtime for a physical
+    /// device: Mono full-AOT on .NET 10 (<c>ios-device-monoaot</c>), CoreCLR on .NET 11
+    /// (<c>ios-device-coreclr</c>). They are separate platforms rather than a flag on one,
+    /// because they run different runtimes and neither may grade or stand in for the other.
+    ///
+    /// <para>The <c>*Release</c> platforms exist only on .NET 11 pairings: the same app built
+    /// <c>-c Release</c>, which runs ReadyToRun CoreCLR code where Debug runs the CoreCLR
+    /// interpreter. Each is its own cell because each engine needs its own proof.</para>
     /// </summary>
-    enum CellPlatform { IosSim, IosDevice, IosDeviceMonoAot, MacOs, MacCatalyst, TvOs }
+    enum CellPlatform
+    {
+        IosSim, IosDevice, IosDeviceDefault, MacOs, MacCatalyst, TvOs,
+        IosSimRelease, MacCatalystRelease, TvOsRelease,
+    }
 
     /// <summary>
     /// <see cref="Unavailable"/> is distinct from <see cref="Skip"/> and
@@ -534,59 +566,123 @@ partial class Build
         string? Reason,
         TimeSpan Duration);
 
-    static readonly CellPlatform[] AllPlatforms =
+    static readonly CellPlatform[] Net10Platforms =
     {
         CellPlatform.IosSim,
         CellPlatform.IosDevice,
-        CellPlatform.IosDeviceMonoAot,
+        CellPlatform.IosDeviceDefault,
         CellPlatform.MacOs,
         CellPlatform.MacCatalyst,
         CellPlatform.TvOs,
     };
 
+    static readonly CellPlatform[] Net11Platforms =
+    {
+        CellPlatform.IosSim,
+        CellPlatform.IosSimRelease,
+        CellPlatform.IosDevice,
+        CellPlatform.IosDeviceDefault,
+        CellPlatform.MacOs,
+        CellPlatform.MacCatalyst,
+        CellPlatform.MacCatalystRelease,
+        CellPlatform.TvOs,
+        CellPlatform.TvOsRelease,
+    };
+
+    /// <summary>The full platform set of the active pairing: what an unrestricted run covers
+    /// and what completeness is judged against.</summary>
+    static IReadOnlyList<CellPlatform> AllPlatforms => AppsRunOnMono ? Net10Platforms : Net11Platforms;
+
     /// <summary>Both device lanes contend for the one physical iPhone.</summary>
     static bool IsDeviceCell(CellPlatform p) =>
-        p is CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot;
+        p is CellPlatform.IosDevice or CellPlatform.IosDeviceDefault;
+
+    /// <summary>Cells that draw an iPhone simulator from the fleet.</summary>
+    static bool IsSimCell(CellPlatform p) => p is CellPlatform.IosSim or CellPlatform.IosSimRelease;
+
+    /// <summary>The Debug platform a Release cell rebuilds, or the platform itself.</summary>
+    static CellPlatform BasePlatform(CellPlatform p) => p switch
+    {
+        CellPlatform.IosSimRelease => CellPlatform.IosSim,
+        CellPlatform.MacCatalystRelease => CellPlatform.MacCatalyst,
+        CellPlatform.TvOsRelease => CellPlatform.TvOs,
+        _ => p,
+    };
+
+    static bool IsReleaseCell(CellPlatform p) => BasePlatform(p) != p;
+
+    /// <summary>The configuration a cell's app is built in: the -release lanes and the NativeAOT
+    /// device publish are Release, everything else Debug.</summary>
+    static string CellConfiguration(CellPlatform p) =>
+        IsReleaseCell(p) || p == CellPlatform.IosDevice ? "Release" : "Debug";
+
+    /// <summary>The engine a cell must prove it ran on, from the pairing and the platform.</summary>
+    static AppEngine ExpectedEngine(CellPlatform p) => p switch
+    {
+        CellPlatform.IosDevice => AppEngine.NativeAot,
+        CellPlatform.IosDeviceDefault => AppsRunOnMono ? AppEngine.MonoAot : AppEngine.CoreClrInterpreter,
+        CellPlatform.MacOs => AppEngine.CoreClrJit,
+        _ when IsReleaseCell(p) => AppEngine.CoreClrReadyToRun,
+        _ => AppsRunOnMono ? AppEngine.Mono : AppEngine.CoreClrInterpreter,
+    };
 
     static string PlatformLabel(CellPlatform p) => p switch
     {
         CellPlatform.IosSim => "ios-sim",
         CellPlatform.IosDevice => "ios-device",
-        CellPlatform.IosDeviceMonoAot => "ios-device-monoaot",
+        CellPlatform.IosDeviceDefault => AppsRunOnMono ? "ios-device-monoaot" : "ios-device-coreclr",
         CellPlatform.MacOs => "macos",
         CellPlatform.MacCatalyst => "maccatalyst",
         CellPlatform.TvOs => "tvos",
+        CellPlatform.IosSimRelease => "ios-sim-release",
+        CellPlatform.MacCatalystRelease => "maccatalyst-release",
+        CellPlatform.TvOsRelease => "tvos-release",
         _ => p.ToString(),
     };
 
-    static string PlatformTfm(CellPlatform p) => p switch
+    static string PlatformTfm(CellPlatform p) => BasePlatform(p) switch
     {
-        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceMonoAot => "net10.0-ios",
-        CellPlatform.MacOs => "net10.0-macos",
-        CellPlatform.MacCatalyst => "net10.0-maccatalyst",
-        CellPlatform.TvOs => "net10.0-tvos",
+        CellPlatform.IosSim or CellPlatform.IosDevice or CellPlatform.IosDeviceDefault => ResolveTfm("ios"),
+        CellPlatform.MacOs => ResolveTfm("macos"),
+        CellPlatform.MacCatalyst => ResolveTfm("maccatalyst"),
+        CellPlatform.TvOs => ResolveTfm("tvos"),
         _ => throw new ArgumentOutOfRangeException(nameof(p)),
     };
 
     static IReadOnlyList<CellPlatform> ParsePlatformsParam(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return AllPlatforms;
+        if (string.IsNullOrWhiteSpace(raw))
+            return AllPlatforms;
         var result = new List<CellPlatform>();
         foreach (var token in raw.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var t = token.Trim().ToLowerInvariant();
+            // `host`: every lane of the pairing this Mac runs without a phone (simulators,
+            // macOS, Mac Catalyst), so one spelling works across pairings under --pairing all.
+            if (t == "host")
+            {
+                foreach (var hp in AllPlatforms.Where(hp => !IsDeviceCell(hp)))
+                    if (!result.Contains(hp)) result.Add(hp);
+                continue;
+            }
             CellPlatform p = t switch
             {
                 "ios-sim" or "ios" or "iossim" => CellPlatform.IosSim,
                 "ios-device" or "device" or "iosdevice" => CellPlatform.IosDevice,
                 "ios-device-monoaot" or "device-monoaot" or "monoaot" or "mono-aot"
-                    => CellPlatform.IosDeviceMonoAot,
+                    when AppsRunOnMono => CellPlatform.IosDeviceDefault,
+                "ios-device-coreclr" or "device-coreclr" or "coreclr-device"
+                    when !AppsRunOnMono => CellPlatform.IosDeviceDefault,
                 "macos" or "mac" => CellPlatform.MacOs,
                 "maccatalyst" or "catalyst" => CellPlatform.MacCatalyst,
                 "tvos" => CellPlatform.TvOs,
+                "ios-sim-release" when !AppsRunOnMono => CellPlatform.IosSimRelease,
+                "maccatalyst-release" when !AppsRunOnMono => CellPlatform.MacCatalystRelease,
+                "tvos-release" when !AppsRunOnMono => CellPlatform.TvOsRelease,
                 _ => throw new InvalidOperationException(
-                    $"Unknown platform '{token}'. Valid: ios-sim, ios-device, ios-device-monoaot, " +
-                    "macos, maccatalyst, tvos"),
+                    $"Platform '{token}' is not a lane of pairing {ActivePairing.Name}. Valid here: " +
+                    string.Join(", ", AllPlatforms.Select(PlatformLabel)) +
+                    " (ios-device-monoaot is .NET 10 only; ios-device-coreclr and the *-release lanes are .NET 11 only)"),
             };
             if (!result.Contains(p)) result.Add(p);
         }
@@ -663,6 +759,9 @@ partial class Build
     {
         Log.Information("--- pre-flight ---");
 
+        // 0. The process really runs on the pairing it reports (SDK + Xcode).
+        AssertPairingEnvironment();
+
         // Run every read-only validation FIRST so a typo or missing
         // precondition (e.g. wrong version, no booted sim, missing codesign
         // config) fails fast without dirtying the working tree. The csproj
@@ -721,17 +820,27 @@ partial class Build
 
         // Host requirements are judged over the cells that will actually launch: a disqualified
         // cell must not abort the run for a simulator or device it will never use.
-        var needsSim = cells.Any(c => c.Platform == CellPlatform.IosSim && !blocked.ContainsKey(c));
+        var needsSim = cells.Any(c => IsSimCell(c.Platform) && !blocked.ContainsKey(c));
         var needsDevice = cells.Any(c => IsDeviceCell(c.Platform) && !blocked.ContainsKey(c));
 
-        // 2. Booted simulator if any sim cells
+        // 2. A ready iPhone simulator on the pairing's runtimes if any sim cells. The fleet
+        //    filters to those runtimes, so a simulator another Xcode's session left booted does
+        //    not satisfy this pairing; one is booted here when none is, so a --pairing all run
+        //    needs no manual BootSim per pairing.
         if (needsSim)
         {
-            var booted = ListBootedSims();
-            if (booted.Count == 0)
+            string udid;
+            try
+            {
+                udid = new SimulatorFleet().EnsureReusable();
+            }
+            catch (Exception ex)
+            {
                 throw new InvalidOperationException(
-                    "Pre-flight: no booted iOS simulator. Run `dotnet nuke BootSim` first.");
-            Log.Information("  Booted simulator(s): {Count}", booted.Count);
+                    $"Pre-flight: no usable iPhone simulator on {ActivePairing.Name}'s runtimes " +
+                    $"({string.Join(", ", ActivePairing.SimRuntimes)}): {ex.Message}", ex);
+            }
+            Log.Information("  Simulator ready on {Pairing}'s runtimes: {Udid}", ActivePairing.Name, udid);
         }
 
         // 3. Connected device if any device cells
@@ -761,6 +870,15 @@ partial class Build
         //    and silently resolve the OLD package from cache or nuget.org —
         //    the matrix then validates the wrong version.
         BumpSdkVersionInternal(version);
+
+        // 5a. (Side-effecting) The cells' third-party xcframeworks exist and this pairing's Swift
+        //     compiler can read them; a source-mode library built by a newer Xcode is rebuilt.
+        var cellLibraries = cells.Select(c => c.Library).Distinct(StringComparer.Ordinal).ToList();
+        var cellCsprojs = cellLibraries
+            .Where(l => File.Exists(RootDirectory / "libraries" / l / "library.json"))
+            .SelectMany(l => Directory.EnumerateFiles(RootDirectory / "libraries" / l, "SwiftBindings.*.csproj", SearchOption.AllDirectories))
+            .Where(p => !p.Contains("/obj/", StringComparison.Ordinal) && !p.Contains("/bin/", StringComparison.Ordinal));
+        EnsureNativeInputs(cellLibraries.Concat(CrossLibraryReferences(cellCsprojs)));
 
         // 6. (Side-effecting) Stamp every apple-framework csproj's own
         //    <Version> to the per-framework bindings train (e.g. 26.2.10).
@@ -1131,7 +1249,7 @@ partial class Build
         // Prefer the canonical (complete-run) artifact; fall back to the most
         // recent run-scoped artifact, which is the only record a filtered or
         // aborted run leaves in the canonical slot's place.
-        var artifactPath = RootDirectory / "artifacts" / $"regression-validate-{version}.json";
+        var artifactPath = RootDirectory / "artifacts" / CanonicalArtifactName(version);
         if (!File.Exists(artifactPath))
         {
             var runsDir = RegressionRunsDir(version);
@@ -1251,41 +1369,6 @@ partial class Build
         return string.IsNullOrEmpty(home) ? null : (AbsolutePath)home / ".nuget" / "packages";
     }
 
-    static IReadOnlyList<string> ListBootedSims()
-    {
-        var psi = new ProcessStartInfo("xcrun")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add("simctl");
-        psi.ArgumentList.Add("list");
-        psi.ArgumentList.Add("devices");
-        psi.ArgumentList.Add("booted");
-        using var p = Process.Start(psi)!;
-        // Drain stdout async + bound WaitForExit so a wedged CoreSimulator
-        // can't hang the regression preflight on the way in.
-        var sb = new System.Text.StringBuilder();
-        p.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (sb) sb.AppendLine(e.Data); };
-        p.ErrorDataReceived += (_, e) => { /* discard stderr */ };
-        p.BeginOutputReadLine();
-        p.BeginErrorReadLine();
-        if (!p.WaitForExit(10_000))
-        {
-            try { p.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("xcrun simctl list devices booted timed out after 10s during preflight");
-        }
-        p.WaitForExit();
-        var booted = new List<string>();
-        foreach (var line in sb.ToString().Split('\n'))
-        {
-            var m = System.Text.RegularExpressions.Regex.Match(line, @"\(([0-9A-F-]{36})\) \(Booted\)");
-            if (m.Success) booted.Add(m.Groups[1].Value);
-        }
-        return booted;
-    }
-
     /// <summary>
     /// Build + validate a single cell. Each platform dispatches to its
     /// matching build helper and validator. Every platform has a validator;
@@ -1296,13 +1379,34 @@ partial class Build
     /// </summary>
     CellOutcome RunCell(Cell cell, string? simUdid, string? deviceUdid, Stopwatch sw, Action<string> sink)
     {
-        var (testDir, _, _) = ResolveTestNames(cell.Library);
-        switch (cell.Platform)
+        var (testDir, appName, _) = ResolveTestNames(cell.Library);
+        var configuration = CellConfiguration(cell.Platform);
+        var expected = ExpectedEngine(cell.Platform);
+        sink($"=== engine: {ToolchainPairing.EngineName(expected)} (pairing {ActivePairing.Name}, -c {configuration}, -f {PlatformTfm(cell.Platform)}) ===");
+
+        // Proves the built bundle carries the engine this cell exists to cover, before anything
+        // is installed or launched. An Error, not a Fail: the run produced no verdict for the
+        // engine it claims, which must never read as a pass.
+        CellOutcome? EngineGate(string platform)
+        {
+            var mismatch = EngineMismatch(testDir, configuration, platform, appName, expected);
+            if (mismatch is null)
+            {
+                sink($"=== engine proven from the bundle: {ToolchainPairing.EngineName(expected)} ===");
+                return null;
+            }
+            sink($"ENGINE NOT PROVEN: {mismatch}");
+            return new CellOutcome(cell, CellResult.Error, $"ENGINE NOT PROVEN — {mismatch}", sw.Elapsed);
+        }
+
+        switch (BasePlatform(cell.Platform))
         {
             case CellPlatform.IosSim:
             {
-                BuildTestAppSimulator(cell.Library, testDir, "ios", onLine: sink, noRestore: true);
-                var result = ValidateSimFor(cell.Library, Timeout, simUdid, "iossimulator-arm64", onLine: sink);
+                BuildTestAppSimulator(cell.Library, testDir, "ios", onLine: sink, noRestore: true, configuration: configuration);
+                if (EngineGate("ios") is { } bad) return bad;
+                var result = ValidateSimFor(cell.Library, Timeout, simUdid, "iossimulator-arm64", onLine: sink,
+                    configuration: configuration);
                 return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.IosDevice:
@@ -1310,34 +1414,38 @@ partial class Build
                 // NativeAOT — the opt-in device runtime. RunDeviceLane checks
                 // the built bundle's shape before install and the app's own
                 // runtime banner after the run, so this cell cannot report a
-                // green for a bundle the Mono lane produced.
+                // green for a bundle the default-runtime lane produced.
                 var result = RunDeviceLane(cell.Library, mono: false, deviceUdid, sink);
                 return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
-            case CellPlatform.IosDeviceMonoAot:
+            case CellPlatform.IosDeviceDefault:
             {
-                // Mono full-AOT — the .NET-for-iOS DEFAULT for a device, and
-                // the runtime most consumers actually ship. Same suite, same
-                // device slice, different managed build.
+                // The .NET-for-iOS DEFAULT device runtime, the one most consumers
+                // actually ship: Mono full-AOT on .NET 10, CoreCLR on .NET 11. Same
+                // suite, same device slice, different managed build.
                 var result = RunDeviceLane(cell.Library, mono: true, deviceUdid, sink);
                 return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.MacOs:
             {
-                BuildTestAppSimulator(cell.Library, testDir, "macos", onLine: sink, noRestore: true);
-                var result = ValidateMacFor(cell.Library, Timeout, "osx-arm64", onLine: sink);
+                BuildTestAppSimulator(cell.Library, testDir, "macos", onLine: sink, noRestore: true, configuration: configuration);
+                if (EngineGate("macos") is { } bad) return bad;
+                var result = ValidateMacFor(cell.Library, Timeout, "osx-arm64", onLine: sink, configuration: configuration);
                 return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.MacCatalyst:
             {
-                BuildTestAppSimulator(cell.Library, testDir, "maccatalyst", onLine: sink, noRestore: true);
-                var result = ValidateMacCatalystFor(cell.Library, Timeout, "maccatalyst-arm64", onLine: sink);
+                BuildTestAppSimulator(cell.Library, testDir, "maccatalyst", onLine: sink, noRestore: true, configuration: configuration);
+                if (EngineGate("maccatalyst") is { } bad) return bad;
+                var result = ValidateMacCatalystFor(cell.Library, Timeout, "maccatalyst-arm64", onLine: sink,
+                    configuration: configuration);
                 return ToOutcome(cell, result, sw.Elapsed, DeferCredentialQualification);
             }
             case CellPlatform.TvOs:
             {
-                BuildTestAppSimulator(cell.Library, testDir, "tvos", onLine: sink, noRestore: true);
-                var (result, unavailable) = ValidateTvOsFor(cell.Library, Timeout, sink);
+                BuildTestAppSimulator(cell.Library, testDir, "tvos", onLine: sink, noRestore: true, configuration: configuration);
+                if (EngineGate("tvos") is { } bad) return bad;
+                var (result, unavailable) = ValidateTvOsFor(cell.Library, Timeout, sink, configuration: configuration);
                 return unavailable is not null
                     ? new CellOutcome(cell, CellResult.Unavailable, unavailable, sw.Elapsed)
                     : ToOutcome(cell, result!, sw.Elapsed, DeferCredentialQualification);
@@ -1345,6 +1453,37 @@ partial class Build
             default:
                 return new CellOutcome(cell, CellResult.Error, $"unhandled platform {cell.Platform}", sw.Elapsed);
         }
+    }
+
+    /// <summary>
+    /// Judge the engine of exactly the bundle the cell's validator is about to launch (the same
+    /// RID and path resolution the validators use, never a sibling bundle of another RID). Null
+    /// when it proves <paramref name="expected"/>; otherwise the reason it does not.
+    /// </summary>
+    string? EngineMismatch(AbsolutePath testDir, string configuration, string platform, string appName,
+        AppEngine expected)
+    {
+        IEnumerable<AbsolutePath> candidates = platform switch
+        {
+            "ios" => new[] { ResolveAppPath(testDir, configuration, "ios", "iossimulator-arm64", appName) },
+            "maccatalyst" => new[] { ResolveAppPath(testDir, configuration, "maccatalyst", "maccatalyst-arm64", appName) },
+            // Same RID order as ValidateTvOsFor, so the gate inspects the bundle it launches.
+            "tvos" => (string.IsNullOrEmpty(RuntimeIdentifier)
+                    ? new[] { "tvossimulator-arm64", "tvossimulator-x64" }
+                    : new[] { RuntimeIdentifier })
+                .Select(r => ResolveAppPath(testDir, configuration, "tvos", r, appName)),
+            // The macOS test may be bundled or bare; its runtime sits next to the binary either way.
+            "macos" => MacBinaryCandidates(testDir, configuration, "osx-arm64", appName)
+                .Where(b => File.Exists(b))
+                .Select(b => b.ToString().EndsWith($".app/Contents/MacOS/{appName}", StringComparison.Ordinal)
+                    ? b.Parent.Parent.Parent
+                    : b.Parent),
+            _ => throw new InvalidOperationException($"no engine proof for platform {platform}"),
+        };
+        var bundle = candidates.FirstOrDefault(c => Directory.Exists(c));
+        return bundle is null
+            ? $"no built {appName} for {platform} ({configuration}) where the validator looks"
+            : EngineEvidence.Mismatch(bundle, appName, expected);
     }
 
     static CellOutcome ToOutcome(
@@ -1414,7 +1553,8 @@ partial class Build
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine();
-        sb.AppendLine($"=== regression-validate ({totalDuration.TotalMinutes:F1} min) ===");
+        sb.AppendLine($"=== regression-validate {ActivePairing.Name} ({totalDuration.TotalMinutes:F1} min) ===");
+        sb.AppendLine("Engines: " + string.Join(", ", platforms.Select(p => $"{PlatformLabel(p)}={ToolchainPairing.EngineName(ExpectedEngine(p))}")));
         sb.AppendLine();
 
         // Header
@@ -1620,9 +1760,15 @@ partial class Build
 
     // ── F1: self-describing, un-clobberable matrix artifact ─────────────────
 
-    /// <summary>Root of the per-run evidence tree for a given SDK version.</summary>
+    /// <summary>Root of the per-run evidence tree for a given SDK version and the active
+    /// pairing: every pairing keeps its own runs, so one pairing's matrix can never stand in
+    /// for, or overwrite, another's.</summary>
     AbsolutePath RegressionRunsDir(string version) =>
-        RootDirectory / "artifacts" / "regression-validate" / version;
+        RootDirectory / "artifacts" / "regression-validate" / version / ActivePairing.Name;
+
+    /// <summary>The canonical (complete-run) artifact name of the active pairing.</summary>
+    static string CanonicalArtifactName(string version) =>
+        $"regression-validate-{version}-{ActivePairing.Name}.json";
 
     /// <summary>
     /// Optional checked-in API-surface baseline (F3). Absent by design today —
@@ -1679,6 +1825,13 @@ partial class Build
         var missingPlatforms = AllPlatforms.Where(p => !platforms.Contains(p)).ToList();
         if (missingPlatforms.Count > 0)
             reasons.Add($"platform subset — not run: {string.Join(", ", missingPlatforms.Select(PlatformLabel))}");
+        // Every engine the pairing's apps run on must have at least one lane in the run; a
+        // .NET 11 run without its Release lanes never exercised ReadyToRun.
+        var missingEngines = ActivePairing.Engines
+            .Where(e => !platforms.Any(p => ExpectedEngine(p) == e)).ToList();
+        if (missingEngines.Count > 0)
+            reasons.Add($"engine not covered on {ActivePairing.Name}: " +
+                        string.Join(", ", missingEngines.Select(ToolchainPairing.EngineName)));
         if (abortReason is not null)
             reasons.Add($"run aborted: {abortReason}");
         if (unreached.Count > 0)
@@ -1734,9 +1887,25 @@ partial class Build
 
         var payload = new
         {
-            schemaVersion = 2,
+            schemaVersion = 3,
             version,
             runId,
+
+            // The .NET + Xcode pairing this matrix ran on, and the engines its cells proved.
+            pairing = new
+            {
+                name = ActivePairing.Name,
+                targetFramework = ActivePairing.TargetFramework,
+                platformLabel = ActivePairing.PlatformLabel,
+                sdkVersion = ActivePairing.SdkVersion,
+                xcodeVersion = ActivePairing.XcodeVersion,
+                enginesRequired = ActivePairing.Engines.Select(ToolchainPairing.EngineName).ToArray(),
+                enginesPlanned = platforms.Select(ExpectedEngine).Distinct().Select(ToolchainPairing.EngineName).ToArray(),
+                enginesPassed = outcomes
+                    .Where(o => o.Result == CellResult.Pass)
+                    .Select(o => ExpectedEngine(o.Cell.Platform)).Distinct()
+                    .Select(ToolchainPairing.EngineName).ToArray(),
+            },
             timestamp = DateTime.UtcNow.ToString("o"),
             totalDurationSeconds = totalDuration.TotalSeconds,
 
@@ -1837,6 +2006,8 @@ partial class Build
             {
                 library = o.Cell.Library,
                 platform = PlatformLabel(o.Cell.Platform),
+                engine = ToolchainPairing.EngineName(ExpectedEngine(o.Cell.Platform)),
+                configuration = CellConfiguration(o.Cell.Platform),
                 result = CellLabel(o.Result),
                 reason = o.Reason,
                 durationSeconds = o.Duration.TotalSeconds,
@@ -1854,7 +2025,7 @@ partial class Build
         AbsolutePath? partial = null;
         if (complete)
         {
-            canonical = artifactDir / $"regression-validate-{version}.json";
+            canonical = artifactDir / CanonicalArtifactName(version);
             File.WriteAllText(canonical, json);
             Log.Information("Wrote canonical artifact (complete run): {Path}", canonical);
         }
@@ -1863,8 +2034,8 @@ partial class Build
             partial = NextPartialArtifactPath(artifactDir, version);
             File.WriteAllText(partial, json);
             Log.Warning(
-                "Incomplete run — wrote {Path} and left regression-validate-{Version}.json untouched. Reasons: {Reasons}",
-                partial, version, string.Join("; ", incompleteReasons));
+                "Incomplete run — wrote {Path} and left {Canonical} untouched. Reasons: {Reasons}",
+                partial, CanonicalArtifactName(version), string.Join("; ", incompleteReasons));
         }
 
         return new RegressionArtifactResult(runArtifact, canonical, partial, complete, incompleteReasons);
@@ -1875,7 +2046,7 @@ partial class Build
     {
         for (var n = 1; ; n++)
         {
-            var candidate = artifactDir / $"regression-validate-{version}.partial-{n}.json";
+            var candidate = artifactDir / $"regression-validate-{version}-{ActivePairing.Name}.partial-{n}.json";
             if (!File.Exists(candidate)) return candidate;
         }
     }

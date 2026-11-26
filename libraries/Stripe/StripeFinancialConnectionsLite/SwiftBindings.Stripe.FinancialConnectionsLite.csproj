@@ -1,7 +1,7 @@
-<Project Sdk="SwiftBindings.Sdk/0.20.2">
+<Project Sdk="SwiftBindings.Sdk/11.0.0">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <!-- StripeFinancialConnectionsLite exports no public API: its .swiftinterface is a bare
          `@_exported import` with nothing to bind, so the generator emits no SBW_* @_cdecl
          wrapper and there is no wrapper xcframework to require. The package exists purely as

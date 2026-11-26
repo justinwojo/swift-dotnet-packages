@@ -759,6 +759,33 @@ internal static class Tests
     }
 #endif
 
+    // The first analysis after a simulator boots waits for mediaanalysisd to finish its first-run
+    // setup (a processing-state migration) before VisionKit hands it the request. On freshly erased
+    // simulators that setup took 0.04 s to 356 s on .NET 10 Mono and .NET 11 alike, all of it in the
+    // daemon, so no budget here can bound it. The harness pays it instead: before this app runs it
+    // warms the daemon once per simulator boot with a throwaway pure-Swift analysis
+    // (build/Build.VisionKitWarmup.cs). This app's first analysis then meets a running daemon, which
+    // answers in well under a second on every engine; the first call keeps a little start-up
+    // headroom for the process's own first analyzer, and the repeat keeps the tight budget. The
+    // harness's run-budget floor for VisionKit (build/Build.RunBudgets.cs) covers both.
+    internal static readonly TimeSpan ColdAnalysisBudget = TimeSpan.FromSeconds(60);
+    internal static readonly TimeSpan WarmAnalysisBudget = TimeSpan.FromSeconds(30);
+
+    private static async Task<ImageAnalysis> AnalyzeTestImageAsync(
+        ImageAnalyzer analyzer, ImageAnalyzer.Configuration config, TimeSpan budget)
+    {
+        using var image = MakeTestImage();
+#if IOS || MACCATALYST
+        return await analyzer.AnalyzeAsync(image, config).WaitAsync(budget);
+#else
+        // The console harness owns the main thread, so nothing drains the main run loop
+        // while an await is outstanding. VisionKit's macOS analyzer delivers its result
+        // through that loop, so the wait has to turn it rather than simply block.
+        return await PumpUntilCompleteAsync(
+            analyzer.AnalyzeAsync(image, CGImagePropertyOrientation.Up, config), budget);
+#endif
+    }
+
     private static async Task RunAsyncTestsAsync()
     {
         // Async method with a real payload: analyze a small in-memory image carrying drawn
@@ -775,25 +802,16 @@ internal static class Tests
         ImageAnalysis? analysis = null;
         try
         {
-            using var image = MakeTestImage();
             using var analyzer = new ImageAnalyzer();
             using var config = new ImageAnalyzer.Configuration(
                 ImageAnalyzer.AnalysisTypes.Text | ImageAnalyzer.AnalysisTypes.MachineReadableCode);
 
-#if IOS || MACCATALYST
-            analysis = await analyzer.AnalyzeAsync(image, config).WaitAsync(TimeSpan.FromSeconds(30));
-#else
-            // The console harness owns the main thread, so nothing drains the main run loop
-            // while an await is outstanding. VisionKit's macOS analyzer delivers its result
-            // through that loop, so the wait has to turn it rather than simply block.
-            analysis = await PumpUntilCompleteAsync(
-                analyzer.AnalyzeAsync(image, CGImagePropertyOrientation.Up, config),
-                TimeSpan.FromSeconds(30));
-#endif
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            analysis = await AnalyzeTestImageAsync(analyzer, config, ColdAnalysisBudget);
             string transcript = analysis.Transcript;
             using var textOnly = ImageAnalyzer.AnalysisTypes.Text;
             bool hasText = analysis.HasResults(textOnly);
-            Log($"ImageAnalyzer.AnalyzeAsync returned an analysis: hasText={hasText}, transcript=\"{transcript}\"");
+            Log($"ImageAnalyzer.AnalyzeAsync returned an analysis in {elapsed.ElapsedMilliseconds} ms (cold): hasText={hasText}, transcript=\"{transcript}\"");
             Pass(analyzeName);
         }
         catch (TimeoutException)
@@ -801,7 +819,7 @@ internal static class Tests
             // Not a skip: this call has everything it needs (an in-memory image, no camera,
             // no permission prompt), so a Task that never completes is the async bridge
             // failing to resume, which is exactly what this suite exists to catch.
-            Fail(analyzeName, "analysis did not complete within 30s");
+            Fail(analyzeName, $"analysis did not complete within {ColdAnalysisBudget.TotalSeconds:0}s");
         }
         catch (Exception ex) when (IsEnvironmentRefusal(ex))
         {
@@ -810,6 +828,44 @@ internal static class Tests
         catch (Exception ex)
         {
             Fail(analyzeName, Describe(ex));
+        }
+
+        // The same call again, now that the analysis daemon is running, under the tight budget:
+        // the cold call's budget has to absorb the daemon's start-up, so this is the check that
+        // still catches a bridge that resumes late or not at all within seconds.
+        string warmName = analyzeName + ", warm daemon";
+        if (analysis is null)
+        {
+            Skip(warmName, "the cold analysis produced nothing, so there is no running daemon to time against");
+        }
+        else
+        {
+            try
+            {
+                using var analyzer = new ImageAnalyzer();
+                using var config = new ImageAnalyzer.Configuration(
+                    ImageAnalyzer.AnalysisTypes.Text | ImageAnalyzer.AnalysisTypes.MachineReadableCode);
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                using var warm = await AnalyzeTestImageAsync(analyzer, config, WarmAnalysisBudget);
+                string warmTranscript = warm.Transcript;
+                Log($"ImageAnalyzer.AnalyzeAsync returned an analysis in {elapsed.ElapsedMilliseconds} ms (warm): transcript=\"{warmTranscript}\"");
+                if (warmTranscript != analysis.Transcript)
+                    Fail(warmName, $"the warm analysis read \"{warmTranscript}\" from the image the cold one read as \"{analysis.Transcript}\"");
+                else
+                    Pass(warmName);
+            }
+            catch (TimeoutException)
+            {
+                Fail(warmName, $"analysis did not complete within {WarmAnalysisBudget.TotalSeconds:0}s with the analysis daemon already running");
+            }
+            catch (Exception ex) when (IsEnvironmentRefusal(ex))
+            {
+                Skip(warmName, $"framework refused the request: {Describe(ex)}");
+            }
+            catch (Exception ex)
+            {
+                Fail(warmName, Describe(ex));
+            }
         }
 
 #if IOS || MACCATALYST

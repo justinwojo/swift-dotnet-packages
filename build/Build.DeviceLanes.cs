@@ -117,7 +117,10 @@ partial class Build
     TestRunResult RunDeviceLane(
         string library, bool mono, string? deviceUdid, Action<string> sink)
     {
-        var laneLabel = $"{library}/{(mono ? "ios-device-monoaot" : "ios-device")}";
+        // The default-runtime lane ("mono") is Mono full-AOT on .NET 10 and CoreCLR on .NET 11:
+        // the same `-c Debug -r ios-arm64` build, judged against the runtime its pairing ships.
+        var coreClr = mono && !AppsRunOnMono;
+        var laneLabel = $"{library}/{(coreClr ? "ios-device-coreclr" : mono ? "ios-device-monoaot" : "ios-device")}";
         var app = ResolveTestApp(library, forDevice: true);
         var testDir = app.TestDir;
         var laneProps = EnsureDeviceLaneProps();
@@ -138,7 +141,18 @@ partial class Build
         var appName = app.AppName;
         var rid = ResolveRid("ios-arm64");
         var appPath = ResolveAppPath(testDir, mono ? "Debug" : "Release", "ios", rid, appName);
-        AssertDeviceAppFlavor(appPath, expectMono: mono, laneLabel);
+        if (coreClr)
+        {
+            if (EngineEvidence.Mismatch(appPath, appName, AppEngine.CoreClrInterpreter) is { } wrong)
+                throw new InvalidOperationException(
+                    $"{laneLabel}: refusing to install — {wrong}. Reporting another runtime's bundle under this " +
+                    "lane's name would be a false green about the runtime the cell exists to cover.");
+            Log.Information("{Lane}: bundle proves the CoreCLR interpreter", laneLabel);
+        }
+        else
+        {
+            AssertDeviceAppFlavor(appPath, expectMono: mono, laneLabel);
+        }
 
         var result = ValidateDeviceFor(library, Timeout, deviceUdid, aot: !mono, rid, onLine: sink, resolvedApp: app);
 
@@ -146,7 +160,7 @@ partial class Build
         // or timeout is reported as itself, not as missing evidence. An unqualified
         // run completed its offline suite, so its runtime claim is judged too.
         if (result.Status is TestRunStatus.Success or TestRunStatus.Unqualified)
-            AssertRuntimeFlavor(result.Output, expectMono: mono, laneLabel);
+            AssertRuntimeFlavor(result.Output, expectMono: mono && !coreClr, laneLabel);
 
         // A stand-in app's pass says nothing about the capability the lane exists to qualify.
         if (app.DeferredQualification is not null && result.Status == TestRunStatus.Success)

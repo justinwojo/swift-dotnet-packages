@@ -85,7 +85,7 @@ public static class LaneEvidenceGate
     /// <summary>Failure text for a runtime mismatch, naming the lane and what ran.</summary>
     public static string RuntimeMismatchMessage(string laneLabel, string banner, bool expectMono) =>
         $"{laneLabel}: the app reported a runtime that contradicts the lane. " +
-        $"Expected {(expectMono ? "Mono" : "NativeAOT")}, app reported: {banner}. " +
+        $"Expected {(expectMono ? "Mono" : "a non-Mono runtime (NativeAOT, or CoreCLR on .NET 11)")}, app reported: {banner}. " +
         "Refusing to report this run under a runtime it did not execute on.";
 
     /// <summary>Every <c>assembly:</c> evidence line in the output, in order.</summary>

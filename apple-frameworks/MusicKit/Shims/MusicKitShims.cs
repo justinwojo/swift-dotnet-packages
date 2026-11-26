@@ -254,17 +254,21 @@ public partial class MusicCatalogSearchSuggestionsRequest
     }
 }
 
+// Each signature mirrors its @_cdecl function in MusicKitShims.swift exactly:
+// (UnsafePointer<UInt8>?, Int, UInt32, UnsafeMutableRawPointer) -> Int32. Swift's Int is
+// pointer-sized, so the UTF-8 length is nint. Declaring it int leaves the upper half of the
+// register unspecified (arm64 and x86_64 alike), and Swift then reads a garbage length.
 internal static unsafe partial class MusicKitShimsNative
 {
     [LibraryImport("MusicKitSwiftBindings", EntryPoint = "SBW_MusicKitShims_CatalogSearchRequest_Init")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int CatalogSearchRequestInit(byte* utf8Ptr, int utf8Len, uint mask, void* outBuffer);
+    public static partial int CatalogSearchRequestInit(byte* utf8Ptr, nint utf8Len, uint mask, void* outBuffer);
 
     [LibraryImport("MusicKitSwiftBindings", EntryPoint = "SBW_MusicKitShims_LibrarySearchRequest_Init")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int LibrarySearchRequestInit(byte* utf8Ptr, int utf8Len, uint mask, void* outBuffer);
+    public static partial int LibrarySearchRequestInit(byte* utf8Ptr, nint utf8Len, uint mask, void* outBuffer);
 
     [LibraryImport("MusicKitSwiftBindings", EntryPoint = "SBW_MusicKitShims_CatalogSearchSuggestionsRequest_Init")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int CatalogSearchSuggestionsRequestInit(byte* utf8Ptr, int utf8Len, uint mask, void* outBuffer);
+    public static partial int CatalogSearchSuggestionsRequestInit(byte* utf8Ptr, nint utf8Len, uint mask, void* outBuffer);
 }

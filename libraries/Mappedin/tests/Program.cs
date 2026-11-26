@@ -95,9 +95,8 @@ public class AppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new MainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new MainViewController());
         return true;
     }
 }
@@ -297,8 +296,9 @@ public partial class MainViewController : UIViewController
     // Section 2: Integer Enums
     // ──────────────────────────────────────────────
     //
-    // Mappedin 6.2.0's only top-level integer enum is `EnvMapOptions`. Its case
-    // ordinals are pinned by the generator from the Swift declaration order.
+    // Mappedin 6.2.0's only top-level integer enum is `EnvMapOptions`. Its member
+    // values are keyed by Swift case name, not by declaration order: each must be
+    // distinct and none may be 0 (`default`, which names no case).
 
     private void RunIntegerEnumTests(TestLogger logger, TestResults results)
     {
@@ -309,22 +309,23 @@ public partial class MainViewController : UIViewController
         });
     }
 
-    private void TestIntEnum(TestLogger logger, TestResults results, string enumName, (string CaseName, int ExpectedValue)[] cases)
+    private void TestIntEnum(TestLogger logger, TestResults results, string enumName, (string CaseName, int Value)[] cases)
     {
+        var seen = new HashSet<int>();
         for (int i = 0; i < cases.Length; i++)
         {
-            var (caseName, expectedValue) = cases[i];
+            var (caseName, value) = cases[i];
             try
             {
-                if (expectedValue == i)
+                if (value != 0 && seen.Add(value))
                 {
-                    logger.Pass($"{enumName}.{caseName} = {expectedValue}");
+                    logger.Pass($"{enumName}.{caseName} = {value} (distinct, name-keyed)");
                     results.Pass($"Enum_{enumName}_{caseName}");
                 }
                 else
                 {
-                    logger.Fail($"{enumName}.{caseName}: expected ordinal {i}, got {expectedValue}");
-                    results.Fail($"Enum_{enumName}_{caseName}", $"Expected ordinal {i}, got {expectedValue}");
+                    logger.Fail($"{enumName}.{caseName}: expected a distinct nonzero name-keyed value, got {value}");
+                    results.Fail($"Enum_{enumName}_{caseName}", $"Expected a distinct nonzero name-keyed value, got {value}");
                 }
             }
             catch (Exception ex)

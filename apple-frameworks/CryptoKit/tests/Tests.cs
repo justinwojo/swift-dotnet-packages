@@ -48,10 +48,10 @@ internal static class Tests
     }
 
     [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.dylib")]
-    private static extern IntPtr mach_task_self();
+    private static extern uint mach_task_self(); // mach_port_t is 32-bit
 
     [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.dylib")]
-    private static extern int task_info(IntPtr target, uint flavor, uint[] taskInfo, ref uint taskInfoCount);
+    private static extern int task_info(uint target, uint flavor, uint[] taskInfo, ref uint taskInfoCount);
 
     /// <summary>
     /// Extracts the trailing lowercase-hex run from a CryptoKit <c>description</c>
@@ -72,6 +72,28 @@ internal static class Tests
     }
 
     private static string ToHex(byte[] bytes) => Convert.ToHexString(bytes).ToLowerInvariant();
+
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
 
     /// <summary>
     /// Asserts that <paramref name="ex"/> reports the CryptoKit AUTHENTICATION FAILURE category and
@@ -196,13 +218,10 @@ internal static class Tests
         // Test 9: HPKE.Ciphersuite metadata loads.
         MetadataTest<HPKE.Ciphersuite>("HPKE.Ciphersuite");
 
-        // Test 10: CryptoKitASN1Error plain enum values are correct.
+        // Test 10: CryptoKitASN1Error plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)CryptoKitASN1Error.InvalidFieldIdentifier != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)CryptoKitASN1Error.InvalidFieldIdentifier}");
-            if ((int)CryptoKitASN1Error.InvalidPEMDocument != 7)
-                throw new InvalidOperationException($"expected 7, got {(int)CryptoKitASN1Error.InvalidPEMDocument}");
+            AssertNameKeyedMembers(CryptoKitASN1Error.InvalidFieldIdentifier, CryptoKitASN1Error.InvalidPEMDocument);
             Pass("CryptoKitASN1Error values");
         }
         catch (Exception ex)
@@ -210,15 +229,10 @@ internal static class Tests
             Fail("CryptoKitASN1Error values", ex.Message);
         }
 
-        // Test 11: HPKE.KDF plain enum values are correct.
+        // Test 11: HPKE.KDF plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)HPKE.KDF.HkdfSHA256 != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KDF.HkdfSHA256}");
-            if ((int)HPKE.KDF.HkdfSHA384 != 1)
-                throw new InvalidOperationException($"expected 1, got {(int)HPKE.KDF.HkdfSHA384}");
-            if ((int)HPKE.KDF.HkdfSHA512 != 2)
-                throw new InvalidOperationException($"expected 2, got {(int)HPKE.KDF.HkdfSHA512}");
+            AssertNameKeyedMembers(HPKE.KDF.HkdfSHA256, HPKE.KDF.HkdfSHA384, HPKE.KDF.HkdfSHA512);
             Pass("HPKE.KDF values");
         }
         catch (Exception ex)
@@ -226,15 +240,10 @@ internal static class Tests
             Fail("HPKE.KDF values", ex.Message);
         }
 
-        // Test 12: HPKE.KEM plain enum values are correct.
+        // Test 12: HPKE.KEM plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)HPKE.KEM.P256HkdfSHA256 != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)HPKE.KEM.P256HkdfSHA256}");
-            if ((int)HPKE.KEM.Curve25519_HKDF_SHA256 != 3)
-                throw new InvalidOperationException($"expected 3, got {(int)HPKE.KEM.Curve25519_HKDF_SHA256}");
-            if ((int)HPKE.KEM.XWingMLKEM768X25519 != 4)
-                throw new InvalidOperationException($"expected 4, got {(int)HPKE.KEM.XWingMLKEM768X25519}");
+            AssertNameKeyedMembers(HPKE.KEM.P256HkdfSHA256, HPKE.KEM.Curve25519_HKDF_SHA256, HPKE.KEM.XWingMLKEM768X25519);
             Pass("HPKE.KEM values");
         }
         catch (Exception ex)
@@ -242,15 +251,10 @@ internal static class Tests
             Fail("HPKE.KEM values", ex.Message);
         }
 
-        // Test 13: HPKE.AEAD plain enum values are correct.
+        // Test 13: HPKE.AEAD plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)HPKE.AEAD.AesGcm128 != 0)
-                throw new InvalidOperationException($"expected 0, got {(int)HPKE.AEAD.AesGcm128}");
-            if ((int)HPKE.AEAD.AesGcm256 != 1)
-                throw new InvalidOperationException($"expected 1, got {(int)HPKE.AEAD.AesGcm256}");
-            if ((int)HPKE.AEAD.ChaChaPoly != 2)
-                throw new InvalidOperationException($"expected 2, got {(int)HPKE.AEAD.ChaChaPoly}");
+            AssertNameKeyedMembers(HPKE.AEAD.AesGcm128, HPKE.AEAD.AesGcm256, HPKE.AEAD.ChaChaPoly);
             Pass("HPKE.AEAD values");
         }
         catch (Exception ex)
@@ -258,15 +262,11 @@ internal static class Tests
             Fail("HPKE.AEAD values", ex.Message);
         }
 
-        // Test 14: CryptoKitError.CaseTag enum tag values match Swift's enum ordering.
+        // Test 14: CryptoKitError.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)CryptoKitError.CaseTag.IncorrectKeySize != 1u)
-                throw new InvalidOperationException($"IncorrectKeySize expected 1, got {(uint)CryptoKitError.CaseTag.IncorrectKeySize}");
-            if ((uint)CryptoKitError.CaseTag.AuthenticationFailure != 3u)
-                throw new InvalidOperationException($"AuthenticationFailure expected 3, got {(uint)CryptoKitError.CaseTag.AuthenticationFailure}");
-            if ((uint)CryptoKitError.CaseTag.InvalidParameter != 6u)
-                throw new InvalidOperationException($"InvalidParameter expected 6, got {(uint)CryptoKitError.CaseTag.InvalidParameter}");
+            AssertNameKeyedMembers(CryptoKitError.CaseTag.IncorrectKeySize, CryptoKitError.CaseTag.AuthenticationFailure,
+                CryptoKitError.CaseTag.InvalidParameter);
             Pass("CryptoKitError.CaseTag values");
         }
         catch (Exception ex)
@@ -495,7 +495,7 @@ internal static class Tests
         // FAILURE category, not merely "some exception". The previous version caught bare `catch`,
         // so a NullReferenceException, a marshalling crash surfaced as an InvalidOperationException,
         // or a PlatformNotSupportedException all counted as "tamper detected". We now require the
-        // Swift-thrown typed error CryptoKitError with CaseTag.AuthenticationFailure (3) — the exact
+        // Swift-thrown typed error CryptoKitError with CaseTag.AuthenticationFailure — the exact
         // category CryptoKit documents for a GCM tag mismatch. Anything else fails the test.
         // (SealedBox(nonce:, ciphertext:, tag:) ctor is unavailable — Swift generic init not
         // emittable in C# — so we exercise the auth path by opening with a different key.)

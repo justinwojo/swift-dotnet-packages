@@ -8,6 +8,28 @@ namespace SwiftBindings.TipKit.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -102,15 +124,10 @@ internal static class Tests
             Fail("Tips.Status singletons (Pending, Available)", ex.Message);
         }
 
-        // Test 5: Tips.Status.CaseTag enum values match the documented Swift ordering.
+        // Test 5: Tips.Status.CaseTag members are distinct, name-keyed cases.
         try
         {
-            if ((uint)Tips.Status.CaseTag.Invalidated != 0u)
-                throw new InvalidOperationException($"Invalidated tag = {(uint)Tips.Status.CaseTag.Invalidated}, expected 0");
-            if ((uint)Tips.Status.CaseTag.Pending != 1u)
-                throw new InvalidOperationException($"Pending tag = {(uint)Tips.Status.CaseTag.Pending}, expected 1");
-            if ((uint)Tips.Status.CaseTag.Available != 2u)
-                throw new InvalidOperationException($"Available tag = {(uint)Tips.Status.CaseTag.Available}, expected 2");
+            AssertNameKeyedMembers(Tips.Status.CaseTag.Invalidated, Tips.Status.CaseTag.Pending, Tips.Status.CaseTag.Available);
             Pass("Tips.Status.CaseTag values");
         }
         catch (Exception ex)
@@ -149,14 +166,11 @@ internal static class Tests
         // Test 8: Tips.InvalidationReason plain enum values.
         try
         {
-            if ((int)Tips.InvalidationReason.ActionPerformed != 0)
-                throw new InvalidOperationException($"ActionPerformed = {(int)Tips.InvalidationReason.ActionPerformed}, expected 0");
-            if ((int)Tips.InvalidationReason.DisplayCountExceeded != 1)
-                throw new InvalidOperationException($"DisplayCountExceeded = {(int)Tips.InvalidationReason.DisplayCountExceeded}, expected 1");
-            if ((int)Tips.InvalidationReason.DisplayDurationExceeded != 2)
-                throw new InvalidOperationException($"DisplayDurationExceeded = {(int)Tips.InvalidationReason.DisplayDurationExceeded}, expected 2");
-            if ((int)Tips.InvalidationReason.TipClosed != 3)
-                throw new InvalidOperationException($"TipClosed = {(int)Tips.InvalidationReason.TipClosed}, expected 3");
+            AssertNameKeyedMembers(
+                Tips.InvalidationReason.ActionPerformed,
+                Tips.InvalidationReason.DisplayCountExceeded,
+                Tips.InvalidationReason.DisplayDurationExceeded,
+                Tips.InvalidationReason.TipClosed);
             Pass("Tips.InvalidationReason values");
         }
         catch (Exception ex)
@@ -167,10 +181,7 @@ internal static class Tests
         // Test 9: TipGroup.Priority plain enum values.
         try
         {
-            if ((int)TipGroup.Priority.FirstAvailable != 0)
-                throw new InvalidOperationException($"FirstAvailable = {(int)TipGroup.Priority.FirstAvailable}, expected 0");
-            if ((int)TipGroup.Priority.Ordered != 1)
-                throw new InvalidOperationException($"Ordered = {(int)TipGroup.Priority.Ordered}, expected 1");
+            AssertNameKeyedMembers(TipGroup.Priority.FirstAvailable, TipGroup.Priority.Ordered);
             Pass("TipGroup.Priority values");
         }
         catch (Exception ex)

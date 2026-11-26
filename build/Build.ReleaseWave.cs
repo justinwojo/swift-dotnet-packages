@@ -126,12 +126,21 @@ partial class Build
         .Description(
             "Run the full local release pipeline (build → pack → sim-validate → publish) for 1..N libraries. " +
             "--wave-spec \"Lib=1.2.3,…\" | --libraries A,B --auto-version | --all --auto-version. " +
-            "Dry run by DEFAULT — pass --dry-run false to publish.")
+            "Dry run only: a wave packs one pairing, and only merged packages ship (release.yml, or PackAllPairings + PublishRelease).")
         .Executes(() => WithAbortExitCode(RunReleaseWaveAsync));
 
     async Task RunReleaseWaveAsync()
     {
         var dryRun = DryRun ?? true;   // publishing is opt-IN, always
+        // A wave packs on this process's pairing only, so its packages are single-pairing
+        // contributions. What ships is the merged package (release.yml's per-pairing pack jobs
+        // plus its merge job, or PackAllPairings locally); publishing a contribution would take
+        // the version on nuget.org and leave the merged package unpublishable.
+        if (!dryRun)
+            throw new InvalidOperationException(
+                $"ReleaseWave packs one pairing ({ActivePairing.Name}) and cannot publish: what ships is the package " +
+                "merged across every pairing. Publish through release.yml, or build it locally with PackAllPairings. " +
+                "Dry runs (the default) still build, pack, stage and validate.");
         var started = DateTime.UtcNow;
         var runId = ComposeRunId(started, TryGitShortSha(), Environment.ProcessId);
         var waveDir = string.IsNullOrWhiteSpace(WaveOutput)

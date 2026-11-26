@@ -242,6 +242,21 @@ partial class Build
     /// to skip the actual push.
     /// </para>
     /// </summary>
+    /// <summary>The pairings whose copy a package does not carry: no managed assembly folder
+    /// <c>lib/&lt;copy TFM&gt;/</c> (<c>lib/net10.0-ios26.0/</c>, <c>lib/net11.0-tvos27.2/</c>…) of that pairing.</summary>
+    static List<string> PairingsWithoutCopy(AbsolutePath nupkg)
+    {
+        using var zip = System.IO.Compression.ZipFile.OpenRead(nupkg);
+        var libFolders = zip.Entries.Select(e => e.FullName.Split('/'))
+            .Where(s => s.Length > 2 && s[0].Equals("lib", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s[1]).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ToolchainPairing.All
+            .Select(name => ToolchainPairing.Load(RootDirectory / "toolchains", name))
+            .Where(p => !new[] { "ios", "macos", "maccatalyst", "tvos" }.Any(plat => libFolders.Contains(p.CopyTfm(plat))))
+            .Select(p => p.Name)
+            .ToList();
+    }
+
     Target PublishRelease => _ => _
         .Description("Push .nupkg files in --packages-dir to nuget.org (publish job)")
         .Requires(() => PackagesDir)
@@ -268,6 +283,18 @@ partial class Build
 
             if (packages.Count == 0)
                 throw new InvalidOperationException($"No .nupkg files found in {dir}");
+
+            // Only a merged package ships. One pairing's contribution (BuildAndPackRelease
+            // output) would take the version on nuget.org before the merged package exists.
+            var unmerged = packages
+                .Select(p => (p.Name, Missing: PairingsWithoutCopy(p)))
+                .Where(x => x.Missing.Count > 0)
+                .ToList();
+            if (unmerged.Count > 0)
+                throw new InvalidOperationException(
+                    "PublishRelease pushes merged packages only (MergePackages / the release merge job); " +
+                    "these carry no copy for some pairings:\n  " +
+                    string.Join("\n  ", unmerged.Select(u => $"{u.Name}: missing {string.Join(", ", u.Missing)}")));
 
             Log.Information("=== PublishRelease: pushing {Count} package(s) (parallelism=5) ===",
                 packages.Count);

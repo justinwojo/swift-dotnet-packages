@@ -39,9 +39,8 @@ public class TestAppDelegate : UIApplicationDelegate
         if (Application.CatalystRunToken is { } runToken)
             Console.WriteLine($"[TIPKIT-CATALYST] MANAGED ENTRY run_token={runToken}");
 #endif
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new TestMainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new TestMainViewController());
         return true;
     }
 }

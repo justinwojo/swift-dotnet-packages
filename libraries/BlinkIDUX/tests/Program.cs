@@ -95,9 +95,8 @@ public class AppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new MainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new MainViewController());
         return true;
     }
 }
@@ -353,24 +352,36 @@ public class MainViewController : UIViewController
     // Phase 3: C# Enum Types
     // ==========================================
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     private void RunCSharpEnumTests(TestLogger logger, TestResults results)
     {
         // PassportOrientation — plain C# enum (no P/Invoke needed)
         try
         {
-            var none = PassportOrientation.None;
-            var left90 = PassportOrientation.Left90;
-            var right90 = PassportOrientation.Right90;
-            if ((int)none == 0 && (int)left90 == 1 && (int)right90 == 2)
-            {
-                logger.Pass("PassportOrientation raw values correct");
-                results.Pass("PassportOrientation_RawValues");
-            }
-            else
-            {
-                logger.Fail($"PassportOrientation raw values: None={none}, Left90={left90}, Right90={right90}");
-                results.Fail("PassportOrientation_RawValues", "Unexpected raw values");
-            }
+            AssertNameKeyedMembers(PassportOrientation.None, PassportOrientation.Left90, PassportOrientation.Right90);
+            logger.Pass("PassportOrientation members distinct and name-keyed");
+            results.Pass("PassportOrientation_RawValues");
         }
         catch (Exception ex)
         {
@@ -403,17 +414,9 @@ public class MainViewController : UIViewController
         // CaptureActivity — plain C# enum
         try
         {
-            var idle = CaptureActivity.Idle;
-            if ((int)idle == 0)
-            {
-                logger.Pass("CaptureActivity.Idle raw value = 0");
-                results.Pass("CaptureActivity_Idle");
-            }
-            else
-            {
-                logger.Fail($"CaptureActivity.Idle raw value = {(int)idle}");
-                results.Fail("CaptureActivity_Idle", $"Unexpected raw value: {(int)idle}");
-            }
+            AssertNameKeyedMembers(CaptureActivity.Idle);
+            logger.Pass("CaptureActivity.Idle is a defined, name-keyed member");
+            results.Pass("CaptureActivity_Idle");
         }
         catch (Exception ex)
         {
@@ -421,22 +424,12 @@ public class MainViewController : UIViewController
             results.Fail("CaptureActivity_Idle", ex.Message);
         }
 
-        // Camera.CameraPosition — nested C# enum
-        // Note: Swift Camera.Position uses back=0, front=1 (not the intuitive front=0, back=1)
+        // Camera.CameraPosition — nested C# enum; members are keyed by Swift case name
         try
         {
-            var front = Camera.CameraPosition.Front;
-            var back = Camera.CameraPosition.Back;
-            if ((int)back == 0 && (int)front == 1)
-            {
-                logger.Pass($"Camera.CameraPosition raw values: Back=0, Front=1 (Swift ordering)");
-                results.Pass("CameraPosition_RawValues");
-            }
-            else
-            {
-                logger.Fail($"Camera.CameraPosition: Front={(int)front}, Back={(int)back}");
-                results.Fail("CameraPosition_RawValues", $"Unexpected: Front={(int)front}, Back={(int)back}");
-            }
+            AssertNameKeyedMembers(Camera.CameraPosition.Back, Camera.CameraPosition.Front);
+            logger.Pass("Camera.CameraPosition members distinct and name-keyed");
+            results.Pass("CameraPosition_RawValues");
         }
         catch (Exception ex)
         {
@@ -528,24 +521,18 @@ public class MainViewController : UIViewController
             results.Fail("CameraStatus_AllTagsUnique", ex.Message);
         }
 
-        // Verify CaseTag enum has correct raw values
+        // Verify the CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)CameraStatus.CaseTag.Unknown == 0 &&
-                (uint)CameraStatus.CaseTag.Unauthorized == 1 &&
-                (uint)CameraStatus.CaseTag.Failed == 2 &&
-                (uint)CameraStatus.CaseTag.Running == 3 &&
-                (uint)CameraStatus.CaseTag.Interrupted == 4 &&
-                (uint)CameraStatus.CaseTag.Stopped == 5)
-            {
-                logger.Pass("CameraStatus CaseTag raw values match Swift ordering");
-                results.Pass("CameraStatus_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("CameraStatus CaseTag raw values don't match expected");
-                results.Fail("CameraStatus_CaseTag_RawValues", "Unexpected raw values");
-            }
+            AssertNameKeyedMembers(
+                CameraStatus.CaseTag.Unknown,
+                CameraStatus.CaseTag.Unauthorized,
+                CameraStatus.CaseTag.Failed,
+                CameraStatus.CaseTag.Running,
+                CameraStatus.CaseTag.Interrupted,
+                CameraStatus.CaseTag.Stopped);
+            logger.Pass("CameraStatus CaseTag members distinct and name-keyed");
+            results.Pass("CameraStatus_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -623,20 +610,12 @@ public class MainViewController : UIViewController
             results.Fail("BlinkIDScanningAlertType_TagsDistinct", ex.Message);
         }
 
-        // CaseTag raw values
+        // CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)BlinkIDScanningAlertType.CaseTag.Timeout == 0 &&
-                (uint)BlinkIDScanningAlertType.CaseTag.DisallowedClass == 1)
-            {
-                logger.Pass("BlinkIDScanningAlertType CaseTag raw values correct");
-                results.Pass("BlinkIDScanningAlertType_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("BlinkIDScanningAlertType CaseTag raw values wrong");
-                results.Fail("BlinkIDScanningAlertType_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(BlinkIDScanningAlertType.CaseTag.Timeout, BlinkIDScanningAlertType.CaseTag.DisallowedClass);
+            logger.Pass("BlinkIDScanningAlertType CaseTag members distinct and name-keyed");
+            results.Pass("BlinkIDScanningAlertType_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -828,23 +807,17 @@ public class MainViewController : UIViewController
             results.Fail("DocumentSide_NoPayload_TagsUnique", ex.Message);
         }
 
-        // CaseTag raw values
+        // CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)DocumentSide.CaseTag.Passport == 0 &&
-                (uint)DocumentSide.CaseTag.Front == 1 &&
-                (uint)DocumentSide.CaseTag.Back == 2 &&
-                (uint)DocumentSide.CaseTag.Barcode == 3 &&
-                (uint)DocumentSide.CaseTag.PassportBarcode == 4)
-            {
-                logger.Pass("DocumentSide CaseTag raw values correct");
-                results.Pass("DocumentSide_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("DocumentSide CaseTag raw values wrong");
-                results.Fail("DocumentSide_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(
+                DocumentSide.CaseTag.Passport,
+                DocumentSide.CaseTag.Front,
+                DocumentSide.CaseTag.Back,
+                DocumentSide.CaseTag.Barcode,
+                DocumentSide.CaseTag.PassportBarcode);
+            logger.Pass("DocumentSide CaseTag members distinct and name-keyed");
+            results.Pass("DocumentSide_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -998,27 +971,21 @@ public class MainViewController : UIViewController
             results.Fail("ReticleState_InactiveWithMessage_Tag", ex.Message);
         }
 
-        // CaseTag raw values
+        // CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)ReticleState.CaseTag.Error == 0 &&
-                (uint)ReticleState.CaseTag.Passport == 1 &&
-                (uint)ReticleState.CaseTag.InactiveWithMessage == 2 &&
-                (uint)ReticleState.CaseTag.Front == 3 &&
-                (uint)ReticleState.CaseTag.Back == 4 &&
-                (uint)ReticleState.CaseTag.Barcode == 5 &&
-                (uint)ReticleState.CaseTag.Detecting == 6 &&
-                (uint)ReticleState.CaseTag.Flip == 7 &&
-                (uint)ReticleState.CaseTag.Inactive == 8)
-            {
-                logger.Pass("ReticleState CaseTag raw values correct");
-                results.Pass("ReticleState_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("ReticleState CaseTag raw values wrong");
-                results.Fail("ReticleState_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(
+                ReticleState.CaseTag.Error,
+                ReticleState.CaseTag.Passport,
+                ReticleState.CaseTag.InactiveWithMessage,
+                ReticleState.CaseTag.Front,
+                ReticleState.CaseTag.Back,
+                ReticleState.CaseTag.Barcode,
+                ReticleState.CaseTag.Detecting,
+                ReticleState.CaseTag.Flip,
+                ReticleState.CaseTag.Inactive);
+            logger.Pass("ReticleState CaseTag members distinct and name-keyed");
+            results.Pass("ReticleState_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -1153,33 +1120,27 @@ public class MainViewController : UIViewController
             results.Fail("UIEvent_WrongSidePassport_Tag", ex.Message);
         }
 
-        // CaseTag raw values (Swift ordering: payload cases first)
+        // CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)BUXUIEvent.CaseTag.RequestDocumentSide == 0 &&
-                (uint)BUXUIEvent.CaseTag.WrongSidePassport == 1 &&
-                (uint)BUXUIEvent.CaseTag.WrongSide == 2 &&
-                (uint)BUXUIEvent.CaseTag.Blur == 3 &&
-                (uint)BUXUIEvent.CaseTag.Glare == 4 &&
-                (uint)BUXUIEvent.CaseTag.Occlusion == 5 &&
-                (uint)BUXUIEvent.CaseTag.Tilt == 6 &&
-                (uint)BUXUIEvent.CaseTag.TooClose == 7 &&
-                (uint)BUXUIEvent.CaseTag.TooFar == 8 &&
-                (uint)BUXUIEvent.CaseTag.TooCloseToEdge == 9 &&
-                (uint)BUXUIEvent.CaseTag.NotFullyVisible == 10 &&
-                (uint)BUXUIEvent.CaseTag.TooDark == 11 &&
-                (uint)BUXUIEvent.CaseTag.TooBright == 12 &&
-                (uint)BUXUIEvent.CaseTag.FacePhotoNotFullyVisible == 13 &&
-                (uint)BUXUIEvent.CaseTag.WrongSidePassportWithBarcode == 14)
-            {
-                logger.Pass("UIEvent CaseTag raw values correct (all 15)");
-                results.Pass("UIEvent_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("UIEvent CaseTag raw values wrong");
-                results.Fail("UIEvent_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(
+                BUXUIEvent.CaseTag.RequestDocumentSide,
+                BUXUIEvent.CaseTag.WrongSidePassport,
+                BUXUIEvent.CaseTag.WrongSide,
+                BUXUIEvent.CaseTag.Blur,
+                BUXUIEvent.CaseTag.Glare,
+                BUXUIEvent.CaseTag.Occlusion,
+                BUXUIEvent.CaseTag.Tilt,
+                BUXUIEvent.CaseTag.TooClose,
+                BUXUIEvent.CaseTag.TooFar,
+                BUXUIEvent.CaseTag.TooCloseToEdge,
+                BUXUIEvent.CaseTag.NotFullyVisible,
+                BUXUIEvent.CaseTag.TooDark,
+                BUXUIEvent.CaseTag.TooBright,
+                BUXUIEvent.CaseTag.FacePhotoNotFullyVisible,
+                BUXUIEvent.CaseTag.WrongSidePassportWithBarcode);
+            logger.Pass("UIEvent CaseTag members distinct and name-keyed (all 15)");
+            results.Pass("UIEvent_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -1238,25 +1199,19 @@ public class MainViewController : UIViewController
             }
         }
 
-        // CaseTag raw values (no P/Invoke needed)
+        // CaseTag members are distinct, name-keyed cases (no P/Invoke needed)
         try
         {
-            if ((uint)MicroblinkColor.CaseTag.Secondary == 0 &&
-                (uint)MicroblinkColor.CaseTag.Primary == 1 &&
-                (uint)MicroblinkColor.CaseTag.TooltipBackground == 2 &&
-                (uint)MicroblinkColor.CaseTag.HelpBackground == 3 &&
-                (uint)MicroblinkColor.CaseTag.Background == 4 &&
-                (uint)MicroblinkColor.CaseTag.NeedHelpTooltipBackground == 5 &&
-                (uint)MicroblinkColor.CaseTag.ToastBackgroundColor == 6)
-            {
-                logger.Pass("MicroblinkColor CaseTag raw values correct (all 7)");
-                results.Pass("MicroblinkColor_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("MicroblinkColor CaseTag raw values wrong");
-                results.Fail("MicroblinkColor_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(
+                MicroblinkColor.CaseTag.Secondary,
+                MicroblinkColor.CaseTag.Primary,
+                MicroblinkColor.CaseTag.TooltipBackground,
+                MicroblinkColor.CaseTag.HelpBackground,
+                MicroblinkColor.CaseTag.Background,
+                MicroblinkColor.CaseTag.NeedHelpTooltipBackground,
+                MicroblinkColor.CaseTag.ToastBackgroundColor);
+            logger.Pass("MicroblinkColor CaseTag members distinct and name-keyed (all 7)");
+            results.Pass("MicroblinkColor_CaseTag_RawValues");
         }
         catch (Exception ex)
         {
@@ -1388,22 +1343,16 @@ public class MainViewController : UIViewController
             results.Fail("ScanningResult_CancelledNotEnded", ex.Message);
         }
 
-        // CaseTag raw values
+        // CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Completed == 0 &&
-                (uint)ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Interrupted == 1 &&
-                (uint)ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Cancelled == 2 &&
-                (uint)ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Ended == 3)
-            {
-                logger.Pass("ScanningResult CaseTag raw values correct");
-                results.Pass("ScanningResult_CaseTag_RawValues");
-            }
-            else
-            {
-                logger.Fail("ScanningResult CaseTag raw values wrong");
-                results.Fail("ScanningResult_CaseTag_RawValues", "Wrong values");
-            }
+            AssertNameKeyedMembers(
+                ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Completed,
+                ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Interrupted,
+                ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Cancelled,
+                ScanningResult<BlinkIDResultState, BUXUIEvent>.CaseTag.Ended);
+            logger.Pass("ScanningResult CaseTag members distinct and name-keyed");
+            results.Pass("ScanningResult_CaseTag_RawValues");
         }
         catch (Exception ex)
         {

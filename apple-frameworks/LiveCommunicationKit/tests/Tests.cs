@@ -8,6 +8,28 @@ namespace SwiftBindings.LiveCommunicationKit.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -73,9 +95,8 @@ internal static class Tests
         // Plain enum values on SetTranslatingAction.TranslationEngine.
         try
         {
-            if ((int)SetTranslatingAction.TranslationEngine.Default != 0 ||
-                (int)SetTranslatingAction.TranslationEngine.Custom != 1)
-                throw new InvalidOperationException("TranslationEngine values mismatch");
+            AssertNameKeyedMembers(SetTranslatingAction.TranslationEngine.Default,
+                SetTranslatingAction.TranslationEngine.Custom);
             Pass("SetTranslatingAction.TranslationEngine values");
         }
         catch (Exception ex)

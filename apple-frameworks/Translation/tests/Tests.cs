@@ -24,6 +24,28 @@ internal static class Tests
         return await task.ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         // Get off ViewDidLoad's synchronous prologue so the run loop is pumping before the first
@@ -63,15 +85,11 @@ internal static class Tests
             catch (Exception ex) { Fail($"{name} metadata", ex.Message); }
         }
 
-        // Test 1: LanguageAvailability.Status plain enum — verify integer values.
+        // Test 1: LanguageAvailability.Status plain enum members are distinct, name-keyed cases.
         try
         {
-            if ((int)LanguageAvailability.Status.Installed != 0)
-                throw new InvalidOperationException($"Installed expected 0, got {(int)LanguageAvailability.Status.Installed}");
-            if ((int)LanguageAvailability.Status.Supported != 1)
-                throw new InvalidOperationException($"Supported expected 1, got {(int)LanguageAvailability.Status.Supported}");
-            if ((int)LanguageAvailability.Status.Unsupported != 2)
-                throw new InvalidOperationException($"Unsupported expected 2, got {(int)LanguageAvailability.Status.Unsupported}");
+            AssertNameKeyedMembers(LanguageAvailability.Status.Installed, LanguageAvailability.Status.Supported,
+                LanguageAvailability.Status.Unsupported);
             Pass("LanguageAvailability.Status values");
         }
         catch (Exception ex)

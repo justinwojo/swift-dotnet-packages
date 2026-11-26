@@ -1,7 +1,7 @@
-<Project Sdk="SwiftBindings.Sdk/0.20.2">
+<Project Sdk="SwiftBindings.Sdk/11.0.0">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <!-- Required: the generated binding emits a Swift wrapper (SBW_* @_cdecl) that its P/Invokes call; a wrapper build failure must hard-fail rather than silently ship broken APIs. -->
     <SwiftWrapperRequired>true</SwiftWrapperRequired>
 

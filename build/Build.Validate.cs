@@ -76,7 +76,8 @@ partial class Build
         .Requires(() => Library)
         .Executes(() =>
         {
-            var result = ValidateSimFor(Library!, Timeout, DeviceUdid, ResolveRid("iossimulator-arm64"));
+            var result = ValidateSimFor(Library!, Timeout, DeviceUdid, ResolveRid("iossimulator-arm64"),
+                configuration: Configuration.ToString());
             ReportTerminalStatus(result, Library!);
         });
 
@@ -87,10 +88,10 @@ partial class Build
     /// <see cref="ValidateSim"/> and the regression-validate orchestrator.
     /// </summary>
     TestRunResult ValidateSimFor(string library, int timeoutSeconds, string? deviceUdid, string rid,
-        Action<string>? onLine = null)
+        Action<string>? onLine = null, string configuration = "Debug")
     {
         var (testDir, appName, bundleId) = ResolveTestNames(library);
-        var appPath = ResolveAppPath(testDir, "Debug", "ios", rid, appName);
+        var appPath = ResolveAppPath(testDir, configuration, "ios", rid, appName);
         if (!Directory.Exists(appPath))
             throw new InvalidOperationException(
                 $"Error: App not found at {appPath}\nRun BuildTestApp --library {library} first.");
@@ -98,7 +99,7 @@ partial class Build
         var storeKitLane = ResolveStoreKitSandboxLane(library, "ios", bundleId);
         return ApplyStoreKitLaneVerdict(ValidateSimAt(appPath, appName, bundleId,
             ResolveRunBudgetSeconds(library, timeoutSeconds), deviceUdid, onLine,
-            storeKitConfiguration: storeKitLane?.Configuration), storeKitLane);
+            storeKitConfiguration: storeKitLane?.Configuration, library: library), storeKitLane);
     }
 
     /// <summary>
@@ -112,7 +113,8 @@ partial class Build
     /// </summary>
     TestRunResult ValidateSimAt(AbsolutePath appPath, string appName, string bundleId,
         int timeoutSeconds, string? deviceUdid, Action<string>? onLine = null,
-        StoreKitSandboxReadiness.Configuration? storeKitConfiguration = null)
+        StoreKitSandboxReadiness.Configuration? storeKitConfiguration = null,
+        string? library = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
         void Err(string line) { if (onLine is null) Log.Error("{Line}", line); else onLine(line); }
@@ -141,6 +143,9 @@ partial class Build
 
         if (storeKitConfiguration is not null)
             RunStoreKitSandboxNativeControl(storeKitConfiguration, sim.Device, onLine);
+        // Only the iOS callers name the library; the tvOS ones pass none, so nothing warms there.
+        if (library is not null)
+            EnsureVisionKitDaemonWarm(library, "ios", sim.Device, onLine);
 
         sim.InstallApp(appPath);
         sim.CleanStaleConsoleFifos();
@@ -210,7 +215,7 @@ partial class Build
         .Requires(() => Library)
         .Executes(() =>
         {
-            var (result, unavailable) = ValidateTvOsFor(Library!, Timeout);
+            var (result, unavailable) = ValidateTvOsFor(Library!, Timeout, configuration: Configuration.ToString());
             if (unavailable is not null)
                 throw new InvalidOperationException(
                     $"=== TVOS UNAVAILABLE ({Library}) === {unavailable}");
@@ -231,7 +236,7 @@ partial class Build
     /// answer.</para>
     /// </summary>
     (TestRunResult? Result, string? Unavailable) ValidateTvOsFor(
-        string library, int timeoutSeconds, Action<string>? onLine = null)
+        string library, int timeoutSeconds, Action<string>? onLine = null, string configuration = "Debug")
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -244,7 +249,7 @@ partial class Build
         var rids = string.IsNullOrEmpty(RuntimeIdentifier)
             ? new[] { "tvossimulator-arm64", "tvossimulator-x64" }
             : new[] { RuntimeIdentifier };
-        var candidates = rids.Select(r => ResolveAppPath(testDir, "Debug", "tvos", r, appName)).ToList();
+        var candidates = rids.Select(r => ResolveAppPath(testDir, configuration, "tvos", r, appName)).ToList();
         var appPath = candidates.FirstOrDefault(c => Directory.Exists(c));
         if (appPath is null)
             throw new InvalidOperationException(
@@ -440,15 +445,30 @@ partial class Build
         .Requires(() => Library)
         .Executes(() =>
         {
-            var result = ValidateMacFor(Library!, Timeout, ResolveRid("osx-arm64"));
+            var result = ValidateMacFor(Library!, Timeout, ResolveRid("osx-arm64"), configuration: Configuration.ToString());
             ReportTerminalStatus(result, Library!);
         });
+
+    /// <summary>Where a built macOS test binary can be: bundled or bare, with or without a RID folder.</summary>
+    static AbsolutePath[] MacBinaryCandidates(AbsolutePath testDir, string configuration, string rid, string appName)
+    {
+        var binBase = testDir / "bin" / configuration / ResolveTfm("macos");
+        var ridBase = binBase / rid;
+        return new[]
+        {
+            ridBase / $"{appName}.app" / "Contents" / "MacOS" / appName,
+            ridBase / appName,
+            binBase / $"{appName}.app" / "Contents" / "MacOS" / appName,
+            binBase / appName,
+        };
+    }
 
     /// <summary>
     /// Pure-function validate-mac core. Returns the <see cref="TestRunResult"/>
     /// instead of throwing — callers wrap with <see cref="ReportTerminalStatus"/>.
     /// </summary>
-    TestRunResult ValidateMacFor(string library, int timeoutSeconds, string rid, Action<string>? onLine = null)
+    TestRunResult ValidateMacFor(string library, int timeoutSeconds, string rid, Action<string>? onLine = null,
+        string configuration = "Debug")
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -458,18 +478,8 @@ partial class Build
         // cannot hold a Sandbox receipt and no macOS readiness control exists.
         var storeKitLane = ResolveStoreKitSandboxLane(library, "macos", bundleId);
 
-        var config = "Debug";
-        var ridBase = testDir / "bin" / config / "net10.0-macos" / rid;
-        var binBase = testDir / "bin" / config / "net10.0-macos";
-
         string? binaryPath = null;
-        var candidates = new[]
-        {
-            ridBase / $"{appName}.app" / "Contents" / "MacOS" / appName,
-            ridBase / appName,
-            binBase / $"{appName}.app" / "Contents" / "MacOS" / appName,
-            binBase / appName,
-        };
+        var candidates = MacBinaryCandidates(testDir, configuration, rid, appName);
         foreach (var candidate in candidates)
         {
             if (File.Exists(candidate))
@@ -512,7 +522,8 @@ partial class Build
         .Requires(() => Library)
         .Executes(() =>
         {
-            var result = ValidateMacCatalystFor(Library!, Timeout, ResolveRid("maccatalyst-arm64"));
+            var result = ValidateMacCatalystFor(Library!, Timeout, ResolveRid("maccatalyst-arm64"),
+                configuration: Configuration.ToString());
             ReportTerminalStatus(result, Library!);
         });
 
@@ -524,7 +535,7 @@ partial class Build
     /// immutable evidence directory.
     /// </summary>
     TestRunResult ValidateMacCatalystFor(string library, int timeoutSeconds, string rid,
-        Action<string>? onLine = null)
+        Action<string>? onLine = null, string configuration = "Debug")
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -533,7 +544,7 @@ partial class Build
         // Offline-only for StoreKit2 whatever is configured: the ad-hoc signed Catalyst test app
         // cannot hold a Sandbox receipt and no Mac Catalyst readiness control exists.
         var storeKitLane = ResolveStoreKitSandboxLane(library, "maccatalyst", bundleId);
-        var appPath = ResolveAppPath(testDir, "Debug", "maccatalyst", rid, appName);
+        var appPath = ResolveAppPath(testDir, configuration, "maccatalyst", rid, appName);
         var binaryPath = appPath / "Contents" / "MacOS" / appName;
 
         if (!File.Exists(binaryPath))

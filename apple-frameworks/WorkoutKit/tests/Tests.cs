@@ -11,6 +11,28 @@ namespace SwiftBindings.WorkoutKit.Tests;
 
 internal static class Tests
 {
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static int Run()
     {
         int passed = 0, failed = 0;
@@ -56,12 +78,10 @@ internal static class Tests
         MetadataTest<SwimBikeRunWorkout>("SwimBikeRunWorkout metadata");
         MetadataTest<ScheduledWorkoutPlan>("ScheduledWorkoutPlan metadata");
 
-        // Plain enums exist with documented Swift values.
+        // Plain enums exist with distinct, name-keyed members.
         try
         {
-            if ((int)StateError.WatchNotPaired != 0 ||
-                (int)StateError.WorkoutApplicationNotInstalled != 1)
-                throw new InvalidOperationException("StateError values mismatch");
+            AssertNameKeyedMembers(StateError.WatchNotPaired, StateError.WorkoutApplicationNotInstalled);
             Pass("StateError values");
         }
         catch (Exception ex)
@@ -71,9 +91,7 @@ internal static class Tests
 
         try
         {
-            if ((int)WorkoutAlertMetric.Current != 0 ||
-                (int)WorkoutAlertMetric.Average != 1)
-                throw new InvalidOperationException("WorkoutAlertMetric values mismatch");
+            AssertNameKeyedMembers(WorkoutAlertMetric.Current, WorkoutAlertMetric.Average);
             Pass("WorkoutAlertMetric values");
         }
         catch (Exception ex)
@@ -84,9 +102,7 @@ internal static class Tests
         // IntervalStep.PurposeKind enum values
         try
         {
-            if ((int)IntervalStep.PurposeKind.Work != 0 ||
-                (int)IntervalStep.PurposeKind.Recovery != 1)
-                throw new InvalidOperationException("IntervalStep.PurposeKind values mismatch");
+            AssertNameKeyedMembers(IntervalStep.PurposeKind.Work, IntervalStep.PurposeKind.Recovery);
             Pass("IntervalStep.PurposeKind values");
         }
         catch (Exception ex)
@@ -97,11 +113,11 @@ internal static class Tests
         // WorkoutScheduler.AuthorizationStateKind enum values
         try
         {
-            if ((long)WorkoutScheduler.AuthorizationStateKind.NotDetermined != 0 ||
-                (long)WorkoutScheduler.AuthorizationStateKind.Restricted != 1 ||
-                (long)WorkoutScheduler.AuthorizationStateKind.Denied != 2 ||
-                (long)WorkoutScheduler.AuthorizationStateKind.Authorized != 3)
-                throw new InvalidOperationException("WorkoutScheduler.AuthorizationStateKind values mismatch");
+            AssertNameKeyedMembers(
+                WorkoutScheduler.AuthorizationStateKind.NotDetermined,
+                WorkoutScheduler.AuthorizationStateKind.Restricted,
+                WorkoutScheduler.AuthorizationStateKind.Denied,
+                WorkoutScheduler.AuthorizationStateKind.Authorized);
             Pass("WorkoutScheduler.AuthorizationStateKind values");
         }
         catch (Exception ex)
@@ -112,11 +128,8 @@ internal static class Tests
         // WorkoutGoal.CaseTag enum values
         try
         {
-            if ((uint)WorkoutGoal.CaseTag.Distance != 0u ||
-                (uint)WorkoutGoal.CaseTag.Time != 1u ||
-                (uint)WorkoutGoal.CaseTag.Energy != 2u ||
-                (uint)WorkoutGoal.CaseTag.Open != 4u)
-                throw new InvalidOperationException("WorkoutGoal.CaseTag values mismatch");
+            AssertNameKeyedMembers(WorkoutGoal.CaseTag.Distance, WorkoutGoal.CaseTag.Time, WorkoutGoal.CaseTag.Energy,
+                WorkoutGoal.CaseTag.Open);
             Pass("WorkoutGoal.CaseTag values");
         }
         catch (Exception ex)
@@ -127,11 +140,11 @@ internal static class Tests
         // WorkoutPlan.WorkoutKind.CaseTag enum values
         try
         {
-            if ((uint)WorkoutPlan.WorkoutKind.CaseTag.Goal != 0u ||
-                (uint)WorkoutPlan.WorkoutKind.CaseTag.Custom != 1u ||
-                (uint)WorkoutPlan.WorkoutKind.CaseTag.Pacer != 2u ||
-                (uint)WorkoutPlan.WorkoutKind.CaseTag.SwimBikeRun != 3u)
-                throw new InvalidOperationException("WorkoutPlan.WorkoutKind.CaseTag values mismatch");
+            AssertNameKeyedMembers(
+                WorkoutPlan.WorkoutKind.CaseTag.Goal,
+                WorkoutPlan.WorkoutKind.CaseTag.Custom,
+                WorkoutPlan.WorkoutKind.CaseTag.Pacer,
+                WorkoutPlan.WorkoutKind.CaseTag.SwimBikeRun);
             Pass("WorkoutPlan.WorkoutKind.CaseTag values");
         }
         catch (Exception ex)
@@ -142,10 +155,8 @@ internal static class Tests
         // SwimBikeRunWorkout.Activity.CaseTag enum values
         try
         {
-            if ((uint)SwimBikeRunWorkout.Activity.CaseTag.Swimming != 0u ||
-                (uint)SwimBikeRunWorkout.Activity.CaseTag.Cycling != 1u ||
-                (uint)SwimBikeRunWorkout.Activity.CaseTag.Running != 2u)
-                throw new InvalidOperationException("SwimBikeRunWorkout.Activity.CaseTag values mismatch");
+            AssertNameKeyedMembers(SwimBikeRunWorkout.Activity.CaseTag.Swimming, SwimBikeRunWorkout.Activity.CaseTag.Cycling,
+                SwimBikeRunWorkout.Activity.CaseTag.Running);
             Pass("SwimBikeRunWorkout.Activity.CaseTag values");
         }
         catch (Exception ex)

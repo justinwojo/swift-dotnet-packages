@@ -105,9 +105,8 @@ public class AppDelegate : UIApplicationDelegate
 
     public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new MainViewController();
-        Window.MakeKeyAndVisible();
+        // The window lives on the UIKit scene (Info.plist scene manifest; Xcode 27 MT7199).
+        global::SwiftBindings.Testing.SwiftBindingsSceneDelegate.Install(() => new MainViewController());
         return true;
     }
 }
@@ -993,18 +992,18 @@ public class MainViewController : UIViewController
 
         // STPCardErrorCode enum-like class
         logger.Info("--- STPCardErrorCode ---");
-        var cardErrorCases = new (string Name, Func<StripeCore.STPCardErrorCode> Getter, uint ExpectedTag)[]
+        var cardErrorCases = new (string Name, Func<StripeCore.STPCardErrorCode> Getter, StripeCore.STPCardErrorCode.CaseTag ExpectedTag)[]
         {
-            ("InvalidNumber", () => StripeCore.STPCardErrorCode.InvalidNumber, 0),
-            ("InvalidExpMonth", () => StripeCore.STPCardErrorCode.InvalidExpMonth, 1),
-            ("InvalidExpYear", () => StripeCore.STPCardErrorCode.InvalidExpYear, 2),
-            ("InvalidCVC", () => StripeCore.STPCardErrorCode.InvalidCVC, 3),
-            ("IncorrectNumber", () => StripeCore.STPCardErrorCode.IncorrectNumber, 4),
-            ("ExpiredCard", () => StripeCore.STPCardErrorCode.ExpiredCard, 5),
-            ("CardDeclined", () => StripeCore.STPCardErrorCode.CardDeclined, 6),
-            ("IncorrectCVC", () => StripeCore.STPCardErrorCode.IncorrectCVC, 7),
-            ("ProcessingError", () => StripeCore.STPCardErrorCode.ProcessingError, 8),
-            ("IncorrectZip", () => StripeCore.STPCardErrorCode.IncorrectZip, 9),
+            ("InvalidNumber", () => StripeCore.STPCardErrorCode.InvalidNumber, StripeCore.STPCardErrorCode.CaseTag.InvalidNumber),
+            ("InvalidExpMonth", () => StripeCore.STPCardErrorCode.InvalidExpMonth, StripeCore.STPCardErrorCode.CaseTag.InvalidExpMonth),
+            ("InvalidExpYear", () => StripeCore.STPCardErrorCode.InvalidExpYear, StripeCore.STPCardErrorCode.CaseTag.InvalidExpYear),
+            ("InvalidCVC", () => StripeCore.STPCardErrorCode.InvalidCVC, StripeCore.STPCardErrorCode.CaseTag.InvalidCVC),
+            ("IncorrectNumber", () => StripeCore.STPCardErrorCode.IncorrectNumber, StripeCore.STPCardErrorCode.CaseTag.IncorrectNumber),
+            ("ExpiredCard", () => StripeCore.STPCardErrorCode.ExpiredCard, StripeCore.STPCardErrorCode.CaseTag.ExpiredCard),
+            ("CardDeclined", () => StripeCore.STPCardErrorCode.CardDeclined, StripeCore.STPCardErrorCode.CaseTag.CardDeclined),
+            ("IncorrectCVC", () => StripeCore.STPCardErrorCode.IncorrectCVC, StripeCore.STPCardErrorCode.CaseTag.IncorrectCVC),
+            ("ProcessingError", () => StripeCore.STPCardErrorCode.ProcessingError, StripeCore.STPCardErrorCode.CaseTag.ProcessingError),
+            ("IncorrectZip", () => StripeCore.STPCardErrorCode.IncorrectZip, StripeCore.STPCardErrorCode.CaseTag.IncorrectZip),
         };
 
         foreach (var (name, getter, expectedTag) in cardErrorCases)
@@ -1012,7 +1011,7 @@ public class MainViewController : UIViewController
             try
             {
                 using var code = getter();
-                if ((uint)code.Tag == expectedTag)
+                if (code.Tag == expectedTag)
                 {
                     logger.Pass($"STPCardErrorCode.{name}: tag={code.Tag}");
                     results.Pass($"StripeCore_STPCardErrorCode_{name}");

@@ -74,7 +74,7 @@ partial class Build
                 if (!fresh)
                     return csproj; // no stamp ⇒ Freshness.CheckFresh throws
 
-                var sbDir = dir / "obj" / "Debug" / "net10.0-ios" / "swift-binding";
+                var sbDir = dir / "obj" / "Debug" / ResolveTfm("ios") / "swift-binding";
                 Directory.CreateDirectory(sbDir);
                 var body = string.Join("\n", referencedModules.Select(m =>
                     $"public static class Use{m} {{ public static object? F() => typeof({m}.Anchor); }}"));
@@ -91,7 +91,7 @@ partial class Build
                 new(framework,
                     csproj,
                     libDir / framework / $"{framework}.xcframework" / "Info.plist",
-                    libDir / framework / "obj" / "Debug" / "net10.0-ios" / "swift-binding");
+                    libDir / framework / "obj" / "Debug" / ResolveTfm("ios") / "swift-binding");
 
             var scratch = (AbsolutePath)Path.Combine(
                 Path.GetTempPath(), $"swiftbindings-projectref-selftest-{Guid.NewGuid():N}");
@@ -299,9 +299,9 @@ partial class Build
         .Description(
             "Run every in-process harness self-test " +
             "(rewriter + dependency injection + regression artifacts + release-wave planning + Apple version split " +
-            "+ release consumption + run budgets + stdout watcher)")
+            "+ release consumption + run budgets + VisionKit warm-up + stdout watcher)")
         .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts,
-            TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, TestStoreKitSandbox,
+            TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, TestStoreKitSandbox, TestVisionKitWarmup,
             ValidateWatcherSelfTest)
         .Executes(() => Log.Information("Harness self-tests complete."));
 }

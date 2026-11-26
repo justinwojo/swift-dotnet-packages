@@ -305,7 +305,7 @@ generate_csproj() {
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -400,8 +400,8 @@ CSPROJ_NATIVE_END
             [ -n "$subdir" ] && base_path="$base_path/$subdir"
         fi
         cat >> "$csproj_path" << CSPROJ_WRAPPER
-      <NativeReference Include="${base_path}/obj/\$(Configuration)/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework"
-                       Condition="Exists('${base_path}/obj/\$(Configuration)/net10.0-ios/swift-binding/${module}SwiftBindings.xcframework')">
+      <NativeReference Include="${base_path}/obj/\$(Configuration)/\$(SwiftBindingsTfmIos)/swift-binding/${module}SwiftBindings.xcframework"
+                       Condition="Exists('${base_path}/obj/\$(Configuration)/\$(SwiftBindingsTfmIos)/swift-binding/${module}SwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
 CSPROJ_WRAPPER

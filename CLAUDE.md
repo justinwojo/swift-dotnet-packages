@@ -78,9 +78,10 @@ All build/test/release orchestration runs through the Nuke harness at the repo r
 - `Pack --library X --version V [--output dir]` — packs all non-internal products to `.nupkg`.
 - `PackValidate --library X` — CI smoke pack with version `0.0.0-ci`.
 - `BuildAndPackRelease --library X --version V [--output dir] [--dry-run]` — release build at `-c Release`, then pack, then write `release-manifest.json`.
-- `PublishRelease --packages-dir dir --nuget-api-key K` — push `.nupkg` files to nuget.org (parallelism=5, `--skip-duplicate`).
-- `ReleaseWave --wave-spec "Lib=1.2.3,…" | --libraries A,B --auto-version | --all --auto-version` — run the **whole release pipeline locally** (build → pack → sim-validate → publish) for 1..N libraries in one process, dependency-ordered, bounded-parallel. **Dry run by default** — see "Local release waves" under Release Process.
-- `RegressionValidate --version V --apple-version A [--apple-bindings-version B] [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos] [--allow-unavailable]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS runs binaries directly, Mac Catalyst launches through LaunchServices with per-launch evidence, and tvOS runs on the tvOS Simulator (`ValidateTvOsFor`) whenever the host has a tvOS runtime installed. See "Two Apple version trains" below for the two Apple flags. A cell the host cannot provide (no tvOS runtime installed, no device on the OS the matrix wants) records `UNAVAIL` and **fails the run** — declared coverage that did not happen is not a pass. `--allow-unavailable` accepts those gaps deliberately; the run stays `complete=false` and the artifact records the opt-out. To *not* run a platform at all, leave it out of `--platforms`.
+- `PackAllPairings --library X --version V` / `MergePackages --library X --version V [--contributions dir]` — pack the library once per toolchain pairing (each under `scripts/use-toolchain.sh`), then fold the per-pairing copies into one package per id with the SDK's `SwiftBindingsMergePackages`. A merge refusal is a finding, never something to suppress.
+- `PublishRelease --packages-dir dir --nuget-api-key K` — push `.nupkg` files to nuget.org (parallelism=5, `--skip-duplicate`). Merged packages only: a package missing any pairing's copy is refused.
+- `ReleaseWave --wave-spec "Lib=1.2.3,…" | --libraries A,B --auto-version | --all --auto-version` — run the **whole release pipeline locally** (build → pack → sim-validate → publish) for 1..N libraries in one process, dependency-ordered, bounded-parallel. **Dry run only** (it packs a single pairing; publishing goes through the merged-package path) — see "Local release waves" under Release Process.
+- `RegressionValidate --version V --apple-version A [--apple-bindings-version B] [--pairing <name|all>] [--filter X] [--platforms ios-sim,ios-device,macos,maccatalyst,tvos] [--allow-unavailable]` — pre-release matrix that builds + validates every package across every TFM its test csproj declares. Sim runs MonoJIT, device runs NativeAOT, macOS runs binaries directly, Mac Catalyst launches through LaunchServices with per-launch evidence, and tvOS runs on the tvOS Simulator (`ValidateTvOsFor`) whenever the host has a tvOS runtime installed. See "Two Apple version trains" below for the two Apple flags. A cell the host cannot provide (no tvOS runtime installed, no device on the OS the matrix wants) records `UNAVAIL` and **fails the run** — declared coverage that did not happen is not a pass. `--allow-unavailable` accepts those gaps deliberately; the run stays `complete=false` and the artifact records the opt-out. To *not* run a platform at all, leave it out of `--platforms`.
 - `ListChangedLibraries [--base-sha S --head-sha S | --all] [--json]` — emit the CI matrix (newline-delimited or GHA `{"include":[...]}` JSON).
 - `ListSims` / `BootSim` / `ShutdownSim` — simulator fleet management.
 
@@ -199,7 +200,13 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on `macos-26`. It 
 3. **Validate packaging** — `dotnet nuke PackValidate --library $X` (smoke pack with version `0.0.0-ci`).
 4. **Build + run sim tests** — `dotnet nuke RunCiSimTest --library $X --timeout 60 --reuse-sim` (boots a sim from the fleet, builds the test app, runs `ValidateSim`, uploads sim diagnostics on failure).
 
-CI auto-detects libraries from `libraries/*/library.json` and Apple frameworks from `apple-frameworks/*/SwiftBindings.*.csproj`. `ListChangedLibraries` emits entries tagged with `kind` (`third-party` or `apple-framework`) for the GHA matrix. Changes under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `global.json`, and `.github/workflows/ci.yml` are treated as shared infra and rebuild every library.
+CI auto-detects libraries from `libraries/*/library.json` and Apple frameworks from `apple-frameworks/*/SwiftBindings.*.csproj`. `ListChangedLibraries` emits entries tagged with `kind` (`third-party` or `apple-framework`) for the GHA matrix. Changes under `build/`, `.nuke/`, `scripts/`, `templates/`, `Directory.Build.props`, `Directory.Build.targets`, `global.json`, `toolchains/`, `tests-shared/`, `.github/actions/` and `.github/workflows/ci.yml` are treated as shared infra and rebuild every library. Each library builds once per toolchain pairing (on the runner its `toolchains/<pairing>.json` names), and a merge job folds the pairings' packages into the one that ships.
+
+## Toolchain pairings
+
+Every package and test app builds for three .NET + Xcode pairings, recorded in `toolchains/<pairing>.json` (see `toolchains/README.md`): `net10-xcode26` (.NET 10 + Xcode 26.3, the default), `net10-xcode27` (.NET 10 + Xcode 27.2) and `net11-xcode27` (.NET 11 + Xcode 27.2, CoreCLR: interpreter in Debug, ReadyToRun in Release). `Directory.Build.props` derives every TFM from the `SwiftBindingsPairing` property; csprojs name platforms only through `$(SwiftBindingsTfmIos|Macos|Maccatalyst|Tvos)`, never a literal TFM. `scripts/use-toolchain.sh <pairing> [-- cmd]` selects the SDK, workload, Xcode and (with `SWIFTBINDINGS_NUGET_PACKAGES_ROOT`) a per-pairing package cache. The shipped package is the merge of the three pairings' packs: `lib/net10.0-<plat>26.0/`, `lib/net10.0-<plat>27.2/`, `lib/net11.0-<plat>27.2/`. `net10-xcode26` builds with the versionless TFM: an explicit `26.0` selects a workload pack that refuses Xcode 26.3, and the versionless build still packs under `26.0`.
+
+`RegressionValidate --pairing all` runs each pairing in its own child process and writes an aggregate verdict under `artifacts/regression-validate/<version>/all/<runId>/`; per-pairing evidence lives under `artifacts/regression-validate/<version>/<pairing>/`. Every cell proves its engine (Mono, CoreCLR interpreter or ReadyToRun) from the bundle it launches before it runs. `complete` is coverage (every pairing, lane and engine ran); `verdict` is the outcome.
 
 ## Dependencies
 
@@ -349,9 +356,9 @@ dotnet nuke ReleaseWave --wave-spec "Matter=26.2.9,MatterSupport=26.2.9"
 # Computed versions, three libraries at a time
 dotnet nuke ReleaseWave --libraries Nuke,Lottie,Kingfisher --auto-version --max-parallel 3
 
-# The published catalog, for real
-NUGET_API_KEY=… dotnet nuke ReleaseWave --all --auto-version --apple-version 26.2.9 --dry-run false
 ```
+
+A wave packs only the active pairing, so it refuses `--dry-run false`: the package that ships is the merge of every pairing's pack (release.yml, or `PackAllPairings` + `PublishRelease`).
 
 **Selection** — exactly one of `--wave-spec`, `--libraries … --auto-version`, or `--all --auto-version`. `--all` means *every already-published library*: `AppIntents` is hard-excluded (do-not-ship, rejected even if named explicitly), and libraries that exist in the repo but have never shipped (`VisionKit` today) are excluded too — first-time publication must be an explicit act, so name them in `--wave-spec`/`--libraries`. This applies to Apple frameworks as much as to third-party libraries: a never-published `apple-frameworks/<Name>` is invisible to `--all` even though every one of its siblings is swept in, so a first Apple publish must ride along as an explicit `--libraries …,VisionKit` (or `--wave-spec "VisionKit=26.2.13,…"`) entry. Under `--auto-version` it then picks up the same shared Apple-bindings version as the rest of the wave.
 
@@ -368,7 +375,7 @@ NUGET_API_KEY=… dotnet nuke ReleaseWave --all --auto-version --apple-version 2
 
 `--apple-bindings-version` **defaults to `--apple-version`** when omitted, so every pre-split invocation behaves exactly as before. `AssertCrossFrameworkCoherence` validates each `SwiftBindings.Apple*` pin against its own train and names the flag to pass in the failure message; an Apple `PackageReference` whose version can't be read still fails loud. Coverage: `dotnet nuke TestAppleVersionSplit` (also run by `TestHarness`).
 
-**`--dry-run` defaults to TRUE.** Publishing requires `--dry-run false` *and* a key in `NUGET_API_KEY` or `--nuget-api-key` (checked in preflight, never logged). Publish is skipped entirely if any library failed, unless `--publish-partial`.
+**`--dry-run` defaults to TRUE, and the wave refuses `--dry-run false`:** it packs only the active pairing, and only merged packages ship (release.yml, or `PackAllPairings` + `MergePackages` + `PublishRelease`). The publish-side behaviour described below (`--publish-partial`, publish order, index polling, `stagedUnpublished`) is retained in the code but unreachable until a wave packs every pairing.
 
 **Ordering and parallelism** — up to `--max-parallel` (default 3) libraries run concurrently, each holding one leased simulator from the fleet. The dependency graph is built from *all three* intra-repo reference forms in non-test csprojs, because all three make one library's build touch another's tree:
 

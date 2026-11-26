@@ -1,6 +1,38 @@
 <Project>
+  <!--
+    Toolchain pairing. One source tree builds for each supported .NET + Xcode pairing:
+
+      SwiftBindingsPairing   build TFM          copy label   toolchain
+      net10-xcode26          net10.0-ios        26.0         .NET 10 SDK 10.0.1xx + Xcode 26.3 (default)
+      net10-xcode27          net10.0-ios27.2    27.2         .NET 10 SDK 10.0.4xx + Xcode 27.2
+      net11-xcode27          net11.0-ios27.2    27.2         .NET 11 SDK 11.0.1xx + Xcode 27.2
+
+    Every package and test csproj names its platforms through the four properties below
+    ($(SwiftBindingsTfmIos) and so on), never a literal TFM, so the pairing alone decides
+    what a build targets and which copy label a pack carries (net10.0-ios26.0,
+    net10.0-ios27.2, net11.0-ios27.2). The Xcode 27.2 pairings spell 27.2 in the TFM: a
+    versionless binding packed there would keep the 26.0 label, and two pairings'
+    contributions could not be told apart at merge. net10-xcode26 stays versionless: an
+    explicit 26.0 selects the workload's 26.0 pack, which demands Xcode 26.0 exactly, while
+    the versionless TFM builds with the 26.2 pack and still packs as net10.0-ios26.0, the
+    label every default net10.0-ios consumer resolves.
+    scripts/use-toolchain.sh <pairing> selects the toolchain and exports the pairing
+    (MSBuild reads environment variables as properties; the Nuke harness reads the same
+    variable). toolchains/<pairing>.json is the single record of each pairing.
+  -->
   <PropertyGroup>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <SwiftBindingsPairing Condition="'$(SwiftBindingsPairing)' == ''">net10-xcode26</SwiftBindingsPairing>
+    <SwiftBindingsTargetFramework Condition="'$(SwiftBindingsPairing)' == 'net11-xcode27'">net11.0</SwiftBindingsTargetFramework>
+    <SwiftBindingsTargetFramework Condition="'$(SwiftBindingsPairing)' != 'net11-xcode27'">net10.0</SwiftBindingsTargetFramework>
+    <SwiftBindingsTfmPlatformVersion Condition="'$(SwiftBindingsPairing)' != 'net10-xcode26'">27.2</SwiftBindingsTfmPlatformVersion>
+    <SwiftBindingsTfmIos>$(SwiftBindingsTargetFramework)-ios$(SwiftBindingsTfmPlatformVersion)</SwiftBindingsTfmIos>
+    <SwiftBindingsTfmMacos>$(SwiftBindingsTargetFramework)-macos$(SwiftBindingsTfmPlatformVersion)</SwiftBindingsTfmMacos>
+    <SwiftBindingsTfmMaccatalyst>$(SwiftBindingsTargetFramework)-maccatalyst$(SwiftBindingsTfmPlatformVersion)</SwiftBindingsTfmMaccatalyst>
+    <SwiftBindingsTfmTvos>$(SwiftBindingsTargetFramework)-tvos$(SwiftBindingsTfmPlatformVersion)</SwiftBindingsTfmTvos>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 

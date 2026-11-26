@@ -34,7 +34,7 @@ partial class Build
             }
 
             var artifactDir = RootDirectory / "artifacts";
-            var canonical = artifactDir / $"regression-validate-{version}.json";
+            var canonical = artifactDir / CanonicalArtifactName(version);
             var runsDir = RegressionRunsDir(version);
 
             // Start from a clean slate so a previous aborted self-test can't
@@ -119,7 +119,7 @@ partial class Build
                         && result.IncompleteReasons.Any(r => r.Contains("platform subset")),
                         string.Join("; ", result.IncompleteReasons));
                     Assert("filtered run writes .partial-1.json",
-                        result.PartialArtifact == artifactDir / $"regression-validate-{version}.partial-1.json"
+                        result.PartialArtifact == artifactDir / $"regression-validate-{version}-{ActivePairing.Name}.partial-1.json"
                         && File.Exists(result.PartialArtifact),
                         $"partial artifact = {result.PartialArtifact}");
                     Assert("filtered run leaves the canonical artifact byte-identical",
@@ -145,10 +145,10 @@ partial class Build
                         inputs: new { sdkVersion = version }, apiSurface: new { filesCollected = 0 });
 
                     Assert("second partial run writes .partial-2.json",
-                        result.PartialArtifact == artifactDir / $"regression-validate-{version}.partial-2.json",
+                        result.PartialArtifact == artifactDir / $"regression-validate-{version}-{ActivePairing.Name}.partial-2.json",
                         $"partial artifact = {result.PartialArtifact}");
                     Assert("first partial artifact survives the second partial run",
-                        File.Exists(artifactDir / $"regression-validate-{version}.partial-1.json"),
+                        File.Exists(artifactDir / $"regression-validate-{version}-{ActivePairing.Name}.partial-1.json"),
                         "partial-1 was clobbered");
                 }
 
@@ -566,6 +566,116 @@ partial class Build
             finally
             {
                 CleanSelfTestArtifacts(version);
+            }
+
+            // ── Pairings and engines ──
+            {
+                // Facts as the probe bundles of each workload actually carry them (2026-11-26):
+                // .NET 10 Catalyst links Mono statically (no dylib), .NET 11 device turns
+                // libcoreclr into a framework, Debug leaves the app assembly out of the R2R image.
+                static SwiftBindings.Build.Models.AppEngine? C(bool? monoCoreLib, bool monoLib, bool clrLib, bool? appR2R) =>
+                    SwiftBindings.Build.Models.EngineEvidence.Classify(
+                        new SwiftBindings.Build.Models.EngineEvidence.Facts(monoCoreLib, monoLib, clrLib, appR2R)).Engine;
+                const SwiftBindings.Build.Models.AppEngine Mono = SwiftBindings.Build.Models.AppEngine.Mono,
+                    Interp = SwiftBindings.Build.Models.AppEngine.CoreClrInterpreter,
+                    R2R = SwiftBindings.Build.Models.AppEngine.CoreClrReadyToRun;
+                Assert("engine: Mono CoreLib + libmonosgen (net10 sim) is Mono", C(true, true, false, false) == Mono, "not Mono");
+                Assert("engine: Mono CoreLib, statically linked (net10 Catalyst) is Mono", C(true, false, false, false) == Mono, "not Mono");
+                Assert("engine: CoreCLR + IL-only app (net11 Debug) is the interpreter", C(false, false, true, false) == Interp, "not interpreter");
+                Assert("engine: CoreCLR + ReadyToRun app (net11 Release) is ReadyToRun", C(false, false, true, true) == R2R, "not R2R");
+                Assert("engine: a CoreCLR CoreLib without libcoreclr proves nothing", C(false, false, false, true) is null, "classified");
+                Assert("engine: a CoreCLR CoreLib next to libmonosgen proves nothing", C(false, true, true, false) is null, "classified");
+                Assert("engine: Mono CoreLib next to libcoreclr proves nothing", C(true, false, true, false) is null, "classified");
+                Assert("engine: CoreCLR without the app assembly proves nothing", C(false, false, true, null) is null, "classified");
+                Assert("engine: a bundle with no CoreLib proves nothing", C(null, false, false, null) is null, "classified");
+                Assert("engine: a binding that disagrees with the app on ReadyToRun proves neither CoreCLR engine",
+                    SwiftBindings.Build.Models.EngineEvidence.Classify(
+                        new SwiftBindings.Build.Models.EngineEvidence.Facts(false, false, true, false, MixedReadyToRun: true)).Engine is null
+                    && SwiftBindings.Build.Models.EngineEvidence.Classify(
+                        new SwiftBindings.Build.Models.EngineEvidence.Facts(false, false, true, true, MixedReadyToRun: true)).Engine is null,
+                    "classified");
+
+                var all = SwiftBindings.Build.Models.ToolchainPairing.All;
+                string[] n10 = { "mono" }, n11 = { "coreclr-interpreter", "coreclr-r2r" };
+                var green = JudgePairingsForTest(all, new[]
+                {
+                    ("net10-xcode26", "PASS", true, n10, n10),
+                    ("net10-xcode27", "PASS", true, n10, n10),
+                    ("net11-xcode27", "PASS", true, n11, n11),
+                });
+                Assert("pairings: all three green and complete is a complete PASS",
+                    green.Verdict == "PASS" && green.Complete, $"{green.Verdict} complete={green.Complete} {string.Join("; ", green.Reasons)}");
+                var oneMissing = JudgePairingsForTest(new[] { "net10-xcode26", "net11-xcode27" }, new[]
+                {
+                    ("net10-xcode26", "PASS", true, n10, n10),
+                    ("net11-xcode27", "PASS", true, n11, n11),
+                });
+                Assert("pairings: a pairing left out makes the run incomplete",
+                    oneMissing.Verdict == "PASS" && !oneMissing.Complete
+                    && oneMissing.Reasons.Any(r => r.Contains("net10-xcode27")), string.Join("; ", oneMissing.Reasons));
+                var noR2r = JudgePairingsForTest(all, new[]
+                {
+                    ("net10-xcode26", "PASS", true, n10, n10),
+                    ("net10-xcode27", "PASS", true, n10, n10),
+                    ("net11-xcode27", "PASS", true, n11, new[] { "coreclr-interpreter" }),
+                });
+                Assert("pairings: an engine no passing cell proved fails the run and still claims full coverage",
+                    noR2r.Verdict == "FAIL" && noR2r.Complete, $"{noR2r.Verdict} complete={noR2r.Complete}");
+                var red = JudgePairingsForTest(all, new[]
+                {
+                    ("net10-xcode26", "PASS", true, n10, n10),
+                    ("net10-xcode27", "FAIL", true, n10, n10),
+                    ("net11-xcode27", "PASS", true, n11, n11),
+                });
+                Assert("pairings: one red pairing fails the run; full coverage still counts as complete",
+                    red.Verdict == "FAIL" && red.Complete, $"{red.Verdict} complete={red.Complete}");
+                Assert("pairings: secret parameter values are masked in logged child command lines",
+                    string.Join(' ', RedactSecrets(new[] { "RegressionValidate", "--nuget-api-key", "abc", "--version", "1.0.0", "--github-token=xyz" }))
+                        == "RegressionValidate --nuget-api-key *** --version 1.0.0 --github-token=***",
+                    string.Join(' ', RedactSecrets(new[] { "RegressionValidate", "--nuget-api-key", "abc", "--version", "1.0.0", "--github-token=xyz" })));
+                Assert("native inputs: an interface written by Swift 6.4 is newer than an Xcode 26.3 compiler",
+                    ParseSwiftVersion("// swift-compiler-version: Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)", "Apple Swift version ")
+                        > ParseSwiftVersion("Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)\nTarget: arm64-apple-macosx26.0", "Apple Swift version ")
+                    && ParseSwiftVersion("no version here", "Apple Swift version ") is null,
+                    "comparison wrong");
+                Assert("pairings: a secret parameter spelled with extra hyphens (as Nuke matches it) is masked",
+                    string.Join(' ', RedactSecrets(new[] { "--nuget-api-k-ey", "abc", "--NugetApiKey=xyz" })) == "--nuget-api-k-ey *** --NugetApiKey=***",
+                    string.Join(' ', RedactSecrets(new[] { "--nuget-api-k-ey", "abc", "--NugetApiKey=xyz" })));
+                Assert("pairings: target and pairing are recognized however Nuke spells them",
+                    OptionName("--tar-get") == "target" && OptionName("-Target=X") == "target" && OptionName("--pair-ing") == "pairing"
+                    && OptionName("value") == "", "OptionName");
+                Assert("pairings: a single-dash secret parameter is masked too",
+                    string.Join(' ', RedactSecrets(new[] { "-nuget-api-key", "abc" })) == "-nuget-api-key ***",
+                    string.Join(' ', RedactSecrets(new[] { "-nuget-api-key", "abc" })));
+                var aborted = JudgePairingsForTest(all, new[]
+                {
+                    ("net10-xcode26", "PASS", true, n10, n10),
+                    ("net10-xcode27", "ABORTED", false, n10, Array.Empty<string>()),
+                    ("net11-xcode27", "FAIL", true, n11, n11),
+                });
+                Assert("pairings: an aborted pairing aborts the run", aborted.Verdict == "ABORTED", aborted.Verdict);
+
+                var dir = RootDirectory / "toolchains";
+                foreach (var name in all)
+                {
+                    var tp = SwiftBindings.Build.Models.ToolchainPairing.Load(dir, name);
+                    Assert($"pairing record {name} loads", tp.Name == name, tp.Name);
+                }
+                Assert("pairing build TFMs and package copy labels match Directory.Build.props",
+                    SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net10-xcode26").Tfm("ios") == "net10.0-ios"
+                    && SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net10-xcode26").CopyTfm("ios") == "net10.0-ios26.0"
+                    && SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net11-xcode27").CopyTfm("tvos") == "net11.0-tvos27.2"
+                    && SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net10-xcode27").Tfm("tvos") == "net10.0-tvos27.2"
+                    && SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net11-xcode27").Tfm("maccatalyst") == "net11.0-maccatalyst27.2",
+                    "labels differ");
+                Assert("an unknown pairing is refused",
+                    Throws(() => SwiftBindings.Build.Models.ToolchainPairing.Load(dir, "net12-xcode28")), "loaded");
+                Assert("a pairing whose engines contradict its framework is refused",
+                    Throws(() => SwiftBindings.Build.Models.ToolchainPairing.Parse(
+                        File.ReadAllText(dir / "net11-xcode27.json").Replace("\"coreclr-interpreter\", \"coreclr-r2r\"", "\"mono\""),
+                        "net11-xcode27", "test")), "accepted");
+
+                static bool Throws(Action a) { try { a(); return false; } catch (InvalidOperationException) { return true; } }
             }
 
             if (failures.Count > 0)

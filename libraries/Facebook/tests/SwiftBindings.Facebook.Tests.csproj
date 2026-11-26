@@ -10,7 +10,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-ios</TargetFramework>
+    <TargetFramework>$(SwiftBindingsTfmIos)</TargetFramework>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -142,14 +142,14 @@
                        Condition="Exists('../%(_FacebookBinding.Identity)/%(_FacebookBinding.Identity).xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <NativeReference Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework"
-                       Condition="Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework')">
+      <NativeReference Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework"
+                       Condition="Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/%(_FacebookBinding.Identity)SwiftBindings.xcframework')">
         <Kind>Framework</Kind>
       </NativeReference>
-      <TrimmerRootDescriptor Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml"
-                             Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml')" />
-      <IlcArg Include="--descriptor:$(MSBuildProjectDirectory)/../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml"
-              Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/net10.0-ios/swift-binding/ILLink.Descriptors.xml')" />
+      <TrimmerRootDescriptor Include="../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/ILLink.Descriptors.xml"
+                             Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/ILLink.Descriptors.xml')" />
+      <IlcArg Include="--descriptor:$(MSBuildProjectDirectory)/../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/ILLink.Descriptors.xml"
+              Condition="'$(PublishAot)' == 'true' AND Exists('../%(_FacebookBinding.Identity)/obj/$(Configuration)/$(SwiftBindingsTfmIos)/swift-binding/ILLink.Descriptors.xml')" />
     </ItemGroup>
   </Target>
 

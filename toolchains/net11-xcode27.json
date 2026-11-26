@@ -1,0 +1,15 @@
+{
+  "pairing": "net11-xcode27",
+  "sdkVersion": "11.0.100",
+  "workloadVersion": "11.0.100.1",
+  "dotnetRoot": "~/.local/share/swift-bindings/toolchains/net11-xcode27.2/dotnet",
+  "developerDirectory": "/Applications/Xcode-27.2.0.app/Contents/Developer",
+  "ciRunner": "xcode-27",
+  "xcodeVersion": "27.2",
+  "targetFramework": "net11.0",
+  "tfmPlatformVersion": "27.2",
+  "platformLabel": "27.2",
+  "engines": ["coreclr-interpreter", "coreclr-r2r"],
+  "simRuntimes": ["iOS-27-2"],
+  "tvSimRuntimes": ["tvOS-27-2"]
+}

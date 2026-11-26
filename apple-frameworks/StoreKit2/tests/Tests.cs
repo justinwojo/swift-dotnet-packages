@@ -105,6 +105,28 @@ internal static class Tests
             "Native completion/cleanup is not established by managed unwind.");
     }
 
+    /// <summary>
+    /// Checks a generated enum (or <c>CaseTag</c>) against the binding's contract: each member's value
+    /// identifies its Swift case by name, not by position, so the named members must be defined, no
+    /// member may equal <c>default</c> (which names no case), and no two members may share a value.
+    /// </summary>
+    private static void AssertNameKeyedMembers<T>(params T[] named) where T : struct, Enum
+    {
+        foreach (var member in named)
+        {
+            if (!Enum.IsDefined(member))
+                throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
+        }
+        var seen = new HashSet<T>();
+        foreach (var member in Enum.GetValues<T>())
+        {
+            if (EqualityComparer<T>.Default.Equals(member, default))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
+            if (!seen.Add(member))
+                throw new InvalidOperationException($"{typeof(T).Name}.{member} shares its value with another member");
+        }
+    }
+
     public static async Task<int> RunAsync()
     {
         int passed = 0, failed = 0, skipped = 0;
@@ -316,19 +338,15 @@ internal static class Tests
             Fail("Storefront.Updates", ex.Message);
         }
 
-        // Test 11: StoreKitError.CaseTag enum values
+        // Test 11: StoreKitError.CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)StoreKitError.CaseTag.Unknown != 2)
-                throw new InvalidOperationException($"Unknown tag expected 2, got {(uint)StoreKitError.CaseTag.Unknown}");
-            if ((uint)StoreKitError.CaseTag.UserCancelled != 3)
-                throw new InvalidOperationException($"UserCancelled tag expected 3, got {(uint)StoreKitError.CaseTag.UserCancelled}");
-            if ((uint)StoreKitError.CaseTag.NotAvailableInStorefront != 4)
-                throw new InvalidOperationException($"NotAvailableInStorefront tag expected 4, got {(uint)StoreKitError.CaseTag.NotAvailableInStorefront}");
-            if ((uint)StoreKitError.CaseTag.NotEntitled != 5)
-                throw new InvalidOperationException($"NotEntitled tag expected 5, got {(uint)StoreKitError.CaseTag.NotEntitled}");
-            if ((uint)StoreKitError.CaseTag.Unsupported != 6)
-                throw new InvalidOperationException($"Unsupported tag expected 6, got {(uint)StoreKitError.CaseTag.Unsupported}");
+            AssertNameKeyedMembers(
+                StoreKitError.CaseTag.Unknown,
+                StoreKitError.CaseTag.UserCancelled,
+                StoreKitError.CaseTag.NotAvailableInStorefront,
+                StoreKitError.CaseTag.NotEntitled,
+                StoreKitError.CaseTag.Unsupported);
             Log($"StoreKitError CaseTag values verified");
             Pass("StoreKitError.CaseTag");
         }
@@ -359,17 +377,14 @@ internal static class Tests
             Fail("StoreKitError singletons", ex.Message);
         }
 
-        // Test 13: Product.SubscriptionPeriod.UnitKind.CaseTag enum values
+        // Test 13: Product.SubscriptionPeriod.UnitKind.CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Day != 0)
-                throw new InvalidOperationException($"Day tag expected 0, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Day}");
-            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Week != 1)
-                throw new InvalidOperationException($"Week tag expected 1, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Week}");
-            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Month != 2)
-                throw new InvalidOperationException($"Month tag expected 2, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Month}");
-            if ((uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Year != 3)
-                throw new InvalidOperationException($"Year tag expected 3, got {(uint)Product.SubscriptionPeriod.UnitKind.CaseTag.Year}");
+            AssertNameKeyedMembers(
+                Product.SubscriptionPeriod.UnitKind.CaseTag.Day,
+                Product.SubscriptionPeriod.UnitKind.CaseTag.Week,
+                Product.SubscriptionPeriod.UnitKind.CaseTag.Month,
+                Product.SubscriptionPeriod.UnitKind.CaseTag.Year);
             Log($"Product.SubscriptionPeriod.UnitKind.CaseTag values verified");
             Pass("Product.SubscriptionPeriod.UnitKind.CaseTag");
         }
@@ -378,15 +393,11 @@ internal static class Tests
             Fail("Product.SubscriptionPeriod.UnitKind.CaseTag", ex.Message);
         }
 
-        // Test 14: Product.PurchaseResult.CaseTag enum values
+        // Test 14: Product.PurchaseResult.CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)Product.PurchaseResult.CaseTag.Success != 0)
-                throw new InvalidOperationException($"Success tag expected 0, got {(uint)Product.PurchaseResult.CaseTag.Success}");
-            if ((uint)Product.PurchaseResult.CaseTag.UserCancelled != 1)
-                throw new InvalidOperationException($"UserCancelled tag expected 1, got {(uint)Product.PurchaseResult.CaseTag.UserCancelled}");
-            if ((uint)Product.PurchaseResult.CaseTag.Pending != 2)
-                throw new InvalidOperationException($"Pending tag expected 2, got {(uint)Product.PurchaseResult.CaseTag.Pending}");
+            AssertNameKeyedMembers(Product.PurchaseResult.CaseTag.Success, Product.PurchaseResult.CaseTag.UserCancelled,
+                Product.PurchaseResult.CaseTag.Pending);
             Log($"Product.PurchaseResult.CaseTag values verified");
             Pass("Product.PurchaseResult.CaseTag");
         }
@@ -395,13 +406,11 @@ internal static class Tests
             Fail("Product.PurchaseResult.CaseTag", ex.Message);
         }
 
-        // Test 15: ExternalPurchase.NoticeResult.CaseTag enum values
+        // Test 15: ExternalPurchase.NoticeResult.CaseTag members are distinct, name-keyed cases
         try
         {
-            if ((uint)ExternalPurchase.NoticeResult.CaseTag.ContinuedWithExternalPurchaseToken != 0)
-                throw new InvalidOperationException($"ContinuedWithExternalPurchaseToken tag expected 0, got {(uint)ExternalPurchase.NoticeResult.CaseTag.ContinuedWithExternalPurchaseToken}");
-            if ((uint)ExternalPurchase.NoticeResult.CaseTag.Cancelled != 1)
-                throw new InvalidOperationException($"Cancelled tag expected 1, got {(uint)ExternalPurchase.NoticeResult.CaseTag.Cancelled}");
+            AssertNameKeyedMembers(ExternalPurchase.NoticeResult.CaseTag.ContinuedWithExternalPurchaseToken,
+                ExternalPurchase.NoticeResult.CaseTag.Cancelled);
             Log($"ExternalPurchase.NoticeResult.CaseTag values verified");
             Pass("ExternalPurchase.NoticeResult.CaseTag");
         }
