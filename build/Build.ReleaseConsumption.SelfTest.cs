@@ -596,6 +596,21 @@ partial class Build
                     .Any(f => f.Contains("no Mach-O LC_UUID", StringComparison.OrdinalIgnoreCase)),
                 "an unidentifiable binary passed as package-provided");
 
+            // A merged package ships one copy per pairing; the consumer embeds only its own.
+            var tipKitOtherPairing = tipKitSim with
+            {
+                Origin = "native/net11.0-ios27.2/TipKitSwiftBindings.xcframework/ios-arm64_x86_64-simulator",
+                Uuids = new[] { "0F0F0F0F-0000-0000-0000-000000000027" },
+            };
+            var mergedImages = new[] { tipKitSim, tipKitOtherPairing, tipKitDevice, runtimeSim };
+            Assert("native provenance: a merged package passes when the consumer embeds one pairing's copy",
+                Provenance(goodBundle, mergedImages, staged).Count == 0,
+                string.Join("; ", Provenance(goodBundle, mergedImages, staged)));
+            Assert("native provenance: a merged package with none of its copies embedded is still rejected",
+                Provenance(new[] { goodBundle[1] }, mergedImages, staged)
+                    .Any(f => f.Contains("ships TipKitSwiftBindings.framework", StringComparison.Ordinal)),
+                "a staged merged package with no embedded copy passed");
+
             Assert("native provenance: a staged package's simulator framework must actually be embedded",
                 Provenance(new[] { goodBundle[1] }, packageImages, staged)
                     .Any(f => f.Contains("no framework of that build is embedded", StringComparison.OrdinalIgnoreCase)),

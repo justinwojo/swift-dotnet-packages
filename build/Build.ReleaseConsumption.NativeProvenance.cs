@@ -173,13 +173,22 @@ partial class Build
             .Where(p => p.Uuids.Count > 0)
             .ToList();
 
-        foreach (var image in stagedImages.OrderBy(p => p.Origin, StringComparer.Ordinal))
+        // A merged package ships one copy of each framework per pairing (native/net10.0-ios26.0/,
+        // native/net11.0-ios27.2/…) and a consumer embeds exactly one of them, so the rule is per
+        // (package, version, framework): one of its shipped copies must be the one embedded.
+        foreach (var copies in stagedImages
+                     .GroupBy(p => (Id: p.PackageId.ToLowerInvariant(), p.Version, p.Framework))
+                     .OrderBy(g => g.Min(p => p.Origin), StringComparer.Ordinal))
         {
-            if (!image.Uuids.Any(embeddedUuids.Contains))
+            if (!copies.Any(image => image.Uuids.Any(embeddedUuids.Contains)))
+            {
+                var image = copies.First();
                 failures.Add(
-                    $"{image.PackageId} {image.Version} ships {image.Framework}.framework at {image.Origin}, but no " +
+                    $"{image.PackageId} {image.Version} ships {image.Framework}.framework at " +
+                    $"{string.Join(", ", copies.Select(c => c.Origin).Order(StringComparer.Ordinal))}, but no " +
                     "framework of that build is embedded in the app. The app linked something else, so the native " +
                     "code under release is not the native code that ran.");
+            }
         }
 
         var stagedWithNative = stagedImages
