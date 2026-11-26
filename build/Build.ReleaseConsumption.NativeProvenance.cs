@@ -70,7 +70,11 @@ partial class Build
         string laneLabel,
         Action<string> info)
     {
-        var embedded = IndexEmbeddedFrameworks(appPath);
+        var (embedded, appOwned) = SplitAppOwnedFrameworks(
+            IndexEmbeddedFrameworks(appPath), Path.GetFileNameWithoutExtension(appPath));
+        foreach (var image in appOwned)
+            info($"  {image.Framework}.framework in the app bundle is the app's own composite ReadyToRun image " +
+                 $"(built from its managed assemblies, uuid {(image.Uuids.Count > 0 ? image.Uuids[0] : "none")}), not package native code");
         var packageImages = ResolvedImages(IndexPackageNativeImages(packagesDir), resolvedPackages);
 
         var failures = NativeProvenanceFailures(embedded, packageImages, resolvedPackages, stagedPackages);
@@ -88,6 +92,24 @@ partial class Build
     }
 
     // ── Pure judging (covered by TestReleaseConsumption) ────────────────────
+
+    /// <summary>
+    /// Separate the one framework a CoreCLR app builds for itself from the frameworks that came
+    /// from somewhere else. A .NET 11 (CoreCLR) app embeds <c>&lt;AppName&gt;.r2r.framework</c>,
+    /// the composite ReadyToRun image the SDK compiles from the app's managed assemblies (the
+    /// framework assemblies in Debug, all of them in Release). No package ships it, so the "nothing
+    /// foreign got in" rule would red every CoreCLR consume; the package assemblies among its inputs
+    /// are covered by the MVID check. Only that name is set aside (compared ignoring case, since the
+    /// bundle path can carry the caller's spelling on a case-insensitive volume): anything else,
+    /// including a differently named <c>*.r2r</c> framework, is still judged.
+    /// </summary>
+    internal static (IReadOnlyList<EmbeddedNativeImage> Judged, IReadOnlyList<EmbeddedNativeImage> AppOwned)
+        SplitAppOwnedFrameworks(IReadOnlyList<EmbeddedNativeImage> embedded, string appName)
+    {
+        var composite = appName + ".r2r";
+        bool IsComposite(EmbeddedNativeImage e) => string.Equals(e.Framework, composite, StringComparison.OrdinalIgnoreCase);
+        return (embedded.Where(e => !IsComposite(e)).ToList(), embedded.Where(IsComposite).ToList());
+    }
 
     /// <summary>
     /// An xcframework slice directory the iOS Simulator build could have drawn

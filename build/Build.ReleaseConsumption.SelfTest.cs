@@ -577,6 +577,26 @@ partial class Build
                 Provenance(goodBundle, packageImages, staged).Count == 0,
                 string.Join("; ", Provenance(goodBundle, packageImages, staged)));
 
+            // A CoreCLR app embeds its own composite ReadyToRun image; no package ships it.
+            var r2rImage = new EmbeddedNativeImage("App.Tests.r2r", "/app/Frameworks/App.Tests.r2r.framework/App.Tests.r2r",
+                new[] { "AFA43F9A-37E3-3447-8ADA-93173F3E7DF8" });
+            var (judged, appOwned) = SplitAppOwnedFrameworks(goodBundle.Append(r2rImage).ToList(), "App.Tests");
+            Assert("native provenance: the app's own <AppName>.r2r composite image is set aside, the rest still judged",
+                appOwned.Count == 1 && appOwned[0] == r2rImage && judged.Count == goodBundle.Length
+                && Provenance(judged, packageImages, staged).Count == 0,
+                $"app-owned [{string.Join(",", appOwned.Select(a => a.Framework))}], judged {judged.Count}");
+            var (_, appOwnedCased) = SplitAppOwnedFrameworks(goodBundle.Append(r2rImage).ToList(), "app.tests");
+            Assert("native provenance: the app's own composite is found when the bundle path is spelled in another case",
+                appOwnedCased.Count == 1 && appOwnedCased[0] == r2rImage,
+                "the composite was judged when the app name differed only by case");
+            var (judgedOther, appOwnedOther) = SplitAppOwnedFrameworks(
+                goodBundle.Append(r2rImage with { Framework = "Other.Tests.r2r" }).ToList(), "App.Tests");
+            Assert("native provenance: a .r2r framework named for another app is still judged (and rejected)",
+                appOwnedOther.Count == 0
+                && Provenance(judgedOther, packageImages, staged)
+                    .Any(f => f.Contains("matches no framework", StringComparison.OrdinalIgnoreCase)),
+                "a foreign .r2r framework was set aside as the app's own");
+
             // The lane's core native false-green: the source build left a
             // working-tree xcframework and the app embedded that instead.
             var workingTreeBundle = new[]
