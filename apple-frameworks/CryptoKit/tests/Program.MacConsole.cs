@@ -6,6 +6,6 @@ namespace SwiftBindings.CryptoKit.Tests;
 
 internal static class MacEntry
 {
-    static System.Threading.Tasks.Task<int> Main() => Tests.RunAsync();
+    static int Main() => SwiftBindings.Testing.MacConsoleMain.Run(Tests.RunAsync);
 }
 #endif

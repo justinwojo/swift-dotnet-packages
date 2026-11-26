@@ -6,6 +6,6 @@ namespace SwiftBindings.VisionKit.Tests;
 
 internal static class MacEntry
 {
-    static async Task<int> Main() => await Tests.RunAsync();
+    static int Main() => SwiftBindings.Testing.MacConsoleMain.Run(Tests.RunAsync);
 }
 #endif

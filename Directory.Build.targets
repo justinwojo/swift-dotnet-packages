@@ -13,6 +13,13 @@
     <Compile Include="$(MSBuildThisFileDirectory)tests-shared/SwiftBindingsSceneDelegate.cs" Link="Shared/SwiftBindingsSceneDelegate.cs" />
   </ItemGroup>
 
+  <!-- Async entry point for every macOS console test app: the Xcode 27.2 workloads install AppKit's
+       synchronization context on the main thread of every macOS app, so an async Main deadlocks on
+       its first await unless the main run loop turns. See tests-shared/MacConsoleMain.cs. -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) and $(TargetFramework.Contains('-macos'))">
+    <Compile Include="$(MSBuildThisFileDirectory)tests-shared/MacConsoleMain.cs" Link="Shared/MacConsoleMain.cs" />
+  </ItemGroup>
+
   <!--
     Harness lane hook.
 
