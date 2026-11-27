@@ -236,7 +236,8 @@ partial class Build
     /// answer.</para>
     /// </summary>
     (TestRunResult? Result, string? Unavailable) ValidateTvOsFor(
-        string library, int timeoutSeconds, Action<string>? onLine = null, string configuration = "Debug")
+        string library, int timeoutSeconds, Action<string>? onLine = null, string configuration = "Debug",
+        AbsolutePath? outputRoot = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -249,7 +250,7 @@ partial class Build
         var rids = string.IsNullOrEmpty(RuntimeIdentifier)
             ? new[] { "tvossimulator-arm64", "tvossimulator-x64" }
             : new[] { RuntimeIdentifier };
-        var candidates = rids.Select(r => ResolveAppPath(testDir, configuration, "tvos", r, appName)).ToList();
+        var candidates = rids.Select(r => ResolveAppPath(outputRoot ?? testDir, configuration, "tvos", r, appName)).ToList();
         var appPath = candidates.FirstOrDefault(c => Directory.Exists(c));
         if (appPath is null)
             throw new InvalidOperationException(
@@ -468,7 +469,7 @@ partial class Build
     /// instead of throwing — callers wrap with <see cref="ReportTerminalStatus"/>.
     /// </summary>
     TestRunResult ValidateMacFor(string library, int timeoutSeconds, string rid, Action<string>? onLine = null,
-        string configuration = "Debug")
+        string configuration = "Debug", AbsolutePath? outputRoot = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -479,7 +480,7 @@ partial class Build
         var storeKitLane = ResolveStoreKitSandboxLane(library, "macos", bundleId);
 
         string? binaryPath = null;
-        var candidates = MacBinaryCandidates(testDir, configuration, rid, appName);
+        var candidates = MacBinaryCandidates(outputRoot ?? testDir, configuration, rid, appName);
         foreach (var candidate in candidates)
         {
             if (File.Exists(candidate))
@@ -535,7 +536,7 @@ partial class Build
     /// immutable evidence directory.
     /// </summary>
     TestRunResult ValidateMacCatalystFor(string library, int timeoutSeconds, string rid,
-        Action<string>? onLine = null, string configuration = "Debug")
+        Action<string>? onLine = null, string configuration = "Debug", AbsolutePath? outputRoot = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -544,7 +545,7 @@ partial class Build
         // Offline-only for StoreKit2 whatever is configured: the ad-hoc signed Catalyst test app
         // cannot hold a Sandbox receipt and no Mac Catalyst readiness control exists.
         var storeKitLane = ResolveStoreKitSandboxLane(library, "maccatalyst", bundleId);
-        var appPath = ResolveAppPath(testDir, configuration, "maccatalyst", rid, appName);
+        var appPath = ResolveAppPath(outputRoot ?? testDir, configuration, "maccatalyst", rid, appName);
         var binaryPath = appPath / "Contents" / "MacOS" / appName;
 
         if (!File.Exists(binaryPath))

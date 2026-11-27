@@ -62,13 +62,15 @@ partial class Build
     /// out of the lane's package cache, and the staged packages' frameworks are
     /// the ones that got there.
     /// </summary>
-    internal static void AssertEmbeddedFrameworksCameFromPackages(
+    internal static IReadOnlyList<string> AssertEmbeddedFrameworksCameFromPackages(
         AbsolutePath appPath,
         AbsolutePath packagesDir,
         IReadOnlyCollection<(string PackageId, string Version)> resolvedPackages,
         IReadOnlyCollection<(string PackageId, string Version)> stagedPackages,
         string laneLabel,
-        Action<string> info)
+        Action<string> info,
+        string platform = "ios",
+        string? expectedCopyTfm = null)
     {
         var (embedded, appOwned) = SplitAppOwnedFrameworks(
             IndexEmbeddedFrameworks(appPath), Path.GetFileNameWithoutExtension(appPath));
@@ -77,18 +79,29 @@ partial class Build
                  $"(built from its managed assemblies, uuid {(image.Uuids.Count > 0 ? image.Uuids[0] : "none")}), not package native code");
         var packageImages = ResolvedImages(IndexPackageNativeImages(packagesDir), resolvedPackages);
 
-        var failures = NativeProvenanceFailures(embedded, packageImages, resolvedPackages, stagedPackages);
+        var failures = NativeProvenanceFailures(embedded, packageImages, resolvedPackages, stagedPackages,
+            slice => ConsumeSliceMatches(platform, slice), expectedCopyTfm);
         if (failures.Count > 0)
             throw new InvalidOperationException(
                 $"{laneLabel}: the built app's native code is not the packages' native code:\n  " +
                 string.Join("\n  ", failures));
 
+        var copies = new List<string>();
         foreach (var image in embedded.OrderBy(e => e.Framework, StringComparer.Ordinal))
         {
-            var source = packageImages.First(p => p.Uuids.Intersect(image.Uuids, StringComparer.Ordinal).Any());
+            // Name the copy the gate accepted: this pairing's, when the package ships one.
+            // The same rule the gate applied: an image that accounts for every embedded UUID.
+            var sources = packageImages.Where(p => image.Uuids.All(u => p.Uuids.Contains(u, StringComparer.Ordinal))).ToList();
+            if (sources.Count == 0)
+                sources = packageImages.Where(p => p.Uuids.Intersect(image.Uuids, StringComparer.Ordinal).Any()).ToList();
+            var source = sources.FirstOrDefault(p => expectedCopyTfm is not null
+                             && string.Equals(CopyTfmOf(p.Origin), expectedCopyTfm, StringComparison.OrdinalIgnoreCase))
+                         ?? sources.First();
+            copies.Add($"{image.Framework} <- {source.PackageId} {source.Origin}");
             info($"  {image.Framework}.framework in the app bundle is {source.PackageId} {source.Version}'s own build " +
-                 $"(uuid {image.Uuids[0]})");
+                 $"from {source.Origin} (uuid {image.Uuids[0]})");
         }
+        return copies;
     }
 
     // ── Pure judging (covered by TestReleaseConsumption) ────────────────────
@@ -150,12 +163,20 @@ partial class Build
     /// than a linked image; it is never embedded, so it is not required to
     /// appear — and it can never satisfy rule 1 for anything either.</para>
     /// </summary>
+    /// <remarks><paramref name="sliceMatches"/> names the slices the consumer's platform embeds
+    /// (default: the iOS simulator). With <paramref name="expectedCopyTfm"/>, rule 2 is per pairing
+    /// copy: of a merged package's copies (<c>native/&lt;copy&gt;/…</c>), the one embedded must be the
+    /// consumer pairing's own. A copy byte-identical to it is not a mismatch (the selection is moot);
+    /// another pairing's distinct build is.</remarks>
     internal static IReadOnlyList<string> NativeProvenanceFailures(
         IReadOnlyList<EmbeddedNativeImage> embedded,
         IReadOnlyList<PackageNativeImage> packageImages,
         IReadOnlyCollection<(string PackageId, string Version)> resolvedPackages,
-        IReadOnlyCollection<(string PackageId, string Version)> stagedPackages)
+        IReadOnlyCollection<(string PackageId, string Version)> stagedPackages,
+        Func<string, bool>? sliceMatches = null,
+        string? expectedCopyTfm = null)
     {
+        sliceMatches ??= IsIosSimulatorSlice;
         var failures = new List<string>();
 
         // Callers hand in the cache index; narrowing it here as well keeps the
@@ -191,7 +212,7 @@ partial class Build
 
         var stagedImages = packageImages
             .Where(p => Names(stagedPackages, p))
-            .Where(p => IsIosSimulatorSlice(p.Slice))
+            .Where(p => sliceMatches(p.Slice))
             .Where(p => p.Uuids.Count > 0)
             .ToList();
 
@@ -210,6 +231,36 @@ partial class Build
                     $"{string.Join(", ", copies.Select(c => c.Origin).Order(StringComparer.Ordinal))}, but no " +
                     "framework of that build is embedded in the app. The app linked something else, so the native " +
                     "code under release is not the native code that ran.");
+                continue;
+            }
+
+            if (expectedCopyTfm is null) continue;
+            var own = copies
+                .Where(c => string.Equals(CopyTfmOf(c.Origin), expectedCopyTfm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var first = copies.First();
+            if (own.Count == 0)
+            {
+                failures.Add(
+                    $"{first.PackageId} {first.Version} ships {first.Framework}.framework only at " +
+                    $"{string.Join(", ", copies.Select(c => c.Origin).Order(StringComparer.Ordinal))} — no " +
+                    $"native/{expectedCopyTfm}/ copy, so this pairing's consumer cannot have embedded its own.");
+                continue;
+            }
+            // Every UUID of each embedded build of this framework must come from one of this
+            // pairing's copies (the SDK may thin a fat image, so a subset is fine): a shared
+            // x86_64 UUID cannot vouch for a foreign arm64 slice.
+            var embeddedBuilds = embedded
+                .Where(e => e.Uuids.Count > 0 && copies.Any(c => c.Uuids.Intersect(e.Uuids, StringComparer.Ordinal).Any()))
+                .ToList();
+            if (!embeddedBuilds.All(e => own.Any(c => e.Uuids.All(u => c.Uuids.Contains(u, StringComparer.Ordinal)))))
+            {
+                var taken = copies.Where(c => c.Uuids.Any(embeddedUuids.Contains)).Select(c => c.Origin)
+                    .Order(StringComparer.Ordinal);
+                failures.Add(
+                    $"{first.PackageId} {first.Version}: the app embeds {first.Framework}.framework from " +
+                    $"{string.Join(", ", taken)}, not this pairing's {string.Join(", ", own.Select(c => c.Origin))} — " +
+                    "the consumer selected another pairing's native build.");
             }
         }
 
@@ -228,7 +279,7 @@ partial class Build
             .ToList();
         if (stagedWithoutNative.Count > 0)
             failures.Add(
-                $"[{string.Join(", ", stagedWithoutNative)}] ship no iOS-simulator framework the lane could identify, " +
+                $"[{string.Join(", ", stagedWithoutNative)}] ship no framework for this platform's slice that the lane could identify, " +
                 "so the native provenance check would pass vacuously for them. Every SwiftBindings binding package " +
                 "carries at least a wrapper xcframework; a package that does not is either mis-packed or a shape this " +
                 "gate has not been taught, and both need a human rather than a green.");
@@ -257,10 +308,13 @@ partial class Build
 
     // ── Filesystem indexing ─────────────────────────────────────────────────
 
-    /// <summary>Every framework under <c>&lt;App&gt;.app/Frameworks</c>, with its identity.</summary>
+    /// <summary>Every framework under <c>&lt;App&gt;.app/Frameworks</c> (or <c>Contents/Frameworks</c>), with its identity.</summary>
     internal static IReadOnlyList<EmbeddedNativeImage> IndexEmbeddedFrameworks(AbsolutePath appPath)
     {
-        var frameworksDir = appPath / "Frameworks";
+        // Flat on iOS and tvOS; behind Contents/ in a macOS or Mac Catalyst bundle.
+        var frameworksDir = Directory.Exists(appPath / "Frameworks")
+            ? appPath / "Frameworks"
+            : appPath / "Contents" / "Frameworks";
         if (!Directory.Exists(frameworksDir)) return Array.Empty<EmbeddedNativeImage>();
 
         return Directory

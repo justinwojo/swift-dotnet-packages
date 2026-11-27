@@ -64,36 +64,47 @@ partial class Build
     /// simulator, and verify the identity of what actually loaded.
     /// </summary>
     Target ReleaseConsume => _ => _
-        .Description("Consume the staged .nupkg from a clean feed + cache and run the test app on the simulator " +
-                     "(--library X --version V [--consume-feed dir] [--consume-versions \"Id=V;…\"] [--timeout N] [--device-udid UDID])")
+        .Description("Consume the staged .nupkg from a clean feed + cache and run the test app on each requested host " +
+                     "platform, proving its engine and its pairing copy (--library X --version V [--consume-platforms " +
+                     "ios-sim,macos,…|host] [--consume-feed dir] [--consume-versions \"Id=V;…\"] [--timeout N] [--device-udid UDID])")
         .Requires(() => Library)
         .Requires(() => Version)
         .Executes(() =>
         {
             var feed = string.IsNullOrEmpty(ConsumeFeed) ? LocalPackagesDir : (AbsolutePath)ConsumeFeed;
-            RunReleaseConsumptionLeg(Library!, Version!, feed, Timeout, DeviceUdid, onLine: null);
+            RunReleaseConsumptionLegs(Library!, Version!, feed);
         });
 
     /// <summary>
-    /// The lane itself, callable from <c>ReleaseWave</c> (which passes its own
-    /// per-library log sink and the simulator it already leased). Throws on any
-    /// failure — a caller that reaches the next line has a release-consumable
-    /// package.
+    /// One leg of the lane — one host platform in the configuration its validate cell uses —
+    /// callable from <c>ReleaseWave</c> (which passes its own per-library log sink and the
+    /// simulator it already leased; it consumes on the iOS simulator, the default). Throws on
+    /// any failure — a caller that reaches the next line has a package this pairing consumes
+    /// on <paramref name="platform"/>, on the engine that platform's cell proves.
+    /// <paramref name="onEngineProven"/> fires once the built bundle has proven its engine.
     /// </summary>
-    internal void RunReleaseConsumptionLeg(
+    internal ConsumeLegEvidence RunReleaseConsumptionLeg(
         string library, string version, AbsolutePath feed, int timeoutSeconds,
         string? simUdid, Action<string>? onLine,
-        IReadOnlyDictionary<string, string>? versionOverrides = null)
+        IReadOnlyDictionary<string, string>? versionOverrides = null,
+        CellPlatform platform = CellPlatform.IosSim,
+        Action? onEngineProven = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
         var sw = Stopwatch.StartNew();
         var (testDir, appName, bundleId) = ResolveTestNames(library);
+        var platformName = ConsumePlatformName(platform);
+        var configuration = CellConfiguration(platform);
+        var expectedEngine = ExpectedEngine(platform);
+        var copyTfm = ActivePairing.CopyTfm(platformName);
         // A missing Sandbox product id runs the offline suite and ends UNQUALIFIED.
         // ReleaseSimulationAccepted treats that as publishable: every check that
         // can run has passed. A malformed id still throws inside ResolveLane.
-        var storeKitConfiguration = ResolveStoreKitSandboxLane(library, "ios", bundleId)?.Configuration;
-        var laneLabel = $"release-consume/{library}";
+        var storeKitLane = ResolveStoreKitSandboxLane(library, platformName, bundleId);
+        var laneLabel = $"release-consume/{library}/{PlatformLabel(platform)}";
+        Info($"=== {laneLabel}: engine {ToolchainPairing.EngineName(expectedEngine)} (pairing {ActivePairing.Name}, " +
+             $"-c {configuration}, -f {PlatformTfm(platform)}, package copy {copyTfm}) ===");
 
         Info($"=== {laneLabel}: consuming staged packages from {feed} ===");
 
@@ -148,8 +159,12 @@ partial class Build
         //    so the lane cannot write into (or read stale state out of) the
         //    tree the ProjectReference lanes use, and two lanes can run against
         //    the same test app without racing on project.assets.json.
-        var scratch = ReleaseConsumptionRoot / library;
-        var packagesDir = scratch / "packages";
+        //    The package cache is per library and shared by its legs; obj/,
+        //    bin/ and the lane props are per leg, so one platform's build can
+        //    never stand in for another's.
+        var libraryRoot = ReleaseConsumptionRoot / library;
+        var scratch = libraryRoot / PlatformLabel(platform);
+        var packagesDir = libraryRoot / "packages";
         var laneDir = scratch / "lane";
         var objDir = scratch / "obj";
         var binDir = scratch / "bin";
@@ -181,7 +196,7 @@ partial class Build
         // frameworks.
         var laneProps = WriteLaneProps(
             laneDir, swaps, withEvidence: true,
-            workingTreeRoot: RootDirectory, laneScratchRoot: scratch);
+            workingTreeRoot: RootDirectory, laneScratchRoot: libraryRoot);
 
         var sharedProps = new[]
         {
@@ -200,8 +215,18 @@ partial class Build
                 $"{laneLabel}: package-mode restore failed with exit {restoreExit}. " +
                 "A consumer cannot install this package as published.");
 
-        // 6. Build the app in package mode.
-        BuildTestAppSimulator(library, testDir, "ios", onLine, noRestore: true, extraArgs: sharedProps);
+        // 6. Build the app in package mode, then prove its engine from the bundle exactly
+        //    as the platform's validate cell does, before anything is launched.
+        BuildTestAppSimulator(library, testDir, platformName, onLine, noRestore: true, extraArgs: sharedProps,
+            configuration: configuration);
+        var appPath = ConsumeBundlePath(scratch, configuration, platformName, appName)
+            ?? throw new InvalidOperationException(
+                $"{laneLabel}: package-mode build produced no {appName} bundle for {platformName} ({configuration}) " +
+                $"under {binDir}.");
+        if (EngineEvidence.Mismatch(appPath, appName, expectedEngine) is { } engineMismatch)
+            throw new InvalidOperationException($"{laneLabel}: ENGINE NOT PROVEN — {engineMismatch}");
+        Info($"=== {laneLabel}: engine proven from the bundle: {ToolchainPairing.EngineName(expectedEngine)} ===");
+        onEngineProven?.Invoke();
 
         // 7. Static identity — the restore graph, the archive that fed it, and
         //    the binaries the app actually ships.
@@ -209,14 +234,11 @@ partial class Build
         AssertStagedPackagesCameFromTheFeed(feed, packagesDir, stagedPackages, laneLabel, Info);
         var resolvedPackages = ResolvedPackages(File.ReadAllText(objDir / "project.assets.json"));
 
-        var rid = ResolveRid("iossimulator-arm64");
-        var appPath = ResolveAppPath(scratch, "Debug", "ios", rid, appName);
-        if (!Directory.Exists(appPath))
-            throw new InvalidOperationException(
-                $"{laneLabel}: package-mode build produced no app bundle at {appPath}.");
-        AssertDeployedAssembliesCameFromPackages(appPath, swaps, packagesDir, laneLabel, Info);
-        AssertEmbeddedFrameworksCameFromPackages(
-            appPath, packagesDir, resolvedPackages, stagedPackages, laneLabel, Info);
+        var managedCopies = AssertDeployedAssembliesCameFromPackages(
+            appPath, swaps, packagesDir, laneLabel, Info, expectedCopyTfm: copyTfm, copyCheckedIds: stagedIds);
+        var nativeCopies = AssertEmbeddedFrameworksCameFromPackages(
+            appPath, packagesDir, resolvedPackages, stagedPackages, laneLabel, Info,
+            platform: platformName, expectedCopyTfm: copyTfm);
 
         // 8. Runtime — install, launch, and require the suite to pass. Given no
         //    --device-udid, ValidateSimAt resolves a concrete iOS-family
@@ -226,19 +248,48 @@ partial class Build
         //    The run budget is the library's own floor when it has one, so a suite whose
         //    bounded awaits exceed the lane's --timeout reports a verdict rather than being
         //    killed mid-run.
-        var result = ValidateSimAt(appPath, appName, bundleId,
-            ResolveRunBudgetSeconds(library, timeoutSeconds), simUdid, Info,
-            storeKitConfiguration, library);
+        //    Every other platform launches through its own validator, pointed at
+        //    the lane's output root, so it resolves the same bundle the engine
+        //    gate inspected.
+        TestRunResult result;
+        switch (platformName)
+        {
+            case "ios":
+                // The same StoreKit lane verdict ValidateSimFor applies, so a run whose live
+                // section was configured cannot come back merely unqualified.
+                result = ApplyStoreKitLaneVerdict(ValidateSimAt(appPath, appName, bundleId,
+                    ResolveRunBudgetSeconds(library, timeoutSeconds), simUdid, Info,
+                    storeKitLane?.Configuration, library), storeKitLane);
+                break;
+            case "macos":
+                result = ValidateMacFor(library, timeoutSeconds, "osx-arm64", Info, configuration, outputRoot: scratch);
+                break;
+            case "maccatalyst":
+                result = ValidateMacCatalystFor(library, timeoutSeconds, "maccatalyst-arm64", Info, configuration,
+                    outputRoot: scratch);
+                break;
+            case "tvos":
+            {
+                var (tvResult, unavailable) = ValidateTvOsFor(library, timeoutSeconds, Info, configuration, outputRoot: scratch);
+                result = tvResult ?? throw new InvalidOperationException(
+                    $"{laneLabel}: UNAVAILABLE — {unavailable}. A consume leg that did not run is not a pass.");
+                break;
+            }
+            default:
+                throw new InvalidOperationException($"{laneLabel}: no validator for {platformName}");
+        }
         if (!ReleaseSimulationAccepted(result.Status))
             throw new InvalidOperationException(
-                $"{laneLabel}: the packaged consumer failed on the simulator — {result.Status}" +
+                $"{laneLabel}: the packaged consumer failed on {PlatformLabel(platform)} — {result.Status}" +
                 (result.Reason is null ? "" : $" ({result.Reason})"));
         if (result.Status == TestRunStatus.Unqualified)
             Info($"{laneLabel}: UNQUALIFIED — the checks that could run passed; live credential qualification was not configured");
 
-        // 9. Runtime identity — what the process itself says it loaded.
-        // .NET 10 simulator apps run Mono; .NET 11 ones run CoreCLR (interpreter in Debug).
-        AssertRuntimeFlavor(result.Output, expectMono: AppsRunOnMono, laneLabel);
+        // 9. Runtime identity — what the process itself says it loaded. Mono
+        //    (.NET 10 simulator, tvOS and Catalyst apps) or not (every CoreCLR
+        //    engine, and macOS on either .NET); the bundle proof above already
+        //    separated the CoreCLR engines.
+        AssertRuntimeFlavor(result.Output, expectMono: expectedEngine == AppEngine.Mono, laneLabel);
         var identityFailures = swaps
             .Select(s => LaneEvidenceGate.JudgeAssemblyIdentity(result.Output, s.PackageId, s.Version))
             .Where(f => f is not null)
@@ -249,7 +300,9 @@ partial class Build
                 string.Join("\n  ", identityFailures));
 
         Info($"=== {laneLabel}: OK — {swaps.Count} package(s) restored, linked, loaded and validated " +
-             $"in {sw.Elapsed.TotalSeconds:F0}s ===");
+             $"on {ToolchainPairing.EngineName(expectedEngine)} from the {copyTfm} copy in {sw.Elapsed.TotalSeconds:F0}s ===");
+        return new ConsumeLegEvidence(string.Join("; ", managedCopies), nativeCopies,
+            result.Status == TestRunStatus.Unqualified ? result.Reason ?? "live credential qualification was not configured" : null);
     }
 
     // ── Pure helpers (covered by TestReleaseConsumption) ────────────────────
@@ -705,14 +758,17 @@ partial class Build
     /// compilation, so this separates "restored the package" from "recompiled
     /// the same source" in a way a version-string comparison cannot.
     /// </summary>
-    internal static void AssertDeployedAssembliesCameFromPackages(
+    internal static IReadOnlyList<string> AssertDeployedAssembliesCameFromPackages(
         AbsolutePath appPath,
         IReadOnlyList<(string Include, string PackageId, string Version)> swaps,
         AbsolutePath packagesDir,
         string laneLabel,
-        Action<string> info)
+        Action<string> info,
+        string? expectedCopyTfm = null,
+        IReadOnlySet<string>? copyCheckedIds = null)
     {
         var failures = new List<string>();
+        var selected = new List<string>();
 
         foreach (var (_, id, version) in swaps)
         {
@@ -750,6 +806,25 @@ partial class Build
                 continue;
             }
 
+            // A merged package ships one copy per pairing; the consumer must have taken its own.
+            // Only the packages under release are held to it: an unstaged dependency restored at
+            // its published pin may legitimately carry an older copy layout.
+            if (expectedCopyTfm is not null && (copyCheckedIds is null || copyCheckedIds.Contains(id)))
+            {
+                var copies = candidates
+                    .Select((c, i) => (CopyTfm: CopyTfmOf(Path.GetRelativePath(packageRoot, c)) ?? "?", Mvid: packageMvids[i]))
+                    .ToList();
+                var (copyFailure, note) = JudgeManagedCopy(id, deployedMvid.Value, copies, expectedCopyTfm);
+                if (copyFailure is not null)
+                {
+                    failures.Add(copyFailure);
+                    continue;
+                }
+                selected.Add($"{id} {note}");
+                info($"  {id}.dll in the app bundle is the package's {note} build (mvid {deployedMvid})");
+                continue;
+            }
+
             if (!packageMvids.Any(m => m == deployedMvid))
             {
                 failures.Add(
@@ -759,6 +834,7 @@ partial class Build
                 continue;
             }
 
+            selected.Add(id);
             info($"  {id}.dll in the app bundle is the package's own build (mvid {deployedMvid})");
         }
 
@@ -766,6 +842,7 @@ partial class Build
             throw new InvalidOperationException(
                 $"{laneLabel}: the built app does not carry the packaged assemblies:\n  " +
                 string.Join("\n  ", failures));
+        return selected;
     }
 
     /// <summary>Module version id of a managed assembly, or null if unreadable.</summary>

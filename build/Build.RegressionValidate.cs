@@ -538,7 +538,7 @@ partial class Build
     /// <c>-c Release</c>, which runs ReadyToRun CoreCLR code where Debug runs the CoreCLR
     /// interpreter. Each is its own cell because each engine needs its own proof.</para>
     /// </summary>
-    enum CellPlatform
+    internal enum CellPlatform
     {
         IosSim, IosDevice, IosDeviceDefault, MacOs, MacCatalyst, TvOs,
         IosSimRelease, MacCatalystRelease, TvOsRelease,
@@ -1463,6 +1463,20 @@ partial class Build
     string? EngineMismatch(AbsolutePath testDir, string configuration, string platform, string appName,
         AppEngine expected)
     {
+        var bundle = EngineBundleCandidates(testDir, configuration, platform, appName).FirstOrDefault(c => Directory.Exists(c));
+        return bundle is null
+            ? $"no built {appName} for {platform} ({configuration}) where the validator looks"
+            : EngineEvidence.Mismatch(bundle, appName, expected);
+    }
+
+    /// <summary>
+    /// The bundle directories a validator launches for <paramref name="platform"/>, in its probe
+    /// order, under <paramref name="testDir"/>'s <c>bin/</c> (a test app's own tree, or the
+    /// consume lane's redirected output root).
+    /// </summary>
+    IEnumerable<AbsolutePath> EngineBundleCandidates(AbsolutePath testDir, string configuration, string platform,
+        string appName)
+    {
         IEnumerable<AbsolutePath> candidates = platform switch
         {
             "ios" => new[] { ResolveAppPath(testDir, configuration, "ios", "iossimulator-arm64", appName) },
@@ -1480,10 +1494,7 @@ partial class Build
                     : b.Parent),
             _ => throw new InvalidOperationException($"no engine proof for platform {platform}"),
         };
-        var bundle = candidates.FirstOrDefault(c => Directory.Exists(c));
-        return bundle is null
-            ? $"no built {appName} for {platform} ({configuration}) where the validator looks"
-            : EngineEvidence.Mismatch(bundle, appName, expected);
+        return candidates;
     }
 
     static CellOutcome ToOutcome(

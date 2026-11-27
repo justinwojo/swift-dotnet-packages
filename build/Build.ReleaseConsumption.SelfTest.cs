@@ -780,6 +780,193 @@ partial class Build
                 ConsumptionNuGetConfig((AbsolutePath)"/tmp/staged&A").Contains("value=\"/tmp/staged&amp;A\"", StringComparison.Ordinal),
                 "the feed path was interpolated raw and would produce a malformed NuGet.config");
 
+            // ── Consume legs: platform selection ──────────────────────────
+            string LegTfm(CellPlatform p) => BasePlatform(p) switch
+            {
+                CellPlatform.IosSim => "netX-ios",
+                CellPlatform.MacOs => "netX-macos",
+                CellPlatform.MacCatalyst => "netX-maccatalyst",
+                CellPlatform.TvOs => "netX-tvos",
+                _ => "netX-device",
+            };
+            var hostNet11 = new[]
+            {
+                CellPlatform.IosSim, CellPlatform.IosSimRelease, CellPlatform.MacOs, CellPlatform.MacCatalyst,
+                CellPlatform.MacCatalystRelease, CellPlatform.TvOs, CellPlatform.TvOsRelease,
+            };
+            var declaredNoCatalyst = new[] { "netX-ios", "netX-macos", "netX-tvos" };
+            var hostLegs = PlanConsumeLegs(hostNet11, declaredNoCatalyst, LegTfm, Array.Empty<CellPlatform>(), "self-test");
+            Assert("consume legs: host keeps every declared platform, Debug and Release, in order",
+                hostLegs.SequenceEqual(new[]
+                {
+                    CellPlatform.IosSim, CellPlatform.IosSimRelease, CellPlatform.MacOs, CellPlatform.TvOs, CellPlatform.TvOsRelease,
+                }),
+                $"got [{string.Join(", ", hostLegs.Select(PlatformLabel))}]");
+            Assert("consume legs: a repeated platform runs once",
+                PlanConsumeLegs(new[] { CellPlatform.MacOs, CellPlatform.MacOs }, declaredNoCatalyst, LegTfm, new[] { CellPlatform.MacOs }, "self-test").Count == 1,
+                "a duplicate platform produced two legs");
+            AssertThrows("consume legs: an explicitly named platform the test app does not declare is refused, not dropped",
+                () => PlanConsumeLegs(new[] { CellPlatform.IosSim, CellPlatform.MacCatalyst }, declaredNoCatalyst, LegTfm,
+                    new[] { CellPlatform.IosSim, CellPlatform.MacCatalyst }, "self-test"),
+                "does not declare", "maccatalyst");
+            AssertThrows("consume legs: a platform named next to host stays strict",
+                () => PlanConsumeLegs(hostNet11, declaredNoCatalyst, LegTfm, new[] { CellPlatform.MacCatalyst }, "self-test"),
+                "does not declare", "maccatalyst");
+            AssertThrows("consume legs: a device lane is refused",
+                () => PlanConsumeLegs(new[] { CellPlatform.IosDevice }, declaredNoCatalyst, LegTfm, new[] { CellPlatform.IosDevice }, "self-test"),
+                "device lane");
+            AssertThrows("consume legs: a plan with no declared platform fails closed",
+                () => PlanConsumeLegs(new[] { CellPlatform.MacCatalyst }, declaredNoCatalyst, LegTfm, Array.Empty<CellPlatform>(), "self-test"),
+                "nothing to consume");
+            Assert("consume legs: each leg proves the engine its validate cell proves",
+                ExpectedEngine(CellPlatform.MacOs) == AppEngine.CoreClrJit
+                && ExpectedEngine(CellPlatform.IosSimRelease) == AppEngine.CoreClrReadyToRun
+                && ExpectedEngine(CellPlatform.TvOsRelease) == AppEngine.CoreClrReadyToRun
+                && ExpectedEngine(CellPlatform.MacCatalystRelease) == AppEngine.CoreClrReadyToRun
+                && CellConfiguration(CellPlatform.TvOsRelease) == "Release" && CellConfiguration(CellPlatform.TvOs) == "Debug",
+                "a consume leg's engine or configuration differs from its validate cell's");
+            Assert("consume legs: each platform builds its own Apple platform",
+                ConsumePlatformName(CellPlatform.IosSimRelease) == "ios" && ConsumePlatformName(CellPlatform.MacOs) == "macos"
+                && ConsumePlatformName(CellPlatform.MacCatalystRelease) == "maccatalyst" && ConsumePlatformName(CellPlatform.TvOs) == "tvos",
+                "a leg mapped onto the wrong platform");
+
+            // ── Consume legs: slices and copies ───────────────────────────
+            Assert("consume slices: each platform embeds only its own slice",
+                ConsumeSliceMatches("tvos", "tvos-arm64_x86_64-simulator") && !ConsumeSliceMatches("tvos", "tvos-arm64")
+                && !ConsumeSliceMatches("tvos", "ios-arm64_x86_64-simulator")
+                && ConsumeSliceMatches("maccatalyst", "ios-arm64_x86_64-maccatalyst")
+                && !ConsumeSliceMatches("maccatalyst", "ios-arm64_x86_64-simulator")
+                && ConsumeSliceMatches("macos", "macos-arm64_x86_64") && !ConsumeSliceMatches("macos", "ios-arm64")
+                && ConsumeSliceMatches("ios", "ios-arm64-simulator") && !ConsumeSliceMatches("ios", "ios-arm64_x86_64-maccatalyst"),
+                "slice classification does not separate the consume platforms");
+            Assert("copy folder: read from lib/ and native/ paths (including inside a resources.zip), not from other layouts",
+                CopyTfmOf("native/net11.0-ios27.2/X.xcframework/ios-arm64-simulator/X.framework") == "net11.0-ios27.2"
+                && CopyTfmOf("lib/net10.0-ios26.0/SwiftBindings.X.dll") == "net10.0-ios26.0"
+                && CopyTfmOf("lib/net10.0-tvos27.2/X.resources.zip!X.xcframework/tvos-arm64/X.framework/X") == "net10.0-tvos27.2"
+                && CopyTfmOf("runtimes/ios-arm64/native/X.xcframework/ios-arm64") is null,
+                "a copy folder was misread");
+
+            var mvidOwn = Guid.Parse("11111111-0000-0000-0000-000000000026");
+            var mvidOther = Guid.Parse("22222222-0000-0000-0000-000000000027");
+            var mvidNet11 = Guid.Parse("33333333-0000-0000-0000-000000000011");
+            var managedCopies = new (string, Guid?)[]
+            {
+                ("net10.0-ios26.0", mvidOwn), ("net10.0-ios27.2", mvidOther), ("net11.0-ios27.2", mvidNet11),
+            };
+            Assert("managed copy: the pairing's own copy passes",
+                JudgeManagedCopy("SwiftBindings.X", mvidOwn, managedCopies, "net10.0-ios26.0").Failure is null,
+                JudgeManagedCopy("SwiftBindings.X", mvidOwn, managedCopies, "net10.0-ios26.0").Failure ?? "");
+            Assert("managed copy: another pairing's copy is a failure that names both copies",
+                JudgeManagedCopy("SwiftBindings.X", mvidNet11, managedCopies, "net10.0-ios26.0").Failure is { } wrongCopy
+                && wrongCopy.Contains("lib/net11.0-ios27.2/", StringComparison.Ordinal)
+                && wrongCopy.Contains("lib/net10.0-ios26.0/", StringComparison.Ordinal),
+                "a consumer that took another pairing's copy passed");
+            Assert("managed copy: a build none of the copies match is a failure",
+                JudgeManagedCopy("SwiftBindings.X", Guid.NewGuid(), managedCopies, "net10.0-ios26.0").Failure
+                    ?.Contains("matches none", StringComparison.Ordinal) == true,
+                "an unknown build passed");
+            Assert("managed copy: a package with no copy for the pairing fails closed",
+                JudgeManagedCopy("SwiftBindings.X", mvidOwn, managedCopies, "net10.0-macos26.0").Failure
+                    ?.Contains("ships no lib/net10.0-macos26.0/", StringComparison.Ordinal) == true,
+                "the missing copy was not reported");
+            var twinCopies = new (string, Guid?)[] { ("net10.0-ios27.2", mvidOther), ("net11.0-ios27.2", mvidOther) };
+            var twin = JudgeManagedCopy("SwiftBindings.X", mvidOther, twinCopies, "net11.0-ios27.2");
+            Assert("managed copy: a copy byte-identical to the pairing's own is not a mismatch, and is named",
+                twin.Failure is null && twin.Note.Contains("identical to net10.0-ios27.2", StringComparison.Ordinal),
+                $"failure '{twin.Failure}', note '{twin.Note}'");
+
+            var copyOwn = tipKitSim with
+            {
+                Origin = "native/net10.0-ios26.0/TipKitSwiftBindings.xcframework/ios-arm64_x86_64-simulator",
+            };
+            var copyNet11 = tipKitOtherPairing;
+            var copyImages = new[] { copyOwn, copyNet11, tipKitDevice, runtimeSim };
+            IReadOnlyList<string> CopyProvenance(IReadOnlyList<EmbeddedNativeImage> bundle, IReadOnlyList<PackageNativeImage> images,
+                string expected, string platform = "ios") =>
+                NativeProvenanceFailures(bundle, images, resolved, staged, slice => ConsumeSliceMatches(platform, slice), expected);
+            Assert("native copy: the pairing's own copy embedded passes",
+                CopyProvenance(goodBundle, copyImages, "net10.0-ios26.0").Count == 0,
+                string.Join("; ", CopyProvenance(goodBundle, copyImages, "net10.0-ios26.0")));
+            Assert("native copy: another pairing's copy embedded is a failure",
+                CopyProvenance(goodBundle, copyImages, "net11.0-ios27.2")
+                    .Any(f => f.Contains("another pairing's native build", StringComparison.Ordinal)),
+                "a consumer that embedded another pairing's framework passed");
+            Assert("native copy: a package with no copy for the pairing fails closed",
+                CopyProvenance(goodBundle, copyImages, "net10.0-ios27.2")
+                    .Any(f => f.Contains("no native/net10.0-ios27.2/ copy", StringComparison.Ordinal)),
+                "the missing native copy was not reported");
+            var copyTwin = copyNet11 with { Uuids = copyOwn.Uuids };
+            Assert("native copy: a byte-identical copy of the pairing's own is accepted",
+                CopyProvenance(goodBundle, new[] { copyOwn, copyTwin, runtimeSim }, "net11.0-ios27.2").Count == 0,
+                string.Join("; ", CopyProvenance(goodBundle, new[] { copyOwn, copyTwin, runtimeSim }, "net11.0-ios27.2")));
+
+            var fatOwn = copyOwn with { Uuids = new[] { armUuid, x64Uuid } };
+            var fatForeign = copyNet11 with { Uuids = new[] { "0F0F0F0F-0000-0000-0000-0000000000A6", x64Uuid } };
+            var fatBundle = new[]
+            {
+                new EmbeddedNativeImage("TipKitSwiftBindings", "/app/Frameworks/TipKitSwiftBindings.framework/TipKitSwiftBindings",
+                    new[] { "0F0F0F0F-0000-0000-0000-0000000000A6", x64Uuid }),
+                goodBundle[1],
+            };
+            Assert("native copy: a shared slice UUID cannot vouch for another pairing's other slice",
+                CopyProvenance(fatBundle, new[] { fatOwn, fatForeign, runtimeSim }, "net10.0-ios26.0")
+                    .Any(f => f.Contains("another pairing's native build", StringComparison.Ordinal)),
+                "a fat framework with one foreign slice passed as the pairing's own");
+            Assert("native copy: a thinned slice of the pairing's own fat framework passes",
+                CopyProvenance(goodBundle, new[] { fatOwn, fatForeign, runtimeSim }, "net10.0-ios26.0").Count == 0,
+                string.Join("; ", CopyProvenance(goodBundle, new[] { fatOwn, fatForeign, runtimeSim }, "net10.0-ios26.0")));
+
+            var tvUuid = "7A7A7A7A-0000-0000-0000-00000000007E";
+            var tvCopy = tipKitSim with
+            {
+                Slice = "tvos-arm64_x86_64-simulator",
+                Origin = "native/net11.0-tvos27.2/TipKitSwiftBindings.xcframework/tvos-arm64_x86_64-simulator",
+                Uuids = new[] { tvUuid },
+            };
+            var tvImages = new[] { copyOwn, tvCopy, runtimeSim };
+            var tvBundle = new[]
+            {
+                new EmbeddedNativeImage("TipKitSwiftBindings", "/app/Frameworks/TipKitSwiftBindings.framework/TipKitSwiftBindings", new[] { tvUuid }),
+                goodBundle[1],
+            };
+            Assert("native copy: a tvOS consumer is judged on the tvOS slice, not the iOS one",
+                CopyProvenance(tvBundle, tvImages, "net11.0-tvos27.2", "tvos").Count == 0,
+                string.Join("; ", CopyProvenance(tvBundle, tvImages, "net11.0-tvos27.2", "tvos")));
+            Assert("native copy: a tvOS consumer that embedded the iOS build is rejected",
+                CopyProvenance(goodBundle, tvImages, "net11.0-tvos27.2", "tvos").Count > 0,
+                "a tvOS app carrying the iOS simulator framework passed");
+
+            // ── Consume legs: verdict ─────────────────────────────────────
+            ConsumeLegRecord Leg(string result, bool proven = true) => new(
+                "X", "net11-xcode27", "tvos-release", "Release", "coreclr-r2r", proven, result,
+                result == "PASS" ? null : "reason", null, Array.Empty<string>(), 1);
+            Assert("consume verdict: a run with no legs fails closed",
+                ConsumeSummaryFailures(Array.Empty<ConsumeLegRecord>()).Count == 1,
+                "an empty consume run passed");
+            Assert("consume verdict: every leg passed on its proven engine is green",
+                ConsumeSummaryFailures(new[] { Leg("PASS"), Leg("PASS") }).Count == 0,
+                "a clean run was red");
+            Assert("consume verdict: one failed or errored leg reds the run",
+                ConsumeSummaryFailures(new[] { Leg("PASS"), Leg("FAIL") }).Count == 1
+                && ConsumeSummaryFailures(new[] { Leg("ERROR", proven: false) }).Count == 1,
+                "a non-pass leg was waved through");
+            Assert("consume verdict: a DEFERRED leg (credential qualification deferred by the operator) is not a failure",
+                ConsumeSummaryFailures(new[] { Leg("PASS"), Leg("DEFERRED") }).Count == 0,
+                "a deferred leg redded the run");
+            Assert("consume verdict: a pass without an engine proof is not a pass",
+                ConsumeSummaryFailures(new[] { Leg("PASS", proven: false) }).Count == 1,
+                "an unproven engine counted as covered");
+            var noProofBundle = Path.Combine(Path.GetTempPath(), $"swiftbindings-consume-noproof-{Guid.NewGuid():N}.app");
+            Directory.CreateDirectory(noProofBundle);
+            try
+            {
+                Assert("consume verdict: a bundle that proves no engine is a mismatch, never a pass",
+                    EngineEvidence.Mismatch(noProofBundle, "X.Tests", AppEngine.CoreClrReadyToRun)
+                        ?.Contains("does not prove any single engine", StringComparison.Ordinal) == true,
+                    "an empty bundle was accepted as ReadyToRun");
+            }
+            finally { Directory.Delete(noProofBundle, recursive: true); }
+
             // ── Verdict ─────────────────────────────────────────────────────
             if (failures.Count > 0)
             {
