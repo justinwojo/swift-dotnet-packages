@@ -172,6 +172,12 @@ partial class Build
                 propsXml.Contains("""<Compile Include="/scratch/LaneEvidence.g.cs" />""", StringComparison.Ordinal),
                 propsXml);
 
+            Assert("lane props: package mode records the linker's real inputs beside its output",
+                propsXml.Contains("""BeforeTargets="_RunILLink">""", StringComparison.Ordinal)
+                && propsXml.Contains($"File=\"$(IntermediateLinkDir)../{LinkerInputsFileName}\"", StringComparison.Ordinal)
+                && propsXml.Contains("Lines=\"@(ManagedAssemblyToLink->'%(FullPath)')\"", StringComparison.Ordinal),
+                propsXml);
+
             var nativeProps = RenderLanePropsXml(
                 swaps, "/scratch/LaneEvidence.g.cs",
                 workingTreeRoot: "/repo", laneScratchRoot: "/repo/artifacts/release-consumption/TipKit");
@@ -878,24 +884,30 @@ partial class Build
             // ── ResolveLinkerInput: a bundle assembly the platform linker rewrote ──
             var linkRoot = Path.Combine(Path.GetTempPath(), "swiftbindings-consume-selftest", "linker");
             if (Directory.Exists(linkRoot)) Directory.Delete(linkRoot, recursive: true);
-            var linkObj = Directory.CreateDirectory(Path.Combine(linkRoot, "obj", "Debug", "rid", "linked")).Parent!.Parent!.Parent!.FullName;
-            var linkApp = Directory.CreateDirectory(Path.Combine(linkRoot, "bin", "rid", "X.Tests.app", "Contents", "MonoBundle")).Parent!.Parent!.FullName;
-            var bundleDll = Path.Combine(linkApp, "Contents", "MonoBundle", "SwiftBindings.X.dll");
+            var linkRid = Directory.CreateDirectory(Path.Combine(linkRoot, "obj", "Debug", "rid", "linked")).Parent!.FullName;
+            var linkObj = Path.Combine(linkRoot, "obj");
+            var bundleDll = Path.Combine(Directory.CreateDirectory(Path.Combine(linkRoot, "bundle")).FullName, "SwiftBindings.X.dll");
             File.WriteAllBytes(bundleDll, new byte[] { 1, 2, 3 });
-            Assert("linker input: no obj dir judges the bundle's assembly as deployed",
-                ResolveLinkerInput(bundleDll, linkApp, null, "SwiftBindings.X") == (null, null), "an input was claimed");
-            File.WriteAllBytes(Path.Combine(linkObj, "Debug", "rid", "linked", "SwiftBindings.X.dll"), new byte[] { 9 });
+            File.WriteAllBytes(Path.Combine(linkRid, "linked", "SwiftBindings.X.dll"), new byte[] { 9 });
             Assert("linker input: a bundle assembly that is not this build's linker output is judged as deployed",
-                ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X") == (null, null), "an input was claimed");
-            File.WriteAllBytes(Path.Combine(linkObj, "Debug", "rid", "linked", "SwiftBindings.X.dll"), new byte[] { 1, 2, 3 });
-            Assert("linker input: a linker output whose input is missing fails closed",
-                ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X").Failure
-                    ?.Contains("cannot be proven", StringComparison.Ordinal) == true, "no failure");
-            var copyLocal = Path.Combine(linkRoot, "bin", "rid", "SwiftBindings.X.dll");
-            File.WriteAllBytes(copyLocal, new byte[] { 7 });
-            Assert("linker input: a linker output is judged by the copy-local beside the bundle",
-                ResolveLinkerInput(bundleDll, linkApp + "/", linkObj, "SwiftBindings.X") == (copyLocal, null),
-                $"got {ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X")}");
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X") == (null, null), "an input was claimed");
+            File.WriteAllBytes(Path.Combine(linkRid, "linked", "SwiftBindings.X.dll"), new byte[] { 1, 2, 3 });
+            Assert("linker input: a linker output with no recorded input fails closed",
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X").Failure
+                    ?.Contains("does not record its input", StringComparison.Ordinal) == true, "no failure");
+            var realInput = Path.Combine(Directory.CreateDirectory(Path.Combine(linkRoot, "pkg", "lib", "net10.0-macos26.0")).FullName, "SwiftBindings.X.dll");
+            File.WriteAllBytes(realInput, new byte[] { 7 });
+            // A same-named copy-local beside the bundle is not evidence: only the recorded input is.
+            File.WriteAllBytes(Path.Combine(linkRoot, "SwiftBindings.X.dll"), new byte[] { 8 });
+            File.WriteAllLines(Path.Combine(linkRid, LinkerInputsFileName),
+                new[] { "/elsewhere/SwiftBindings.Other.dll", realInput });
+            Assert("linker input: a linker output is judged by the input the linker recorded",
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X") == (realInput, null),
+                $"got {ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X")}");
+            File.AppendAllLines(Path.Combine(linkRid, LinkerInputsFileName), new[] { Path.Combine(linkRoot, "SwiftBindings.X.dll") });
+            Assert("linker input: two recorded inputs for one assembly fail closed",
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X").Failure
+                    ?.Contains("records 2 inputs", StringComparison.Ordinal) == true, "no failure");
             Directory.Delete(linkRoot, recursive: true);
 
             var copyOwn = tipKitSim with

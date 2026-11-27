@@ -809,7 +809,7 @@ partial class Build
             var via = "";
             if (deployedMvid is not null && !packageMvids.Contains(deployedMvid))
             {
-                var (input, linkerFailure) = ResolveLinkerInput(deployed, appPath, objDir, id);
+                var (input, linkerFailure) = ResolveLinkerInput(deployed, objDir, id);
                 if (linkerFailure is not null)
                 {
                     failures.Add(linkerFailure);
@@ -870,26 +870,33 @@ partial class Build
     /// The platform linker can rewrite an assembly even when nothing is trimmed (the .NET 10
     /// macOS build runs it for the registrar in Debug), which gives the bundle's copy a new MVID.
     /// When the bundle's <paramref name="id"/>.dll is byte-identical to this build's own linker
-    /// output (<c>obj/**/linked/</c>), its identity is the linker's input: the copy-local the same
-    /// build resolved beside the bundle. Returns (null, null) when the bundle's assembly is not a
-    /// linker output, so the caller judges it as deployed; a failure when it is one but the input
-    /// is missing.
+    /// output (<c>obj/**/linked/</c>), its identity is the linker's input, as the lane props
+    /// recorded it from <c>@(ManagedAssemblyToLink)</c> (<see cref="LinkerInputsFileName"/>).
+    /// Returns (null, null) when the bundle's assembly is not a linker output, so the caller
+    /// judges it as deployed; a failure when it is one but its input was not recorded.
     /// </summary>
-    internal static (string? Input, string? Failure) ResolveLinkerInput(
-        string deployed, string appPath, string? objDir, string id)
+    internal static (string? Input, string? Failure) ResolveLinkerInput(string deployed, string? objDir, string id)
     {
         if (objDir is null || !Directory.Exists(objDir)) return (null, null);
         var deployedBytes = File.ReadAllBytes(deployed);
-        var isLinkerOutput = Directory
+        var linked = Directory
             .EnumerateFiles(objDir, $"{id}.dll", SearchOption.AllDirectories)
             .Where(f => string.Equals(Path.GetFileName(Path.GetDirectoryName(f)), "linked", StringComparison.Ordinal))
-            .Any(f => File.ReadAllBytes(f).AsSpan().SequenceEqual(deployedBytes));
-        if (!isLinkerOutput) return (null, null);
-        var input = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(appPath))!, $"{id}.dll");
-        return File.Exists(input)
-            ? (input, null)
-            : (null, $"the bundle's {id}.dll is this build's linker output, but its input (the copy-local {input}) " +
-                     "is missing, so the package copy it came from cannot be proven.");
+            .FirstOrDefault(f => File.ReadAllBytes(f).AsSpan().SequenceEqual(deployedBytes));
+        if (linked is null) return (null, null);
+        var record = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(linked))!, LinkerInputsFileName);
+        var inputs = File.Exists(record)
+            ? File.ReadAllLines(record)
+                .Where(l => string.Equals(Path.GetFileName(l.Trim()), $"{id}.dll", StringComparison.OrdinalIgnoreCase))
+                .Select(l => l.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+            : new List<string>();
+        return inputs.Count == 1 && File.Exists(inputs[0])
+            ? (inputs[0], null)
+            : (null, $"the bundle's {id}.dll is this build's linker output ({linked}), but {record} " +
+                     (inputs.Count == 0 ? "does not record its input" : $"records {inputs.Count} inputs for it") +
+                     ", so the package copy it came from cannot be proven.");
     }
 
     /// <summary>Module version id of a managed assembly, or null if unreadable.</summary>

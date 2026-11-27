@@ -204,6 +204,9 @@ partial class Build
     /// the wrapper items are added by a target, not by an ItemGroup, and are not
     /// there to be removed at evaluation.</para>
     /// </summary>
+    /// <summary>The lane's record of the platform linker's inputs, beside its <c>linked/</c> output.</summary>
+    internal const string LinkerInputsFileName = "swiftbindings-linker-inputs.txt";
+
     internal static string RenderLanePropsXml(
         IReadOnlyList<(string Include, string PackageId, string Version)> swaps,
         string? evidenceSourcePath,
@@ -222,6 +225,16 @@ partial class Build
             foreach (var (_, id, version) in swaps)
                 sb.AppendLine($"    <PackageReference Include=\"{Attr(id)}\" Version=\"{Attr(version)}\" />");
             sb.AppendLine("  </ItemGroup>");
+            // The assemblies the platform linker actually reads (it can rewrite one even when
+            // nothing is trimmed), recorded beside its output so the copy gate judges a rewritten
+            // bundle assembly on its real input. BeforeTargets of _RunILLink runs after that
+            // target's DependsOnTargets, so the item is final here.
+            sb.AppendLine($"""
+                  <Target Name="_SwiftBindingsLaneRecordLinkerInputs" BeforeTargets="_RunILLink">
+                    <WriteLinesToFile File="$(IntermediateLinkDir)../{LinkerInputsFileName}"
+                                      Lines="@(ManagedAssemblyToLink->'%(FullPath)')" Overwrite="true" />
+                  </Target>
+                """);
         }
 
         if (swaps.Count > 0 && !string.IsNullOrEmpty(workingTreeRoot) && !string.IsNullOrEmpty(laneScratchRoot))
