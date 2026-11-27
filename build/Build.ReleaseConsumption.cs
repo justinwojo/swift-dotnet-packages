@@ -238,7 +238,8 @@ partial class Build
         var resolvedPackages = ResolvedPackages(File.ReadAllText(objDir / "project.assets.json"));
 
         var managedCopies = AssertDeployedAssembliesCameFromPackages(
-            appPath, swaps, packagesDir, laneLabel, Info, expectedCopyTfm: copyTfm, copyCheckedIds: stagedIds);
+            appPath, swaps, packagesDir, laneLabel, Info, expectedCopyTfm: copyTfm, copyCheckedIds: stagedIds,
+            objDir: objDir);
         var nativeCopies = AssertEmbeddedFrameworksCameFromPackages(
             appPath, packagesDir, resolvedPackages, stagedPackages, laneLabel, Info,
             platform: platformName, expectedCopyTfm: copyTfm);
@@ -769,7 +770,8 @@ partial class Build
         string laneLabel,
         Action<string> info,
         string? expectedCopyTfm = null,
-        IReadOnlySet<string>? copyCheckedIds = null)
+        IReadOnlySet<string>? copyCheckedIds = null,
+        AbsolutePath? objDir = null)
     {
         var failures = new List<string>();
         var selected = new List<string>();
@@ -802,8 +804,23 @@ partial class Build
                 continue;
             }
 
-            var deployedMvid = ReadMvid(deployed);
             var packageMvids = candidates.Select(ReadMvid).ToList();
+            var deployedMvid = ReadMvid(deployed);
+            var via = "";
+            if (deployedMvid is not null && !packageMvids.Contains(deployedMvid))
+            {
+                var (input, linkerFailure) = ResolveLinkerInput(deployed, appPath, objDir, id);
+                if (linkerFailure is not null)
+                {
+                    failures.Add(linkerFailure);
+                    continue;
+                }
+                if (input is not null)
+                {
+                    via = $" via this build's linker (bundle mvid {deployedMvid}, input {input})";
+                    deployedMvid = ReadMvid(input);
+                }
+            }
             if (deployedMvid is null)
             {
                 failures.Add($"could not read a module version id from the deployed {deployed}.");
@@ -824,8 +841,8 @@ partial class Build
                     failures.Add(copyFailure);
                     continue;
                 }
-                selected.Add($"{id} {note}");
-                info($"  {id}.dll in the app bundle is the package's {note} build (mvid {deployedMvid})");
+                selected.Add($"{id} {note}{(via.Length > 0 ? " (linker-rewritten)" : "")}");
+                info($"  {id}.dll in the app bundle is the package's {note} build (mvid {deployedMvid}){via}");
                 continue;
             }
 
@@ -839,7 +856,7 @@ partial class Build
             }
 
             selected.Add(id);
-            info($"  {id}.dll in the app bundle is the package's own build (mvid {deployedMvid})");
+            info($"  {id}.dll in the app bundle is the package's own build (mvid {deployedMvid}){via}");
         }
 
         if (failures.Count > 0)
@@ -847,6 +864,32 @@ partial class Build
                 $"{laneLabel}: the built app does not carry the packaged assemblies:\n  " +
                 string.Join("\n  ", failures));
         return selected;
+    }
+
+    /// <summary>
+    /// The platform linker can rewrite an assembly even when nothing is trimmed (the .NET 10
+    /// macOS build runs it for the registrar in Debug), which gives the bundle's copy a new MVID.
+    /// When the bundle's <paramref name="id"/>.dll is byte-identical to this build's own linker
+    /// output (<c>obj/**/linked/</c>), its identity is the linker's input: the copy-local the same
+    /// build resolved beside the bundle. Returns (null, null) when the bundle's assembly is not a
+    /// linker output, so the caller judges it as deployed; a failure when it is one but the input
+    /// is missing.
+    /// </summary>
+    internal static (string? Input, string? Failure) ResolveLinkerInput(
+        string deployed, string appPath, string? objDir, string id)
+    {
+        if (objDir is null || !Directory.Exists(objDir)) return (null, null);
+        var deployedBytes = File.ReadAllBytes(deployed);
+        var isLinkerOutput = Directory
+            .EnumerateFiles(objDir, $"{id}.dll", SearchOption.AllDirectories)
+            .Where(f => string.Equals(Path.GetFileName(Path.GetDirectoryName(f)), "linked", StringComparison.Ordinal))
+            .Any(f => File.ReadAllBytes(f).AsSpan().SequenceEqual(deployedBytes));
+        if (!isLinkerOutput) return (null, null);
+        var input = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(appPath))!, $"{id}.dll");
+        return File.Exists(input)
+            ? (input, null)
+            : (null, $"the bundle's {id}.dll is this build's linker output, but its input (the copy-local {input}) " +
+                     "is missing, so the package copy it came from cannot be proven.");
     }
 
     /// <summary>Module version id of a managed assembly, or null if unreadable.</summary>

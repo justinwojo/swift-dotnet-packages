@@ -875,6 +875,29 @@ partial class Build
                 twin.Failure is null && twin.Note.Contains("identical to net10.0-ios27.2", StringComparison.Ordinal),
                 $"failure '{twin.Failure}', note '{twin.Note}'");
 
+            // ── ResolveLinkerInput: a bundle assembly the platform linker rewrote ──
+            var linkRoot = Path.Combine(Path.GetTempPath(), "swiftbindings-consume-selftest", "linker");
+            if (Directory.Exists(linkRoot)) Directory.Delete(linkRoot, recursive: true);
+            var linkObj = Directory.CreateDirectory(Path.Combine(linkRoot, "obj", "Debug", "rid", "linked")).Parent!.Parent!.Parent!.FullName;
+            var linkApp = Directory.CreateDirectory(Path.Combine(linkRoot, "bin", "rid", "X.Tests.app", "Contents", "MonoBundle")).Parent!.Parent!.FullName;
+            var bundleDll = Path.Combine(linkApp, "Contents", "MonoBundle", "SwiftBindings.X.dll");
+            File.WriteAllBytes(bundleDll, new byte[] { 1, 2, 3 });
+            Assert("linker input: no obj dir judges the bundle's assembly as deployed",
+                ResolveLinkerInput(bundleDll, linkApp, null, "SwiftBindings.X") == (null, null), "an input was claimed");
+            File.WriteAllBytes(Path.Combine(linkObj, "Debug", "rid", "linked", "SwiftBindings.X.dll"), new byte[] { 9 });
+            Assert("linker input: a bundle assembly that is not this build's linker output is judged as deployed",
+                ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X") == (null, null), "an input was claimed");
+            File.WriteAllBytes(Path.Combine(linkObj, "Debug", "rid", "linked", "SwiftBindings.X.dll"), new byte[] { 1, 2, 3 });
+            Assert("linker input: a linker output whose input is missing fails closed",
+                ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X").Failure
+                    ?.Contains("cannot be proven", StringComparison.Ordinal) == true, "no failure");
+            var copyLocal = Path.Combine(linkRoot, "bin", "rid", "SwiftBindings.X.dll");
+            File.WriteAllBytes(copyLocal, new byte[] { 7 });
+            Assert("linker input: a linker output is judged by the copy-local beside the bundle",
+                ResolveLinkerInput(bundleDll, linkApp + "/", linkObj, "SwiftBindings.X") == (copyLocal, null),
+                $"got {ResolveLinkerInput(bundleDll, linkApp, linkObj, "SwiftBindings.X")}");
+            Directory.Delete(linkRoot, recursive: true);
+
             var copyOwn = tipKitSim with
             {
                 Origin = "native/net10.0-ios26.0/TipKitSwiftBindings.xcframework/ios-arm64_x86_64-simulator",
