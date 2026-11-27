@@ -595,6 +595,24 @@ partial class Build
             throw new InvalidOperationException($"simctl install failed: {installEx.Message}", installEx);
         }
 
+        // Same rule as ValidateSimAt: answer the app's privacy prompts before launch, and take
+        // the answers back after the run.
+        var privacy = sim.PreAnswerPrivacyPrompts(appPath, bundleId, line => Log.Information("{Line}", line));
+        try
+        {
+            return RunInstalledCiSimTest(sim, bundleId, appName, crashDir, beforeCrashCount,
+                runBudgetSeconds, launchBudgetSeconds, storeKitConfiguration);
+        }
+        finally
+        {
+            sim.ResetPrivacyAnswers(bundleId, privacy, line => Log.Information("{Line}", line));
+        }
+    }
+
+    TestPhaseOutcome RunInstalledCiSimTest(SimctlClient sim, string bundleId, string appName, string crashDir,
+        int beforeCrashCount, int runBudgetSeconds, int launchBudgetSeconds,
+        StoreKitSandboxReadiness.Configuration? storeKitConfiguration)
+    {
         var managedLaunchArguments = storeKitConfiguration is null
             ? Array.Empty<string>()
             : new[]

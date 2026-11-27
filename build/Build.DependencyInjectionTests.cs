@@ -299,9 +299,9 @@ partial class Build
         .Description(
             "Run every in-process harness self-test " +
             "(rewriter + dependency injection + regression artifacts + release-wave planning + Apple version split " +
-            "+ release consumption + run budgets + VisionKit warm-up + stdout watcher)")
+            "+ release consumption + run budgets + VisionKit warm-up + simulator privacy + stdout watcher)")
         .DependsOn(TestCsprojRewriter, TestProjectRefRewriter, TestProjectRefInjection, TestRegressionArtifacts,
             TestReleaseWave, TestAppleVersionSplit, TestReleaseConsumption, TestRunBudgets, TestStoreKitSandbox, TestVisionKitWarmup,
-            ValidateWatcherSelfTest)
+            TestSimulatorPrivacy, ValidateWatcherSelfTest)
         .Executes(() => Log.Information("Harness self-tests complete."));
 }

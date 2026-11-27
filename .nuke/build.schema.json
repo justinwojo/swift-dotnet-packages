@@ -64,6 +64,7 @@
         "TestReleaseConsumption",
         "TestReleaseWave",
         "TestRunBudgets",
+        "TestSimulatorPrivacy",
         "TestStoreKitSandbox",
         "TestVisionKitWarmup",
         "ValidateDevice",

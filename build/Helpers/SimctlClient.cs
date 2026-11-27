@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Serilog;
+using SwiftBindings.Build.Models;
 
 namespace SwiftBindings.Build.Helpers;
 
@@ -230,20 +231,95 @@ public sealed class SimctlClient
         }
     }
 
-    private static (int Exit, string Output) Run(IEnumerable<string> args, TimeSpan timeout)
+    /// <summary>
+    /// Answer, before launch, every privacy prompt the app at <paramref name="appPath"/> could
+    /// raise (see <see cref="SimulatorPrivacy"/>): grant each service its Info.plist declares a
+    /// usage string for, through <c>simctl privacy</c> where simctl knows the service and through
+    /// the simulator's TCC database where it does not. Throws when an answer cannot be recorded,
+    /// or a declared service has no known answer: an alert the app raises unanswered stays on
+    /// this shared simulator after the app is gone, and only a reboot takes it down.
+    /// </summary>
+    internal SimulatorPrivacy.Plan PreAnswerPrivacyPrompts(string appPath, string bundleId, Action<string> info)
+    {
+        var plist = Path.Combine(appPath, "Info.plist");
+        var (plExit, plXml) = RunTool("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", plist], TimeSpan.FromSeconds(30));
+        if (plExit != 0)
+            throw new InvalidOperationException($"Cannot read {plist} to pre-answer its privacy prompts:\n{plXml}");
+        var plan = SimulatorPrivacy.PlanFor(SimulatorPrivacy.UsageKeysFromPlistXml(plXml));
+        if (plan.Unanswered.Count > 0)
+            throw new InvalidOperationException(
+                $"{bundleId} declares {string.Join(", ", plan.Unanswered)}, which the harness cannot pre-answer on a " +
+                "simulator (Models/SimulatorPrivacy.cs). Launching it could leave a system alert up on a shared " +
+                "simulator, so the launch is refused.");
+        if (!plan.HasAnswers)
+            return plan;
+
+        foreach (var service in plan.SimctlServices)
+        {
+            var (exit, output) = Run(["privacy", _device, "grant", service, bundleId], TimeSpan.FromSeconds(60));
+            if (exit != 0)
+                throw new InvalidOperationException(
+                    $"simctl privacy grant {service} {bundleId} on {_device} failed (exit {exit}):\n{output}");
+        }
+        if (plan.DatabaseServices.Count > 0)
+        {
+            var db = TccDatabasePath();
+            if (!File.Exists(db))
+                throw new InvalidOperationException(
+                    $"Cannot pre-answer {string.Join(", ", plan.DatabaseServices)} for {bundleId}: " +
+                    $"no TCC database at {db} (is {_device} booted?)");
+            var sql = string.Join("\n", plan.DatabaseServices.Select(s => SimulatorPrivacy.GrantSql(s, bundleId)));
+            var (exit, output) = RunTool("/usr/bin/sqlite3", [db, ".timeout 10000", sql], TimeSpan.FromSeconds(30));
+            if (exit != 0)
+                throw new InvalidOperationException(
+                    $"Recording {string.Join(", ", plan.DatabaseServices)} for {bundleId} in {db} failed (exit {exit}):\n{output}");
+        }
+        info($"Privacy prompts pre-answered on {_device} for {bundleId}: granted " +
+             string.Join(", ", plan.SimctlServices.Concat(plan.DatabaseServices)));
+        return plan;
+    }
+
+    /// <summary>
+    /// After the run: take back every answer <see cref="PreAnswerPrivacyPrompts"/> recorded
+    /// (<c>simctl privacy reset all</c> also clears the rows it wrote to the TCC database).
+    /// Best effort; never throws.
+    /// </summary>
+    internal void ResetPrivacyAnswers(string bundleId, SimulatorPrivacy.Plan plan, Action<string> info)
+    {
+        if (!plan.HasAnswers)
+            return;
+        try
+        {
+            var (exit, output) = Run(["privacy", _device, "reset", "all", bundleId], TimeSpan.FromSeconds(60));
+            if (exit != 0)
+                info($"simctl privacy reset all {bundleId} on {_device} returned {exit}: {output.Trim()}");
+        }
+        catch (Exception ex)
+        {
+            info($"simctl privacy reset all {bundleId} on {_device} did not finish: {ex.Message}");
+        }
+    }
+
+    string TccDatabasePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Library", "Developer", "CoreSimulator", "Devices", _device, "data", "Library", "TCC", "TCC.db");
+
+    private static (int Exit, string Output) Run(IEnumerable<string> args, TimeSpan timeout) =>
+        RunTool("xcrun", ["simctl", .. args], timeout);
+
+    private static (int Exit, string Output) RunTool(string fileName, IEnumerable<string> args, TimeSpan timeout)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "xcrun",
+            FileName = fileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("simctl");
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         using var p = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start xcrun simctl");
+            ?? throw new InvalidOperationException($"Failed to start {fileName}");
         var sb = new System.Text.StringBuilder();
         p.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (sb) sb.AppendLine(e.Data); };
         p.ErrorDataReceived += (_, e) => { if (e.Data is not null) lock (sb) sb.AppendLine(e.Data); };
@@ -253,7 +329,7 @@ public sealed class SimctlClient
         if (!p.WaitForExit((int)timeout.TotalMilliseconds))
         {
             try { p.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException($"xcrun simctl {string.Join(' ', args)} timed out after {timeout.TotalSeconds}s");
+            throw new TimeoutException($"{fileName} {string.Join(' ', args)} timed out after {timeout.TotalSeconds}s");
         }
         p.WaitForExit();
         return (p.ExitCode, sb.ToString());

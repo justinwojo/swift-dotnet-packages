@@ -149,7 +149,25 @@ partial class Build
 
         sim.InstallApp(appPath);
         sim.CleanStaleConsoleFifos();
+        // A system alert the app raises outlives it and keeps every other app on this shared
+        // simulator from becoming active, so each prompt it declares is answered before launch,
+        // and the answers are taken back after the run.
+        var privacy = sim.PreAnswerPrivacyPrompts(appPath, bundleId, Info);
+        try
+        {
+            return LaunchAndWatchSim(sim, appName, bundleId, timeoutSeconds, crashDir, beforeCrashCount,
+                storeKitConfiguration, Info, Err);
+        }
+        finally
+        {
+            sim.ResetPrivacyAnswers(bundleId, privacy, Info);
+        }
+    }
 
+    TestRunResult LaunchAndWatchSim(SimctlClient sim, string appName, string bundleId, int timeoutSeconds,
+        string crashDir, int beforeCrashCount, StoreKitSandboxReadiness.Configuration? storeKitConfiguration,
+        Action<string> Info, Action<string> Err)
+    {
         var managedLaunchArguments = storeKitConfiguration is null
             ? Array.Empty<string>()
             : new[]
