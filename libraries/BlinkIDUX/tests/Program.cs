@@ -364,8 +364,11 @@ public class MainViewController : UIViewController
             if (!Enum.IsDefined(member))
                 throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
         }
+        // Walk the members by name: on Mono, Enum.GetValues throws InvalidCastException (from
+        // Array.Copy into the enum-typed array) for an enum nested in a generic class, such as the
+        // CaseTag of a generic Swift enum. Names map one-to-one onto the members GetValues returns.
         var seen = new HashSet<T>();
-        foreach (var member in Enum.GetValues<T>())
+        foreach (var member in Enum.GetNames<T>().Select(n => Enum.Parse<T>(n)))
         {
             if (EqualityComparer<T>.Default.Equals(member, default))
                 throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
