@@ -81,14 +81,17 @@ partial class Build
     /// simulator it already leased; it consumes on the iOS simulator, the default). Throws on
     /// any failure — a caller that reaches the next line has a package this pairing consumes
     /// on <paramref name="platform"/>, on the engine that platform's cell proves.
-    /// <paramref name="onEngineProven"/> fires once the built bundle has proven its engine.
+    /// <paramref name="onEngineProven"/> fires once the built bundle has proven its engine, and
+    /// <paramref name="onCopiesProven"/> once the shipped binaries are proven to be this pairing's
+    /// copies, so a leg that fails later (at launch) still records which copies it shipped.
     /// </summary>
     internal ConsumeLegEvidence RunReleaseConsumptionLeg(
         string library, string version, AbsolutePath feed, int timeoutSeconds,
         string? simUdid, Action<string>? onLine,
         IReadOnlyDictionary<string, string>? versionOverrides = null,
         CellPlatform platform = CellPlatform.IosSim,
-        Action? onEngineProven = null)
+        Action? onEngineProven = null,
+        Action<string, IReadOnlyList<string>>? onCopiesProven = null)
     {
         void Info(string line) { if (onLine is null) Log.Information("{Line}", line); else onLine(line); }
 
@@ -239,6 +242,7 @@ partial class Build
         var nativeCopies = AssertEmbeddedFrameworksCameFromPackages(
             appPath, packagesDir, resolvedPackages, stagedPackages, laneLabel, Info,
             platform: platformName, expectedCopyTfm: copyTfm);
+        onCopiesProven?.Invoke(string.Join("; ", managedCopies), nativeCopies);
 
         // 8. Runtime — install, launch, and require the suite to pass. Given no
         //    --device-udid, ValidateSimAt resolves a concrete iOS-family

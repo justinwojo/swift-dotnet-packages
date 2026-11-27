@@ -211,10 +211,12 @@ partial class Build
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var engine = ToolchainPairing.EngineName(ExpectedEngine(leg));
             var proven = false;
+            (string? Managed, IReadOnlyList<string> Native) copies = (null, Array.Empty<string>());
             try
             {
                 var evidence = RunReleaseConsumptionLeg(library, version, feed, Timeout, DeviceUdid, onLine: null,
-                    platform: leg, onEngineProven: () => proven = true);
+                    platform: leg, onEngineProven: () => proven = true,
+                    onCopiesProven: (managed, native) => copies = (managed, native));
                 // Offline checks passed but the live credential section did not run: DEFERRED only
                 // when the operator deferred it, exactly as a validate cell records it.
                 var (result, reason) = evidence.Unqualified is null
@@ -231,7 +233,7 @@ partial class Build
                 // the remaining legs still run and the record is still written.
                 Log.Error("release-consume/{Library} {Leg}: {Message}", library, PlatformLabel(leg), ex.Message);
                 records.Add(new ConsumeLegRecord(library, ActivePairing.Name, PlatformLabel(leg), CellConfiguration(leg),
-                    engine, proven, proven ? "FAIL" : "ERROR", ex.Message, null, Array.Empty<string>(),
+                    engine, proven, proven ? "FAIL" : "ERROR", ex.Message, copies.Managed, copies.Native,
                     sw.Elapsed.TotalSeconds));
             }
             var r = records[^1];
