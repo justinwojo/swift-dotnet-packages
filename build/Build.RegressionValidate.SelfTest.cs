@@ -673,6 +673,33 @@ partial class Build
                         File.ReadAllText(dir / "net11-xcode27.json").Replace("\"coreclr-interpreter\", \"coreclr-r2r\"", "\"mono\""),
                         "net11-xcode27", "test")), "accepted");
 
+                // The merge restore runs in this process, outside use-toolchain.sh: it must still use
+                // the private per-pairing cache, never the global ~/.nuget/packages.
+                var cacheRoot = Path.Combine(Path.GetTempPath(), $"sb-merge-env-{Guid.NewGuid():N}");
+                try
+                {
+                    Func<string, string?> Env(params (string Key, string Value)[] vars) =>
+                        k => vars.FirstOrDefault(v => v.Key == k).Value;
+                    var unpaired = MergeRestoreEnvironment(Env(("SWIFTBINDINGS_NUGET_PACKAGES_ROOT", cacheRoot)));
+                    Assert("merge restore: the private root maps onto the default pairing's cache",
+                        unpaired.TryGetValue("NUGET_PACKAGES", out var c1) && c1 == Path.Combine(cacheRoot, "net10-xcode26")
+                        && Directory.Exists(c1), string.Join(";", unpaired));
+                    var paired = MergeRestoreEnvironment(Env(("SWIFTBINDINGS_NUGET_PACKAGES_ROOT", cacheRoot),
+                        ("SwiftBindingsPairing", "net11-xcode27")));
+                    Assert("merge restore: a selected pairing gets its own cache",
+                        paired.TryGetValue("NUGET_PACKAGES", out var c2) && c2 == Path.Combine(cacheRoot, "net11-xcode27"),
+                        string.Join(";", paired));
+                    Assert("merge restore: an explicit NUGET_PACKAGES is left alone",
+                        MergeRestoreEnvironment(Env(("SWIFTBINDINGS_NUGET_PACKAGES_ROOT", cacheRoot),
+                            ("NUGET_PACKAGES", "/x"))).Count == 0, "overridden");
+                    Assert("merge restore: no private root, no override",
+                        MergeRestoreEnvironment(Env()).Count == 0, "overridden");
+                }
+                finally
+                {
+                    if (Directory.Exists(cacheRoot)) Directory.Delete(cacheRoot, recursive: true);
+                }
+
                 static bool Throws(Action a) { try { a(); return false; } catch (InvalidOperationException) { return true; } }
             }
 

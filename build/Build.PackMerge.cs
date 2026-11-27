@@ -98,6 +98,10 @@ partial class Build
 
         EnsureMergeNativeInputs(library, csprojs.Values);
 
+        var mergeEnvironment = MergeRestoreEnvironment(Environment.GetEnvironmentVariable);
+        if (mergeEnvironment.TryGetValue("NUGET_PACKAGES", out var mergeCache))
+            Log.Information("Merge restores into the private package cache {Cache}", mergeCache);
+
         var refused = new List<string>();
         foreach (var id in ids.Order(StringComparer.Ordinal))
         {
@@ -123,7 +127,7 @@ partial class Build
                 $"-p:SwiftBindingsMergeContributions=\"{string.Join(";", parts.Select(p => (string)p))}\"",
                 $"-p:SwiftBindingsMergeTargetFrameworks=\"{string.Join(";", tfms)}\"",
                 $"-p:SwiftBindingsMergeOutput={outputDir}",
-            });
+            }, onLine: null, secrets: null, environment: mergeEnvironment);
             // The SDK names the merged file from the nuspec version, which keeps build metadata;
             // give it NuGet's normalized file name, which upload and ReleaseConsume look for.
             var merged = outputDir / $"{id}.{fileVersion}.nupkg";
@@ -141,6 +145,26 @@ partial class Build
                 $"MergePackages: {refused.Count} package(s) of {library} did not merge — a merge refusal is a " +
                 "finding, not something to suppress:\n  " + string.Join("\n  ", refused));
         Log.Information("MergePackages {Library}: {Count} merged package(s) in {Dir}", library, ids.Count, outputDir);
+    }
+
+    /// <summary>
+    /// Environment for the merge's <c>dotnet msbuild -restore</c> child. The merge runs in this
+    /// process, which PackAllPairings (and a bare MergePackages) start outside
+    /// <c>scripts/use-toolchain.sh</c>, so <c>SWIFTBINDINGS_NUGET_PACKAGES_ROOT</c> would never
+    /// become a <c>NUGET_PACKAGES</c> and the restore would write into the global
+    /// <c>~/.nuget/packages</c>. Map it the way use-toolchain.sh does, onto the cache of the pairing
+    /// the restore evaluates as (the selected one, else the default). An explicit
+    /// <c>NUGET_PACKAGES</c> (this process already runs under a pairing) is left alone.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> MergeRestoreEnvironment(Func<string, string?> env)
+    {
+        var root = env("SWIFTBINDINGS_NUGET_PACKAGES_ROOT");
+        if (string.IsNullOrEmpty(root) || !string.IsNullOrEmpty(env("NUGET_PACKAGES")))
+            return new Dictionary<string, string>();
+        var pairing = env(ToolchainPairing.EnvironmentVariable) is { Length: > 0 } p ? p : ToolchainPairing.Default;
+        var cache = Path.Combine(root, pairing);
+        Directory.CreateDirectory(cache);
+        return new Dictionary<string, string> { ["NUGET_PACKAGES"] = cache };
     }
 
     /// <summary>

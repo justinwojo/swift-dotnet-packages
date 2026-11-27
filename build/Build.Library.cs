@@ -183,7 +183,8 @@ partial class Build
     /// <c>ps</c> for the lifetime of the child process — that is a limitation of
     /// <c>dotnet nuget push</c>'s CLI surface, not of this echo.
     /// </remarks>
-    static int RunDotnet(IEnumerable<string> args, Action<string>? onLine, IReadOnlyCollection<string>? secrets)
+    static int RunDotnet(IEnumerable<string> args, Action<string>? onLine, IReadOnlyCollection<string>? secrets,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
         {
@@ -194,6 +195,9 @@ partial class Build
         };
         foreach (var a in args)
             psi.ArgumentList.Add(a);
+        if (environment is not null)
+            foreach (var (key, value) in environment)
+                psi.Environment[key] = value;
 
         var live = secrets?.Where(s => !string.IsNullOrEmpty(s)).ToArray() ?? Array.Empty<string>();
         string Scrub(string line)
