@@ -7,7 +7,7 @@ using Foundation;
 using UIKit;
 using Swift;
 using BlinkID;
-using BlinkID.BlinkIDSDK;
+using static BlinkID.BlinkIDSDK;
 using Swift.Runtime;
 
 namespace BlinkIDSimTests;

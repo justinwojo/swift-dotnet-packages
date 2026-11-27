@@ -504,18 +504,6 @@ public sealed class AppDelegate : UIApplicationDelegate
                 AEMAdvertiserRuleOperator.RegexMatch,
                 AEMAdvertiserRuleOperator.GreaterThanOrEqual));
 
-        Check("AEM AEMSettings.GetAppID is callable", () =>
-        {
-            // AEMSettings.appID is sourced from the main bundle's FacebookAppID key, so
-            // the answer is fully determined here: assert the marshalled String? equals
-            // exactly what the bundle declares (nil when the key is absent, as in this
-            // test app). A "non-nil implies non-empty" check would pass on any garbage.
-            var expected = NSBundle.MainBundle.ObjectForInfoDictionary("FacebookAppID") as NSString;
-            var appId = AEMSettings.GetAppID();
-            if (appId != expected?.ToString())
-                throw new Exception($"appID='{appId ?? "<nil>"}' but Info.plist FacebookAppID='{expected?.ToString() ?? "<absent>"}'");
-        });
-
         Check("AEM AEMReporter ctor (Swift class instantiation)", () =>
         {
             using var reporter = new AEMReporter();
@@ -539,28 +527,27 @@ public sealed class AppDelegate : UIApplicationDelegate
             AEMReporter.SetAdvertiserRuleMatchInServerEnabled(true);
         });
 
-        // The five AEMReporter members whose Swift signatures reach a module-internal
-        // type (IsContentOptimized, CatalogRequestParameters, RuleMatchRequestParameters,
-        // LoadRuleMatch, AddConfigurations) have no ABI-correct call path: no @_cdecl
-        // wrapper can be generated and the direct P/Invoke signature is not blittable.
-        // The generator now emits them as [Obsolete(DiagnosticId = "SB0009")] tombstones
-        // whose bodies throw NotSupportedException instead of issuing the unsound native
-        // call — so the contract to assert is "declared, and throws managed, never
-        // faults native". A managed exception here is the FIX working; a process fault
-        // is a regression back to the unsound direct P/Invoke.
-        Check("AEM AEMReporter module-internal members throw NotSupportedException (SB0009 tombstone)", () =>
+        // AEMSettings.appID and the AEMReporter members that reach module-internal types
+        // (isContentOptimized, catalogRequestParameters, ruleMatchRequestParameters,
+        // loadRuleMatch, addConfigurations) are internal in FBAEMKit's public Swift
+        // interface. The generator does not project a member that is not public in the
+        // module's interface (it records an `// Unsupported:` ModuleInternal drop), so the
+        // contract is that none of them appears on the C# surface: an internal member
+        // bound as public API, or as a throwing stand-in, is the regression.
+        Check("AEM module-internal members are not projected as public API", () =>
         {
-#pragma warning disable CS0618 // the tombstone is [Obsolete] by design; calling it IS the test
-            try
-            {
-                AEMReporter.IsContentOptimized(null);
-                throw new Exception("IsContentOptimized(null) returned instead of throwing NotSupportedException");
-            }
-            catch (NotSupportedException)
-            {
-                // Expected: the tombstone body threw before any native transition.
-            }
-#pragma warning restore CS0618
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+            var leaked = new[] { "IsContentOptimized", "CatalogRequestParameters", "RuleMatchRequestParameters",
+                                 "LoadRuleMatch", "AddConfigurations" }
+                .Where(n => typeof(AEMReporter).GetMember(n, flags).Length > 0)
+                .Select(n => "AEMReporter." + n)
+                .Concat(new[] { "GetAppID", "AppID" }
+                    .Where(n => typeof(AEMSettings).GetMember(n, flags).Length > 0)
+                    .Select(n => "AEMSettings." + n))
+                .ToList();
+            if (leaked.Count > 0)
+                throw new Exception($"module-internal members projected: {string.Join(", ", leaked)}");
         });
 
         Skip("AEM AEMReporter.Configure / Enable / HandleMethod",
