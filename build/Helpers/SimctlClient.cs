@@ -232,14 +232,12 @@ public sealed class SimctlClient
     }
 
     /// <summary>
-    /// Answer, before launch, every privacy prompt the app at <paramref name="appPath"/> could
-    /// raise (see <see cref="SimulatorPrivacy"/>): grant each service its Info.plist declares a
-    /// usage string for, through <c>simctl privacy</c> where simctl knows the service and through
-    /// the simulator's TCC database where it does not. Throws when an answer cannot be recorded,
-    /// or a declared service has no known answer: an alert the app raises unanswered stays on
-    /// this shared simulator after the app is gone, and only a reboot takes it down.
+    /// The privacy prompts the app at <paramref name="appPath"/> could raise (see
+    /// <see cref="SimulatorPrivacy"/>): one service per usage string its Info.plist declares.
+    /// Throws when a declared service has no known answer: an alert the app raises unanswered
+    /// stays on this shared simulator after the app is gone, and only a reboot takes it down.
     /// </summary>
-    internal SimulatorPrivacy.Plan PreAnswerPrivacyPrompts(string appPath, string bundleId, Action<string> info)
+    internal SimulatorPrivacy.Plan ReadPrivacyPlan(string appPath, string bundleId)
     {
         var plist = Path.Combine(appPath, "Info.plist");
         var (plExit, plXml) = RunTool("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", plist], TimeSpan.FromSeconds(30));
@@ -251,9 +249,19 @@ public sealed class SimctlClient
                 $"{bundleId} declares {string.Join(", ", plan.Unanswered)}, which the harness cannot pre-answer on a " +
                 "simulator (Models/SimulatorPrivacy.cs). Launching it could leave a system alert up on a shared " +
                 "simulator, so the launch is refused.");
-        if (!plan.HasAnswers)
-            return plan;
+        return plan;
+    }
 
+    /// <summary>
+    /// Before launch, grant every service in <paramref name="plan"/>: through <c>simctl privacy</c>
+    /// where simctl knows the service, and through the simulator's TCC database where it does not.
+    /// The harness owns its test bundle's answers for these services, so an earlier decision is
+    /// replaced. Throws when an answer cannot be recorded; the caller resets the plan either way.
+    /// </summary>
+    internal void GrantPrivacyAnswers(SimulatorPrivacy.Plan plan, string bundleId, Action<string> info)
+    {
+        if (!plan.HasAnswers)
+            return;
         foreach (var service in plan.SimctlServices)
         {
             var (exit, output) = Run(["privacy", _device, "grant", service, bundleId], TimeSpan.FromSeconds(60));
@@ -276,33 +284,55 @@ public sealed class SimctlClient
         }
         info($"Privacy prompts pre-answered on {_device} for {bundleId}: granted " +
              string.Join(", ", plan.SimctlServices.Concat(plan.DatabaseServices)));
-        return plan;
     }
 
     /// <summary>
-    /// After the run: take back every answer <see cref="PreAnswerPrivacyPrompts"/> recorded
-    /// (<c>simctl privacy reset all</c> also clears the rows it wrote to the TCC database).
-    /// Best effort; never throws.
+    /// After the run: put the plan's services back to unanswered for <paramref name="bundleId"/>,
+    /// and touch no other service. Best effort; never throws.
     /// </summary>
-    internal void ResetPrivacyAnswers(string bundleId, SimulatorPrivacy.Plan plan, Action<string> info)
+    internal void ResetPrivacyAnswers(SimulatorPrivacy.Plan plan, string bundleId, Action<string> info)
     {
-        if (!plan.HasAnswers)
+        foreach (var service in plan.SimctlServices)
+        {
+            try
+            {
+                var (exit, output) = Run(["privacy", _device, "reset", service, bundleId], TimeSpan.FromSeconds(60));
+                if (exit != 0)
+                    info($"simctl privacy reset {service} {bundleId} on {_device} returned {exit}: {output.Trim()}");
+            }
+            catch (Exception ex)
+            {
+                info($"simctl privacy reset {service} {bundleId} on {_device} did not finish: {ex.Message}");
+            }
+        }
+        if (plan.DatabaseServices.Count == 0)
             return;
         try
         {
-            var (exit, output) = Run(["privacy", _device, "reset", "all", bundleId], TimeSpan.FromSeconds(60));
+            var (exit, output) = RunTool("/usr/bin/sqlite3",
+                [TccDatabasePath(), ".timeout 10000", SimulatorPrivacy.ResetSql(plan.DatabaseServices, bundleId)],
+                TimeSpan.FromSeconds(30));
             if (exit != 0)
-                info($"simctl privacy reset all {bundleId} on {_device} returned {exit}: {output.Trim()}");
+                info($"Removing {bundleId}'s {string.Join(", ", plan.DatabaseServices)} answers on {_device} returned {exit}: {output.Trim()}");
         }
         catch (Exception ex)
         {
-            info($"simctl privacy reset all {bundleId} on {_device} did not finish: {ex.Message}");
+            info($"Removing {bundleId}'s {string.Join(", ", plan.DatabaseServices)} answers on {_device} did not finish: {ex.Message}");
         }
     }
 
-    string TccDatabasePath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "Library", "Developer", "CoreSimulator", "Devices", _device, "data", "Library", "TCC", "TCC.db");
+    /// <summary>
+    /// The simulator's TCC database, under the data directory simctl itself resolves for this
+    /// device (a UDID or simctl's own alias, in whatever device set simctl uses).
+    /// </summary>
+    string TccDatabasePath()
+    {
+        var (exit, output) = Run(["getenv", _device, "HOME"], TimeSpan.FromSeconds(30));
+        var home = output.Trim();
+        if (exit != 0 || home.Length == 0 || home.Contains('\n') || !Path.IsPathRooted(home))
+            throw new InvalidOperationException($"simctl getenv {_device} HOME failed (exit {exit}): {home}");
+        return Path.Combine(home, "Library", "TCC", "TCC.db");
+    }
 
     private static (int Exit, string Output) Run(IEnumerable<string> args, TimeSpan timeout) =>
         RunTool("xcrun", ["simctl", .. args], timeout);

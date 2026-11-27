@@ -9,7 +9,7 @@ partial class Build
     /// <summary>
     /// Self-test for the simulator privacy policy (<c>Models/SimulatorPrivacy.cs</c>): which
     /// declared usage strings are answered through simctl, which through the TCC database, and
-    /// the statement that writes the database answers.
+    /// the statements that write and remove the database answers.
     /// </summary>
     Target TestSimulatorPrivacy => _ => _
         .Description("Self-test the simulator privacy pre-answer policy")
@@ -41,7 +41,6 @@ partial class Build
             Assert.True(plan.SimctlServices.SequenceEqual(new[] { "media-library" }));
             Assert.True(plan.DatabaseServices.SequenceEqual(new[] { "kTCCServiceCamera" }));
             Assert.True(plan.Unanswered.SequenceEqual(new[] { "NSHealthShareUsageDescription" }));
-            Assert.False(plan.IsEmpty);
             Assert.True(plan.HasAnswers);
             Assert.False(SimulatorPrivacy.PlanFor(new[] { "NSHealthShareUsageDescription" }).HasAnswers);
 
@@ -53,7 +52,7 @@ partial class Build
             Assert.True(calendar.SimctlServices.SequenceEqual(new[] { "calendar" }));
 
             // No usage strings: nothing to answer, and nothing to take back after the run.
-            Assert.True(SimulatorPrivacy.PlanFor(Array.Empty<string>()).IsEmpty);
+            Assert.False(SimulatorPrivacy.PlanFor(Array.Empty<string>()).HasAnswers);
             Assert.True(SimulatorPrivacy.UsageKeysFromPlistXml(
                 "<plist version=\"1.0\"><dict><key>CFBundleName</key><string>x</string></dict></plist>").Count == 0);
 
@@ -62,6 +61,10 @@ partial class Build
                 "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, " +
                 "indirect_object_identifier, flags) VALUES ('kTCCServiceCamera', 'com.swiftbindings.visionkit.tests', " +
                 "0, 2, 4, 1, 'UNUSED', 0);");
+
+            // The reset removes the plan's database answers and nothing else.
+            Assert.True(SimulatorPrivacy.ResetSql(new[] { "kTCCServiceCamera" }, "com.example.app") ==
+                "DELETE FROM access WHERE client = 'com.example.app' AND client_type = 0 AND service IN ('kTCCServiceCamera');");
 
             // Values spliced into SQL are validated.
             foreach (var (service, bundle) in new[]

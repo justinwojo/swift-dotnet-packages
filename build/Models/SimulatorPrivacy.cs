@@ -16,8 +16,8 @@ namespace SwiftBindings.Build.Models;
 /// simulator can become active. A VisionKit cell once left a camera alert behind and turned every
 /// later cell on the same simulator that needs an active app red. So before launch the harness
 /// answers every service the app declares a usage string for (granted, as a user who tapped Allow
-/// would), and after the run it resets those answers. A declared service it has no way to answer
-/// refuses the launch rather than risk the alert.</para>
+/// would), and after the run it puts those services back to unanswered. A declared service it has
+/// no way to answer refuses the launch rather than risk the alert.</para>
 ///
 /// <para>The usage strings in the bundle's Info.plist decide the services: an app without one
 /// cannot raise that service's prompt at all (iOS terminates it instead). simctl grants most
@@ -69,7 +69,6 @@ internal static class SimulatorPrivacy
         IReadOnlyList<string> DatabaseServices,
         IReadOnlyList<string> Unanswered)
     {
-        internal bool IsEmpty => SimctlServices.Count == 0 && DatabaseServices.Count == 0 && Unanswered.Count == 0;
         internal bool HasAnswers => SimctlServices.Count > 0 || DatabaseServices.Count > 0;
     }
 
@@ -121,5 +120,16 @@ internal static class SimulatorPrivacy
         return "INSERT OR REPLACE INTO access " +
                "(service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier, flags) " +
                $"VALUES ('{service}', '{bundleId}', 0, 2, 4, 1, 'UNUSED', 0);";
+    }
+
+    /// <summary>The SQL that removes the database answers for <paramref name="services"/> and nothing else.</summary>
+    internal static string ResetSql(IReadOnlyCollection<string> services, string bundleId)
+    {
+        if (!s_bundleId.IsMatch(bundleId))
+            throw new ArgumentException($"Not a bundle identifier: '{bundleId}'", nameof(bundleId));
+        if (services.Count == 0 || services.Any(s => !s_tccService.IsMatch(s)))
+            throw new ArgumentException($"Not a list of TCC service names: '{string.Join(", ", services)}'", nameof(services));
+        return $"DELETE FROM access WHERE client = '{bundleId}' AND client_type = 0 AND service IN ("
+               + string.Join(", ", services.Select(s => $"'{s}'")) + ");";
     }
 }

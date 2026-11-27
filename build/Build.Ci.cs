@@ -596,16 +596,17 @@ partial class Build
         }
 
         // Same rule as ValidateSimAt: answer the app's privacy prompts before launch, and take
-        // the answers back after the run.
-        var privacy = sim.PreAnswerPrivacyPrompts(appPath, bundleId, line => Log.Information("{Line}", line));
+        // those services back to unanswered after the run.
+        var privacy = sim.ReadPrivacyPlan(appPath, bundleId);
         try
         {
+            sim.GrantPrivacyAnswers(privacy, bundleId, line => Log.Information("{Line}", line));
             return RunInstalledCiSimTest(sim, bundleId, appName, crashDir, beforeCrashCount,
                 runBudgetSeconds, launchBudgetSeconds, storeKitConfiguration);
         }
         finally
         {
-            sim.ResetPrivacyAnswers(bundleId, privacy, line => Log.Information("{Line}", line));
+            sim.ResetPrivacyAnswers(privacy, bundleId, line => Log.Information("{Line}", line));
         }
     }
 
