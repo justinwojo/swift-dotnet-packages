@@ -879,24 +879,37 @@ partial class Build
     {
         if (objDir is null || !Directory.Exists(objDir)) return (null, null);
         var deployedBytes = File.ReadAllBytes(deployed);
-        var linked = Directory
+        // Every linker output the bundle's copy matches must vouch for the same input, so the
+        // verdict never depends on which output directory the walk happens to reach first.
+        var linkedOutputs = Directory
             .EnumerateFiles(objDir, $"{id}.dll", SearchOption.AllDirectories)
             .Where(f => string.Equals(Path.GetFileName(Path.GetDirectoryName(f)), "linked", StringComparison.Ordinal))
-            .FirstOrDefault(f => File.ReadAllBytes(f).AsSpan().SequenceEqual(deployedBytes));
-        if (linked is null) return (null, null);
-        var record = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(linked))!, LinkerInputsFileName);
-        var inputs = File.Exists(record)
-            ? File.ReadAllLines(record)
-                .Where(l => string.Equals(Path.GetFileName(l.Trim()), $"{id}.dll", StringComparison.OrdinalIgnoreCase))
-                .Select(l => l.Trim())
-                .Distinct(StringComparer.Ordinal)
-                .ToList()
-            : new List<string>();
-        return inputs.Count == 1 && File.Exists(inputs[0])
-            ? (inputs[0], null)
-            : (null, $"the bundle's {id}.dll is this build's linker output ({linked}), but {record} " +
-                     (inputs.Count == 0 ? "does not record its input" : $"records {inputs.Count} inputs for it") +
-                     ", so the package copy it came from cannot be proven.");
+            .Where(f => File.ReadAllBytes(f).AsSpan().SequenceEqual(deployedBytes))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+        if (linkedOutputs.Count == 0) return (null, null);
+        var resolved = new List<string>();
+        foreach (var linked in linkedOutputs)
+        {
+            var record = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(linked))!, LinkerInputsFileName);
+            var inputs = File.Exists(record)
+                ? File.ReadAllLines(record)
+                    .Where(l => string.Equals(Path.GetFileName(l.Trim()), $"{id}.dll", StringComparison.OrdinalIgnoreCase))
+                    .Select(l => l.Trim())
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList()
+                : new List<string>();
+            if (inputs.Count != 1 || !File.Exists(inputs[0]))
+                return (null, $"the bundle's {id}.dll is this build's linker output ({linked}), but {record} " +
+                              (inputs.Count == 0 ? "does not record its input" : $"records {inputs.Count} inputs for it") +
+                              ", so the package copy it came from cannot be proven.");
+            resolved.Add(inputs[0]);
+        }
+        var distinct = resolved.Distinct(StringComparer.Ordinal).ToList();
+        return distinct.Count == 1
+            ? (distinct[0], null)
+            : (null, $"the bundle's {id}.dll matches {linkedOutputs.Count} linker outputs whose records name " +
+                     $"different inputs ({string.Join(", ", distinct)}), so the package copy it came from cannot be proven.");
     }
 
     /// <summary>Module version id of a managed assembly, or null if unreadable.</summary>

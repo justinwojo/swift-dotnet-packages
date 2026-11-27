@@ -173,7 +173,7 @@ partial class Build
                 propsXml);
 
             Assert("lane props: package mode records the linker's real inputs beside its output",
-                propsXml.Contains("""BeforeTargets="_RunILLink">""", StringComparison.Ordinal)
+                propsXml.Contains("""AfterTargets="_RunILLink">""", StringComparison.Ordinal)
                 && propsXml.Contains($"File=\"$(IntermediateLinkDir)../{LinkerInputsFileName}\"", StringComparison.Ordinal)
                 && propsXml.Contains("Lines=\"@(ManagedAssemblyToLink->'%(FullPath)')\"", StringComparison.Ordinal),
                 propsXml);
@@ -908,6 +908,18 @@ partial class Build
             Assert("linker input: two recorded inputs for one assembly fail closed",
                 ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X").Failure
                     ?.Contains("records 2 inputs", StringComparison.Ordinal) == true, "no failure");
+            File.WriteAllLines(Path.Combine(linkRid, LinkerInputsFileName), new[] { realInput });
+            var otherRid = Directory.CreateDirectory(Path.Combine(linkObj, "Debug", "other-rid", "linked")).Parent!.FullName;
+            File.WriteAllBytes(Path.Combine(otherRid, "linked", "SwiftBindings.X.dll"), new byte[] { 1, 2, 3 });
+            File.WriteAllLines(Path.Combine(otherRid, LinkerInputsFileName), new[] { Path.Combine(linkRoot, "SwiftBindings.X.dll") });
+            Assert("linker input: two matching linker outputs that record different inputs fail closed",
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X").Failure
+                    ?.Contains("name different inputs", StringComparison.Ordinal) == true,
+                $"got {ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X")}");
+            File.WriteAllLines(Path.Combine(otherRid, LinkerInputsFileName), new[] { realInput });
+            Assert("linker input: matching linker outputs that agree on the input are judged by it",
+                ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X") == (realInput, null),
+                $"got {ResolveLinkerInput(bundleDll, linkObj, "SwiftBindings.X")}");
             Directory.Delete(linkRoot, recursive: true);
 
             var copyOwn = tipKitSim with

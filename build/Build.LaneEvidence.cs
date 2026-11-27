@@ -227,10 +227,10 @@ partial class Build
             sb.AppendLine("  </ItemGroup>");
             // The assemblies the platform linker actually reads (it can rewrite one even when
             // nothing is trimmed), recorded beside its output so the copy gate judges a rewritten
-            // bundle assembly on its real input. BeforeTargets of _RunILLink runs after that
-            // target's DependsOnTargets, so the item is final here.
+            // bundle assembly on its real input. Recorded after _RunILLink, so a hook that runs
+            // before the link (in any import order) cannot change the item after it is written.
             sb.AppendLine($"""
-                  <Target Name="_SwiftBindingsLaneRecordLinkerInputs" BeforeTargets="_RunILLink">
+                  <Target Name="_SwiftBindingsLaneRecordLinkerInputs" AfterTargets="_RunILLink">
                     <WriteLinesToFile File="$(IntermediateLinkDir)../{LinkerInputsFileName}"
                                       Lines="@(ManagedAssemblyToLink->'%(FullPath)')" Overwrite="true" />
                   </Target>
