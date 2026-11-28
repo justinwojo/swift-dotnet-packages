@@ -117,8 +117,11 @@ internal static class Tests
             if (!Enum.IsDefined(member))
                 throw new InvalidOperationException($"{typeof(T).Name} value {member} is not a defined member");
         }
+        // Walk the members by name: on Mono, Enum.GetValues throws InvalidCastException (from
+        // Array.Copy into the enum-typed array) for an enum nested in a generic class, such as the
+        // CaseTag of a generic Swift enum. Names map one-to-one onto the members GetValues returns.
         var seen = new HashSet<T>();
-        foreach (var member in Enum.GetValues<T>())
+        foreach (var member in Enum.GetNames<T>().Select(n => Enum.Parse<T>(n)))
         {
             if (EqualityComparer<T>.Default.Equals(member, default))
                 throw new InvalidOperationException($"{typeof(T).Name}.{member} equals default, which names no case");
@@ -256,13 +259,12 @@ internal static class Tests
             Fail("Transaction.CurrentEntitlements", ex.Message);
         }
 
-        // Test 5: VerificationResult enum tag values — assert actual uint values
+        // Test 5: VerificationResult case tags — name-keyed like every generated CaseTag, so the
+        // values identify the Swift cases by name, not by position (never 0, never shared).
         try
         {
-            if ((uint)VerificationResult<Transaction>.CaseTag.Unverified != 0)
-                throw new InvalidOperationException($"Unverified expected 0, got {(uint)VerificationResult<Transaction>.CaseTag.Unverified}");
-            if ((uint)VerificationResult<Transaction>.CaseTag.Verified != 1)
-                throw new InvalidOperationException($"Verified expected 1, got {(uint)VerificationResult<Transaction>.CaseTag.Verified}");
+            AssertNameKeyedMembers(VerificationResult<Transaction>.CaseTag.Unverified,
+                VerificationResult<Transaction>.CaseTag.Verified);
             Pass("VerificationResult.CaseTag");
         }
         catch (Exception ex)
